@@ -306,6 +306,36 @@ export class D1ProjectRecordRepository implements ProjectRecordRepository {
     return (results ?? []).map(rowToOutcome)
   }
 
+  async listOutcomesOfProjects(projectIds: string[]): Promise<ProjectOutcomeRow[]> {
+    const rows: ProjectOutcomeRow[] = []
+    for (const chunk of chunkForIn(projectIds)) {
+      const { results } = await this.deps.db
+        .prepare(
+          `SELECT * FROM project_outcomes
+           WHERE project_id IN (${chunk.map(() => '?').join(', ')}) ORDER BY project_id, seq`,
+        )
+        .bind(...chunk)
+        .all<OutcomeRow>()
+      rows.push(...(results ?? []).map(rowToOutcome))
+    }
+    return rows
+  }
+
+  async projectsWithOutcomes(projectIds: string[]): Promise<string[]> {
+    const found: string[] = []
+    for (const chunk of chunkForIn(projectIds)) {
+      const { results } = await this.deps.db
+        .prepare(
+          `SELECT DISTINCT project_id FROM project_outcomes
+           WHERE project_id IN (${chunk.map(() => '?').join(', ')})`,
+        )
+        .bind(...chunk)
+        .all<{ project_id: string }>()
+      for (const row of results ?? []) found.push(row.project_id)
+    }
+    return found
+  }
+
   async deleteByProjects(projectIds: string[]): Promise<void> {
     for (const chunk of chunkForIn(projectIds)) {
       const placeholders = chunk.map(() => '?').join(', ')

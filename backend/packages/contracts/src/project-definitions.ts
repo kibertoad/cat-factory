@@ -7,7 +7,7 @@ import { taskTypeFieldDescriptorSchema } from './task-types.js'
 // Project definitions: the versioned, org-authored template a project of some kind pins. The
 // platform reads the envelope (key, version, credentials, targets, inputs, prompt additions) and
 // treats `spec` as opaque: the project kind owns its shape and validates it. Design:
-// `docs/initiatives/research-projects.md`.
+// `backend/docs/adr/0069-projects-and-research-projects.md`.
 // ---------------------------------------------------------------------------
 
 export const PROJECT_DEFINITION_TITLE_MAX = 200

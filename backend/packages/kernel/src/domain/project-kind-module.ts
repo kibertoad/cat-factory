@@ -12,7 +12,7 @@ import type { Block } from './types.js'
 // check, the task's sequence claim, the state fixed on the step, the outcome write and its
 // storage placement, the credential park), and calls a module only where content matters. A
 // kind's descriptor (`ProjectKindRegistry`) says what the board offers; its module says what its
-// definitions and outcomes mean. Design: `docs/initiatives/research-projects.md`.
+// definitions and outcomes mean. Design: `backend/docs/adr/0069-projects-and-research-projects.md`.
 // ---------------------------------------------------------------------------
 
 /** What a module is told about a task when it plans it or briefs its agent. */
@@ -72,6 +72,21 @@ export interface ProjectKindModule<Body = unknown> extends ProjectDefinitionSpec
   view?(input: ProjectViewInput<Body>): unknown
   /** The schemas of this kind's own shapes, served so a client can type what the API leaves opaque. */
   schemas?: ProjectKindSchemas
+  /**
+   * What a project of this kind contributes as read-only context to a task that links it. Absent:
+   * the platform renders the newest outcome of each stream as recorded.
+   */
+  renderContext?(input: ProjectViewInput<Body>): ProjectContextRendering
+}
+
+/** A project's current result as linked context for another task's agent. */
+export interface ProjectContextRendering {
+  /** One line for the prompt's linked-context index. */
+  summary: string
+  /** How complete the result is, in one line. */
+  coverage: string
+  /** The full result as Markdown, materialised as a file the agent reads. */
+  body: string
 }
 
 /** What a module reads to compute a project's current view. */

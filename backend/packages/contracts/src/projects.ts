@@ -6,7 +6,7 @@ import { positionSchema, taskTypeSchema } from './primitives.js'
 // Projects: account-owned peers of services. A project owns a root block (level and type
 // `project`) whose tasks are ordinary blocks beneath it, is mounted onto boards exactly as a
 // service is, and links to zero or more services as read-only context. Its kind is registered
-// by the deployment. Design: `docs/initiatives/research-projects.md`.
+// by the deployment. Design: `backend/docs/adr/0069-projects-and-research-projects.md`.
 // ---------------------------------------------------------------------------
 
 export const PROJECT_TITLE_MAX = 200
@@ -63,6 +63,30 @@ export const createProjectInputSchema = v.object({
   definition: v.optional(projectPinInputSchema),
 })
 export type CreateProjectInput = v.InferOutput<typeof createProjectInputSchema>
+
+/** How many projects one task may carry as linked context. */
+export const TASK_PROJECT_LINKS_MAX = 20
+
+const projectIdsSchema = v.pipe(
+  v.array(v.pipe(v.string(), v.minLength(1))),
+  v.minLength(1),
+  v.maxLength(TASK_PROJECT_LINKS_MAX),
+  v.check((ids) => new Set(ids).size === ids.length, 'project ids must be unique'),
+)
+
+/** Link projects to a task as read-only context. */
+export const linkTaskProjectsInputSchema = v.object({ projectIds: projectIdsSchema })
+export type LinkTaskProjectsInput = v.InferOutput<typeof linkTaskProjectsInputSchema>
+
+/** A project linked to a task as context, as the task's inspector lists it. */
+export const taskLinkedProjectSchema = v.object({
+  projectId: v.string(),
+  kind: projectKindIdSchema,
+  /** The project's title (its root block's), or null when the root is not on this board. */
+  title: v.nullable(v.string()),
+  linkedAt: v.number(),
+})
+export type TaskLinkedProject = v.InferOutput<typeof taskLinkedProjectSchema>
 
 /** Replace a project's service links. */
 export const setProjectServicesInputSchema = v.object({

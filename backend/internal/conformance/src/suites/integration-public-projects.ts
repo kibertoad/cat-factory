@@ -323,6 +323,75 @@ export function definePublicProjectsConformance(harness: ConformanceHarness): vo
       expect(research.coverage.total.answered).toBe(2)
     })
 
+    it('links a researched project to a service task, created with it or after', async () => {
+      const { app, wsId, write, decide } = await setup()
+      const project = await createResearchProject(app, write)
+      const services = await app.call<{ services: Array<{ serviceId: string }> }>(
+        'GET',
+        '/api/v1/services',
+        undefined,
+        write,
+      )
+      const serviceId = services.body.services[0]!.serviceId
+      const tooEarly = await app.call(
+        'POST',
+        `/api/v1/services/${serviceId}/tasks`,
+        { title: 'Integrate', projects: [project.projectId] },
+        write,
+      )
+      expect(tooEarly.status).toBe(422)
+      expect(reasonOf(tooEarly.body)).toBe('project_has_no_result')
+
+      const research = await app.call<PublicProjectTask>(
+        'POST',
+        `/api/v1/projects/${project.projectId}/tasks`,
+        { title: 'Research the vendor' },
+        write,
+      )
+      await app.call(
+        'POST',
+        `/api/v1/projects/${project.projectId}/tasks/${research.body.taskId}/start`,
+        {},
+        decide,
+      )
+      await app.drive(wsId)
+
+      const created = await app.call<{ taskId: string }>(
+        'POST',
+        `/api/v1/services/${serviceId}/tasks`,
+        { title: 'Integrate', projects: [project.projectId] },
+        write,
+      )
+      expect(created.status).toBe(201)
+      const path = `/api/v1/tasks/${created.body.taskId}/projects`
+      const listed = await app.call<{ projects: Array<{ projectId: string }> }>(
+        'GET',
+        path,
+        undefined,
+        write,
+      )
+      expect(listed.body.projects.map((p) => p.projectId)).toEqual([project.projectId])
+
+      const detached = await app.call(
+        'POST',
+        `${path}/detach`,
+        { projectId: project.projectId },
+        write,
+      )
+      expect(detached.status).toBe(204)
+      const relinked = await app.call<{ projectId: string }>(
+        'POST',
+        path,
+        { projectId: project.projectId },
+        write,
+      )
+      expect(relinked.status).toBe(201)
+      expect(relinked.body.projectId).toBe(project.projectId)
+      const foreign = await app.call('POST', path, { projectId: 'prj_missing' }, write)
+      expect(foreign.status).toBe(422)
+      expect(reasonOf(foreign.body)).toBe('project_link_invalid')
+    })
+
     it('resumes a run parked on a missing credential once it is stored', async () => {
       const { app, wsId, write, decide } = await setup({
         researchCredentialRequest: {

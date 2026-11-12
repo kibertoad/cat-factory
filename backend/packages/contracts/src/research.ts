@@ -18,7 +18,8 @@ import { researchModeSchema, type ResearchMode } from './research-mode.js'
 // The `research` project kind's own content: the spec its definitions carry (topics of
 // questions), the body each of its outcome revisions holds (answers with evidence), and how
 // those revisions fold. The platform stores all of it opaquely through the generic project
-// definition and outcome contracts. Design: `docs/initiatives/research-projects.md`.
+// definition and outcome contracts.
+// Design: `backend/docs/adr/0069-projects-and-research-projects.md`.
 // ---------------------------------------------------------------------------
 
 export const RESEARCH_KIND = 'research'

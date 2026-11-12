@@ -730,7 +730,9 @@
         "outcome_too_large_for_inline": "El resultado es demasiado grande para guardarlo, así que no se registró. Acota la tarea y vuelve a ejecutarla.",
         "research_nothing_to_ask": "El modo de esta tarea de investigación no deja ninguna pregunta por hacer: nada nuevo con lo que ampliar, o nada parcial o bloqueado que aclarar. Elige otro modo o añade una pregunta.",
         "task_owned_by_project": "Esta tarea pertenece a un proyecto, que no tiene servicio. Usa en su lugar la dirección de tareas del proyecto.",
-        "project_definition_invalid": "La definición la rechaza su estructura o su tipo de proyecto. La respuesta enumera cada problema; corrígelos y vuelve a publicar."
+        "project_definition_invalid": "La definición la rechaza su estructura o su tipo de proyecto. La respuesta enumera cada problema; corrígelos y vuelve a publicar.",
+        "project_link_invalid": "Ese proyecto no existe o pertenece a otra organización. Vincula un proyecto de esta organización.",
+        "project_has_no_result": "Ese proyecto aún no tiene ningún resultado que leer. Ejecuta primero una tarea en él y luego vincúlalo."
       }
     },
     "action": {
@@ -9288,6 +9290,18 @@
     "mount": {
       "added": "Proyecto {title} añadido a este tablero",
       "failed": "No se ha podido añadir el proyecto"
+    },
+    "taskLinks": {
+      "title": "Proyectos vinculados",
+      "hint": "Los agentes que trabajan en esta tarea leen el resultado actual de cada proyecto vinculado, como los hallazgos de un proyecto de investigación.",
+      "pick": "Elige un proyecto",
+      "link": "Vincular",
+      "unlink": "Desvincular el proyecto",
+      "empty": "No hay ningún proyecto vinculado.",
+      "linked": "Proyecto vinculado",
+      "loadFailed": "No se pudieron cargar los proyectos vinculados",
+      "linkFailed": "No se pudo vincular el proyecto",
+      "unlinkFailed": "No se pudo desvincular el proyecto"
     },
     "view": {
       "open": "Abrir proyecto",

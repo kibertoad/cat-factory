@@ -6620,7 +6620,9 @@
         "outcome_too_large_for_inline": "Das Ergebnis ist zu groß zum Speichern und wurde daher nicht festgehalten. Grenze die Aufgabe ein und starte sie erneut.",
         "research_nothing_to_ask": "Der Modus dieser Rechercheaufgabe lässt keine Frage übrig: nichts Neues zum Erweitern oder nichts Unvollständiges oder Blockiertes zum Klären. Wähle einen anderen Modus oder füge eine Frage hinzu.",
         "task_owned_by_project": "Diese Aufgabe gehört zu einem Projekt, das keinen Service hat. Verwenden Sie stattdessen die Aufgabenadresse des Projekts.",
-        "project_definition_invalid": "Die Definition wird von ihrem Rahmen oder von ihrer Projektart abgelehnt. Die Antwort nennt jedes Problem; beheben Sie sie und veröffentlichen Sie erneut."
+        "project_definition_invalid": "Die Definition wird von ihrem Rahmen oder von ihrer Projektart abgelehnt. Die Antwort nennt jedes Problem; beheben Sie sie und veröffentlichen Sie erneut.",
+        "project_link_invalid": "Dieses Projekt existiert nicht oder gehört zu einer anderen Organisation. Verknüpfen Sie ein Projekt dieser Organisation.",
+        "project_has_no_result": "Dieses Projekt hat noch kein Ergebnis zum Lesen. Führen Sie zuerst eine Aufgabe darin aus und verknüpfen Sie es dann."
       }
     },
     "action": {
@@ -9288,6 +9290,18 @@
     "mount": {
       "added": "Projekt {title} zu diesem Board hinzugefügt",
       "failed": "Das Projekt konnte nicht hinzugefügt werden"
+    },
+    "taskLinks": {
+      "title": "Verknüpfte Projekte",
+      "hint": "Das aktuelle Ergebnis jedes verknüpften Projekts, etwa die Erkenntnisse eines Rechercheprojekts, lesen die Agenten, die an dieser Aufgabe arbeiten.",
+      "pick": "Projekt auswählen",
+      "link": "Verknüpfen",
+      "unlink": "Projektverknüpfung lösen",
+      "empty": "Kein Projekt ist verknüpft.",
+      "linked": "Projekt verknüpft",
+      "loadFailed": "Die verknüpften Projekte konnten nicht geladen werden",
+      "linkFailed": "Das Projekt konnte nicht verknüpft werden",
+      "unlinkFailed": "Die Projektverknüpfung konnte nicht gelöst werden"
     },
     "view": {
       "open": "Projekt öffnen",

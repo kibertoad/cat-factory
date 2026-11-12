@@ -28,7 +28,7 @@ import { toolServersSection } from '@cat-factory/agents'
 // values never reach the model). What the agent is asked is the kind's prompt over its brief.
 // A credential the definition needs at START that does not resolve
 // refuses the dispatch with `CapabilityCredentialMissingError`, so the step parks before any
-// container starts. Design: `docs/initiatives/research-projects.md`.
+// container starts. Design: `backend/docs/adr/0069-projects-and-research-projects.md`.
 // ---------------------------------------------------------------------------
 
 /** What the project body reads, as bound callbacks so the executor stays the only owner. */

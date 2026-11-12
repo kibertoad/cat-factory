@@ -42,6 +42,7 @@ import type { ProjectDefinitionPublisher } from './modules/projects/ProjectDefin
 import type { ProjectOutcomeReader } from './modules/projects/ProjectOutcomeReader.js'
 import type { ProjectBoardViews } from './modules/projects/ProjectBoardViews.js'
 import type { OutcomeStoragePolicyService } from './modules/projects/OutcomeStoragePolicyService.js'
+import type { TaskProjectLinkService } from './modules/projects/TaskProjectLinkService.js'
 import { createInlineUseCaseService } from './container/use-case-service.js'
 import type { InlineUseCaseService } from './modules/useCases/InlineUseCaseService.js'
 
@@ -772,6 +773,8 @@ export interface ProjectsModule {
   storagePolicy?: OutcomeStoragePolicyService
   /** Absent when the facade wires no definition store. */
   publisher?: ProjectDefinitionPublisher
+  /** Projects linked to tasks as context. Absent when the facade wires no link store. */
+  taskLinks?: TaskProjectLinkService
 }
 
 /** Assemble the in-org service-sharing module when its repositories are wired. */
@@ -974,6 +977,7 @@ export function createCore(injected: CoreDependencies): Core {
     blueprintReconciler,
     platform,
     collaborators,
+    taskProjectLinks: modules.get('projects')?.taskLinks,
   })
 
   // The modules that depend on the assembled engine (they drive `executionService`, or feed the

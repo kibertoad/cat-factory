@@ -53,6 +53,7 @@ import {
   blocks,
   outcomeStoragePolicies,
   projectServiceLinks,
+  taskProjectLinks,
   projects,
   services,
   workspaceFragmentDefaults,
@@ -281,6 +282,8 @@ export class DrizzleWorkspaceRepository implements WorkspaceRepository {
           ),
         )
       const projectIds = homedProjects.map((r) => r.id)
+      // Every link this board's tasks hold.
+      await tx.delete(taskProjectLinks).where(eq(taskProjectLinks.workspace_id, id))
       if (projectIds.length) {
         await tx
           .delete(workspaceMounts)
@@ -293,6 +296,8 @@ export class DrizzleWorkspaceRepository implements WorkspaceRepository {
         await tx
           .delete(projectServiceLinks)
           .where(inArray(projectServiceLinks.project_id, projectIds))
+        // Every task's link to a homed project, on any board.
+        await tx.delete(taskProjectLinks).where(inArray(taskProjectLinks.project_id, projectIds))
         // A homed project's outcomes, sequence, pin and policy tier.
         await deleteProjectRecords(tx, projectIds)
         await tx.delete(projects).where(inArray(projects.id, projectIds))

@@ -1,4 +1,4 @@
-import type { PipelineStep, StepContextDocument } from '@cat-factory/kernel'
+import type { PipelineStep, StepContextDocument, StepContextProject } from '@cat-factory/kernel'
 
 /**
  * The step fields the context builder REWRITES from each resolution, behind one seam that owns the
@@ -35,6 +35,16 @@ export interface StepObservations {
    * is which REVISION this dispatch read.
    */
   contextDocuments(docs: readonly ContextDocument[]): void
+  /** The linked projects this resolution read, each with the result it read. */
+  contextProjects(projects: readonly ContextProject[]): void
+}
+
+/** The shape {@link StepObservations.contextProjects} reads off a resolved context project. */
+interface ContextProject {
+  projectId: string
+  title: string
+  kind: string
+  revision: { id: string; seq: number } | null
 }
 
 /** The shape {@link StepObservations.contextDocuments} reads off a resolved context doc. */
@@ -86,6 +96,20 @@ export function stepObservations(
         url: doc.url,
         origin: doc.origin,
         ...(doc.freshness ? { freshness: doc.freshness } : {}),
+      }))
+    },
+    contextProjects(projects) {
+      if (!records) return
+      if (!projects.length) {
+        delete step.contextProjects
+        return
+      }
+      step.contextProjects = projects.map((project): StepContextProject => ({
+        projectId: project.projectId,
+        title: project.title,
+        kind: project.kind,
+        revisionId: project.revision?.id ?? null,
+        seq: project.revision?.seq ?? null,
       }))
     },
   }

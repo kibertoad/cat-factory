@@ -187,6 +187,7 @@ import type {
   OutcomeStoragePolicyRepository,
   ProjectDefinitionRepository,
   ProjectRecordRepository,
+  TaskProjectLinkRepository,
   ProjectKindSource,
   RegisteredProjectDefinitionSource,
   ProjectDefinitionRegistry,
@@ -342,6 +343,8 @@ export interface CoreDependencies extends ContentLibraryDependencies {
   projectDefinitionRepository?: ProjectDefinitionRepository
   projectRecordRepository?: ProjectRecordRepository
   outcomeStoragePolicyRepository?: OutcomeStoragePolicyRepository
+  /** Projects linked to tasks as read-only context. */
+  taskProjectLinkRepository?: TaskProjectLinkRepository
   idGenerator: IdGenerator
   clock: Clock
   /**

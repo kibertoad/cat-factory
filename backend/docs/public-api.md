@@ -2788,7 +2788,7 @@ curl -s -H "$AUTH" "$BASE/api/v1/kaizen/entries?agentKind=coder&since=$LAST_SWEE
 Projects are account-owned peers of services, mounted onto boards. A project's kind decides what
 its definition's `spec`, its outcomes' `body` and its `view` hold; this surface serves them
 opaquely and the kind serves their JSON Schemas, so no kind's types reach the SDKs. The built-in
-kind is `research`. Design: [`research-projects.md`](../../docs/initiatives/research-projects.md).
+kind is `research`. Design: [ADR 0069](./adr/0069-projects-and-research-projects.md).
 
 | Method / path                                                           | Scope           | Behaviour                                                                                                                                      |
 | ----------------------------------------------------------------------- | --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |

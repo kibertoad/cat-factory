@@ -72,6 +72,10 @@ export interface ProjectRecordRepository {
   getOutcome(projectId: string, id: string): Promise<ProjectOutcomeRow | null>
   /** The project's outcomes, `seq` ascending; one stream's when `stream` is given. */
   listOutcomes(projectId: string, stream?: string): Promise<ProjectOutcomeRow[]>
+  /** The outcomes of several projects in one (chunked) read, each project's `seq` ascending. */
+  listOutcomesOfProjects(projectIds: string[]): Promise<ProjectOutcomeRow[]>
+  /** Which of the given projects hold at least one outcome, in one (chunked) read. */
+  projectsWithOutcomes(projectIds: string[]): Promise<string[]>
   /**
    * Reclaim every record of deleted projects: pins, sequences, outcomes and the project tier of
    * the outcome-storage policy. Empty input is a no-op.

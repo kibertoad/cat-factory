@@ -641,6 +641,11 @@ export type CredentialWaitReason = (typeof CREDENTIAL_WAIT_REASONS)[number]
  *  - `project_definition_invalid`       a published definition is refused by its envelope or by
  *                                       its kind's module (a duplicate question id, say).
  *                                       `details.problems` lists them.
+ *  - `project_link_invalid`             a project linked to a task as context does not exist or
+ *                                       belongs to another account. `details.projectIds` names them.
+ *  - `project_has_no_result`            a project linked to a task as context has no result to
+ *                                       read yet (no task under it has recorded an outcome).
+ *                                       `details.projectIds` names them.
  *
  * The SPA keys an exhaustive `Record<ProjectReason, …>` of message keys off this.
  */
@@ -662,6 +667,8 @@ export const PROJECT_REASONS = [
   'outcome_too_large_for_inline',
   'task_owned_by_project',
   'project_definition_invalid',
+  'project_link_invalid',
+  'project_has_no_result',
 ] as const
 
 export type ProjectReason = (typeof PROJECT_REASONS)[number]

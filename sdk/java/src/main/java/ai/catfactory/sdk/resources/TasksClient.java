@@ -54,6 +54,14 @@ public final class TasksClient {
     }
 
     /**
+     * attachPublicTaskProject
+     * {@code POST /api/v1/tasks/{taskId}/projects} (operation {@code attachPublicTaskProject}).
+     */
+    public ListPublicTaskProjectsResponseProject attachProject(String taskId, AttachPublicTaskProjectRequest body) {
+        return transport.request("POST", "/api/v1/tasks/" + Transport.pathSegment(taskId) + "/projects", body, Map.of(), new TypeReference<ListPublicTaskProjectsResponseProject>() {});
+    }
+
+    /**
      * Create a task under a service
      * Create a task inside a service frame the key’s workspace owns. The task starts in the
      * `planned` state; start it with the start endpoint. Optionally file it FROM a tracker ticket,
@@ -86,6 +94,15 @@ public final class TasksClient {
      */
     public void detachDocument(String taskId, DetachPublicTaskDocumentRequest body) {
         transport.requestNoContent("POST", "/api/v1/tasks/" + Transport.pathSegment(taskId) + "/documents/detach", body, Map.of());
+    }
+
+    /**
+     * detachPublicTaskProject
+     * {@code POST /api/v1/tasks/{taskId}/projects/detach} (operation {@code
+     * detachPublicTaskProject}).
+     */
+    public void detachProject(String taskId, AttachPublicTaskProjectRequest body) {
+        transport.requestNoContent("POST", "/api/v1/tasks/" + Transport.pathSegment(taskId) + "/projects/detach", body, Map.of());
     }
 
     /**
@@ -153,6 +170,14 @@ public final class TasksClient {
      */
     public ListPublicTaskDocumentsResponse listDocuments(String taskId) {
         return transport.request("GET", "/api/v1/tasks/" + Transport.pathSegment(taskId) + "/documents", null, Map.of(), new TypeReference<ListPublicTaskDocumentsResponse>() {});
+    }
+
+    /**
+     * listPublicTaskProjects
+     * {@code GET /api/v1/tasks/{taskId}/projects} (operation {@code listPublicTaskProjects}).
+     */
+    public ListPublicTaskProjectsResponse listProjects(String taskId) {
+        return transport.request("GET", "/api/v1/tasks/" + Transport.pathSegment(taskId) + "/projects", null, Map.of(), new TypeReference<ListPublicTaskProjectsResponse>() {});
     }
 
     /**

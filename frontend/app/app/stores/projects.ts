@@ -5,6 +5,7 @@ import type {
   PinnableProjectDefinition,
   Project,
   ProjectKindDescriptor,
+  TaskLinkedProject,
   WorkspaceMount,
 } from '@cat-factory/contracts'
 import { useWorkspaceStore } from '~/stores/workspace'
@@ -71,6 +72,22 @@ export const useProjectsStore = defineStore('projects', () => {
     return api.listPinnableProjectDefinitions(ws.requireId(), kind)
   }
 
+  /** The projects a task links as read-only context. */
+  async function taskLinks(blockId: string): Promise<TaskLinkedProject[]> {
+    const ws = useWorkspaceStore()
+    return (await api.listTaskProjects(ws.requireId(), blockId)).projects
+  }
+
+  async function linkToTask(blockId: string, projectIds: string[]): Promise<TaskLinkedProject[]> {
+    const ws = useWorkspaceStore()
+    return (await api.linkTaskProjects(ws.requireId(), blockId, projectIds)).projects
+  }
+
+  async function unlinkFromTask(blockId: string, projectId: string): Promise<void> {
+    const ws = useWorkspaceStore()
+    await api.unlinkTaskProject(ws.requireId(), blockId, projectId)
+  }
+
   async function setServices(projectId: string, serviceIds: string[]) {
     const ws = useWorkspaceStore()
     const updated = await api.setProjectServices(ws.requireId(), projectId, serviceIds)
@@ -101,6 +118,9 @@ export const useProjectsStore = defineStore('projects', () => {
     isSharedRoot,
     hydrate,
     listPinnableDefinitions,
+    taskLinks,
+    linkToTask,
+    unlinkFromTask,
     create,
     setServices,
     mount,
