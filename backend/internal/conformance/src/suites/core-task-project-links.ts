@@ -130,6 +130,41 @@ export function defineCoreTaskProjectLinksConformance(harness: ConformanceHarnes
       expect((await app.call<{ projects: unknown[] }>('GET', path)).body.projects).toEqual([])
     })
 
+    it('links a task under a service another board homes, through the board that mounts it', async () => {
+      const { app, wsId, project } = await setup()
+      await research(app, wsId, project)
+      const accountId = (await app.workspaceRepository().accountOf(wsId))!
+      const frame = (
+        await app.call<Block>('POST', `/workspaces/${wsId}/blocks`, {
+          type: 'service',
+          title: 'Shared service',
+        })
+      ).body
+      const task = (
+        await app.call<Block>('POST', `/workspaces/${wsId}/blocks/${frame.id}/tasks`, {
+          title: 'Integrate from the other board',
+        })
+      ).body
+      const snap = (await app.call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)).body
+      const serviceId = snap.serviceCatalog!.find((s) => s.frameBlockId === frame.id)!.id
+      const other = (await app.createWorkspaceInAccount(accountId, null, { name: 'Other board' }))
+        .workspace.id
+      expect((await app.call('POST', `/workspaces/${other}/services/${serviceId}`, {})).status).toBe(
+        201,
+      )
+      const fromOther = `/workspaces/${other}/blocks/${task.id}/projects`
+      const linked = await app.call<{ projects: TaskLinkedProject[] }>('POST', fromOther, {
+        projectIds: [project.id],
+      })
+      expect(linked.status, JSON.stringify(linked.body)).toBe(200)
+      // The link is the task's, keyed where the task lives, so its home board reads it too.
+      const fromHome = await app.call<{ projects: TaskLinkedProject[] }>(
+        'GET',
+        `/workspaces/${wsId}/blocks/${task.id}/projects`,
+      )
+      expect(fromHome.body.projects.map((p) => p.projectId)).toEqual([project.id])
+    })
+
     it("drops a task's links when the linked project is deleted", async () => {
       const { app, wsId, project, task } = await setup()
       await research(app, wsId, project)
