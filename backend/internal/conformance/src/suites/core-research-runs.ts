@@ -196,36 +196,47 @@ export function defineCoreResearchRunsConformance(harness: ConformanceHarness): 
       ).toEqual(['scheme', 'scopes'])
     })
 
-    it('carries an offloaded body to the board that inherits the project', async () => {
-      const store = memoryBinaryArtifactStore()
-      const { app, wsId, project } = await setup(
-        {},
-        { resolveBinaryArtifactStore: () => Promise.resolve(store) },
-      )
-      await app
-        .outcomeStoragePolicyRepository()
-        .set('project', project.id, { inlineMaxBytes: 16, offload: 'enabled' })
-      expect((await runTask(app, wsId, project)).exec.status).toBe('done')
-      const accountId = (await app.workspaceRepository().accountOf(wsId))!
-      const other = await app.createWorkspaceInAccount(accountId, null, { name: 'Other board' })
-      const otherId = other.workspace.id
-      await app.call('POST', `/workspaces/${otherId}/projects/${project.id}/mount`, {})
-      expect((await app.call('DELETE', `/workspaces/${wsId}`)).status).toBe(204)
-      expect((await store.listByBlock(otherId, project.rootBlockId)).map((a) => a.kind)).toEqual([
-        'outcome',
-      ])
-      const refresh = await runTask(app, otherId, project, { researchMode: 'refresh' })
-      expect(refresh.exec.status).toBe('done')
-    })
+    // Deleting a board is mothership-internal (a node never proxies `workspaceRepository.delete`),
+    // so a mothership node cannot serve it; the mothership's own facade runs this test.
+    it.skipIf(harness.name === 'mothership')(
+      'carries an offloaded body to the board that inherits the project',
+      async () => {
+        const store = memoryBinaryArtifactStore()
+        const { app, wsId, project } = await setup(
+          {},
+          { resolveBinaryArtifactStore: () => Promise.resolve(store) },
+        )
+        await app
+          .outcomeStoragePolicyRepository()
+          .set('project', project.id, { inlineMaxBytes: 16, offload: 'enabled' })
+        expect((await runTask(app, wsId, project)).exec.status).toBe('done')
+        const accountId = (await app.workspaceRepository().accountOf(wsId))!
+        const other = await app.createWorkspaceInAccount(accountId, null, { name: 'Other board' })
+        const otherId = other.workspace.id
+        await app.call('POST', `/workspaces/${otherId}/projects/${project.id}/mount`, {})
+        expect((await app.call('DELETE', `/workspaces/${wsId}`)).status).toBe(204)
+        expect((await store.listByBlock(otherId, project.rootBlockId)).map((a) => a.kind)).toEqual([
+          'outcome',
+        ])
+        const refresh = await runTask(app, otherId, project, { researchMode: 'refresh' })
+        expect(refresh.exec.status).toBe('done')
+      },
+    )
 
-    it('keeps a small body inline when no content storage is configured', async () => {
-      const { app, wsId, project } = await setup()
-      await app
-        .outcomeStoragePolicyRepository()
-        .set('project', project.id, { inlineMaxBytes: 16, offload: 'enabled' })
-      const { exec } = await runTask(app, wsId, project)
-      expect(exec.status).toBe('done')
-    })
+    // A mothership node cannot resolve the account's content storage (the settings row carries
+    // sealed storage credentials and stays mothership-internal), so it cannot tell "no storage"
+    // from "storage it cannot reach". Media artifacts share the limitation on a node.
+    it.skipIf(harness.name === 'mothership')(
+      'keeps a small body inline when no content storage is configured',
+      async () => {
+        const { app, wsId, project } = await setup()
+        await app
+          .outcomeStoragePolicyRepository()
+          .set('project', project.id, { inlineMaxBytes: 16, offload: 'enabled' })
+        const { exec } = await runTask(app, wsId, project)
+        expect(exec.status).toBe('done')
+      },
+    )
 
     it('refuses a research task under a service', async () => {
       const { app, wsId } = await setup()

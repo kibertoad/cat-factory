@@ -32,6 +32,8 @@ from cat_factory import (  # noqa: E402
     CatFactoryUnauthorizedError,
 )
 from cat_factory.models import (  # noqa: E402
+    CreatePublicProject,
+    CreatePublicProjectDefinition,
     CreatePublicTask,
     NotificationWebhookAlertEvent,
     NotificationWebhookRunEvent,
@@ -73,7 +75,7 @@ def step(name: str, fn: Callable[[], None]) -> None:
 client = CatFactoryClient(base_url=base_url, api_key=api_key, user_agent="cat-factory-smoketest")
 read_client = CatFactoryClient(base_url=base_url, api_key=read_key)
 
-state: dict[str, str] = {"service_id": "", "task_id": "", "pipeline_id": ""}
+state: dict[str, str] = {"service_id": "", "task_id": "", "pipeline_id": "", "project_id": ""}
 
 
 def list_services() -> None:
@@ -216,6 +218,63 @@ def expect_not_found() -> None:
         observations["notFoundHasRequestId"] = isinstance(exc.request_id, str)
 
 
+# A project of the built-in research kind pins a definition the deployment registers in code (the
+# test server ships `e2e:vendor`). The kind serves nullable JSON Schemas, the project a nullable
+# pin, and the view an opaque value: the null-versus-absent and opaque cases the four clients must
+# decode alike.
+def get_project_kind() -> None:
+    kind = client.project_kinds.get("research")
+    observations["projectKindPinsDefinition"] = str(kind.definition) == "required"
+    observations["projectKindServesViewSchema"] = kind.schemas.view is not None
+
+
+def list_project_definitions() -> None:
+    result = client.project_kinds.list_definitions("research")
+    observations["projectDefinitionListed"] = any(
+        d.definition.key == "e2e:vendor" and str(d.origin) == "registered" for d in result.definitions
+    )
+
+
+def create_project() -> None:
+    project = client.projects.create(
+        CreatePublicProject(
+            kind="research",
+            title="SDK smoketest research",
+            definition=CreatePublicProjectDefinition(key="e2e:vendor"),
+        )
+    )
+    state["project_id"] = project.project_id
+    observations["projectKind"] = project.kind
+    observations["projectHomedHere"] = project.homed_here
+    observations["projectPinnedVersion"] = project.pin.definition_version if project.pin else None
+    observations["projectServiceCount"] = len(project.service_ids)
+
+
+def get_project() -> None:
+    project = client.projects.get(state["project_id"])
+    observations["projectFetchedTitle"] = project.title
+    observations["projectFetchedPinKey"] = project.pin.definition_key if project.pin else None
+
+
+def list_project_outcomes() -> None:
+    result = client.projects.list_outcomes(state["project_id"])
+    observations["projectOutcomeCount"] = len(result.outcomes)
+
+
+def get_project_view() -> None:
+    view = client.projects.get_view(state["project_id"])
+    observations["projectViewKind"] = view.kind
+    observations["projectViewIsPresent"] = view.view is not None
+
+
+def expect_project_not_found() -> None:
+    try:
+        client.projects.get("prj_definitely_not_a_real_project")
+        failures.append("error: project not found: expected a 404, got a success")
+    except CatFactoryNotFoundError:
+        observations["projectNotFoundIsTypedClass"] = True
+
+
 def expect_unauthorized() -> None:
     bogus = CatFactoryClient(base_url=base_url, api_key="cf_live_pak_0000.deadbeef")
     try:
@@ -315,6 +374,13 @@ step("error: not found", expect_not_found)
 step("error: unauthorized", expect_unauthorized)
 step("error: insufficient scope", expect_insufficient_scope)
 step("error: connection refused", expect_connection_refused)
+step("projectKinds.get", get_project_kind)
+step("projectKinds.listDefinitions", list_project_definitions)
+step("projects.create", create_project)
+step("projects.get", get_project)
+step("projects.listOutcomes", list_project_outcomes)
+step("projects.getView", get_project_view)
+step("error: project not found", expect_project_not_found)
 step("tasks.start", start_task)
 step("tasks.stream (SSE)", stream_task)
 step("tasks.getRun", get_run)

@@ -34,6 +34,7 @@ import { useReactiveSlots } from '@modular-vue/runtime'
 import type { AppSlots, ResultViewContribution } from '~/modular/slots'
 import ContextAttachmentFields from '~/components/context/ContextAttachmentFields.vue'
 import TaskImageStaging from '~/components/tasks/TaskImageStaging.vue'
+import TaskProjectStaging from '~/components/projects/TaskProjectStaging.vue'
 import AgentConfigField from '~/components/common/AgentConfigField.vue'
 import DescriptorFields from '~/components/common/DescriptorFields.vue'
 import FragmentSelector from '~/components/fragments/FragmentSelector.vue'
@@ -86,6 +87,7 @@ const { resolvePending, linkPending, presentLinkFailures } = useContextLinking()
 const { uploadStaged } = useTaskImageUpload()
 /** Images to attach once the task exists; an upload needs its block id. */
 const stagedImages = ref<File[]>([])
+const { staged: stagedProjects, linkStaged: linkStagedProjects } = useStagedProjectLinks()
 
 const open = computed(() => ui.addTaskContainerId !== null)
 
@@ -662,6 +664,7 @@ onModalOpen(open, () => {
   agentConfigValues.value = {}
   pendingContext.value = []
   stagedImages.value = []
+  stagedProjects.value = []
   // Seed from a prefill when opened from another surface (e.g. "create task from
   // issue" sets the title + stages the issue as linked context). Pipeline / preset stay at their
   // defaults unless the opener carries a choice the person already made (the one-sentence
@@ -845,6 +848,7 @@ async function submitCreate(acknowledgeReviewDebt: boolean) {
       // "Copy details" for a bug report, and after the create because the task is already sound.
       presentLinkFailures(await linkPending(block.id, pendingContext.value), block.id)
       await uploadStaged(block.id, stagedImages.value)
+      await linkStagedProjects(block.id)
     }
     ui.closeReviewFriction()
     ui.closeAddTask()
@@ -1426,6 +1430,7 @@ function createRefusalMessage(error: unknown): string | null {
           <!-- Images that explain the task, staged until it exists. A recurring task hands off to
                the schedule modal and creates no task here, so it is not offered. -->
           <TaskImageStaging v-if="!isRecurring" v-model="stagedImages" />
+          <TaskProjectStaging v-if="!isRecurring" v-model="stagedProjects" />
 
           <p class="text-2xs text-dimmed">
             {{ t('board.addTask.plannedHint') }}

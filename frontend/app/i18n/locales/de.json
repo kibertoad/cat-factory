@@ -9301,7 +9301,8 @@
       "linked": "Projekt verknüpft",
       "loadFailed": "Die verknüpften Projekte konnten nicht geladen werden",
       "linkFailed": "Das Projekt konnte nicht verknüpft werden",
-      "unlinkFailed": "Die Projektverknüpfung konnte nicht gelöst werden"
+      "unlinkFailed": "Die Projektverknüpfung konnte nicht gelöst werden",
+      "stageHint": "Wird verknüpft, sobald die Aufgabe angelegt ist. Ein Projekt ohne Ergebnis wird dann abgelehnt."
     },
     "view": {
       "open": "Projekt öffnen",

@@ -14,7 +14,7 @@ import type { ProjectContextContributor } from './projectContext.js'
 
 export interface TaskProjectLinkServiceDeps {
   links: TaskProjectLinkRepository
-  projectRepository: Pick<ProjectRepository, 'listByIds'>
+  projectRepository: Pick<ProjectRepository, 'listByIds' | 'listByAccount'>
   blockRepository: Pick<BlockRepository, 'findByIds'>
   /** The block and the board that homes it: a task under a mounted service is homed elsewhere. */
   resolveBlock: (
@@ -86,10 +86,15 @@ export class TaskProjectLinkService {
   async assertLinkable(workspaceId: string, projectIds: readonly string[]): Promise<void> {
     if (projectIds.length === 0) return
     const accountId = (await this.deps.workspaceRepository.accountOf(workspaceId)) ?? null
-    const projects = await this.projectsById([...projectIds])
-    const invalid = projectIds.filter(
-      (id) => (projects.get(id)?.accountId ?? undefined) !== accountId,
+    // Read the account's own projects rather than the named ids: a mothership node's persistence
+    // RPC refuses a by-id read naming a missing or foreign project as a whole.
+    const wanted = new Set(projectIds)
+    const projects = new Map(
+      (await this.deps.projectRepository.listByAccount(accountId))
+        .filter((p) => wanted.has(p.id))
+        .map((p) => [p.id, p] as const),
     )
+    const invalid = projectIds.filter((id) => !projects.has(id))
     if (invalid.length) {
       throw new ValidationError('A task can only link projects of its own organization', {
         reason: 'project_link_invalid',
