@@ -236,7 +236,8 @@
         "review": "İnceleme",
         "ralph": "Ralph döngüsü",
         "bugFishing": "Hata avı",
-        "resolveConflicts": "Çakışmaları çöz"
+        "resolveConflicts": "Çakışmaları çöz",
+        "research": "Araştırma"
       },
       "recurringWithFrame": "Yinelenen bir görev, bir işlem hattını belirli bir aralıkta çalıştırır. Programı ve istemi ayarlamak için devam edin.",
       "recurringNoFrame": "Yinelenen bir görev bir serviste bulunmalıdır. Bir servis çerçevesinden (veya içindeki bir modülden) ekleyin.",
@@ -720,7 +721,13 @@
         "project_definition_required": "Bu proje türü bir tanım sabitler, bu yüzden bir tanıma ihtiyaç duyar. Bir tanım seçip yeniden deneyin.",
         "project_definition_not_accepted": "Bu proje türü tanım sabitlemez. Tanımı kaldırın veya tanım kullanan bir tür seçin.",
         "project_definition_not_found": "Bu kuruluşta o anahtar ve sürümle eşleşen bu türde bir proje tanımı yok. Anahtarı kontrol edin ya da en yenisini sabitlemek için sürümü boş bırakın.",
-        "project_definition_inputs_invalid": "Tanımın girdileri için verilen değerler tanımı karşılamıyor. Her zorunlu girdiyi kabul edilen bir değerle doldurup yeniden deneyin."
+        "project_definition_inputs_invalid": "Tanımın girdileri için verilen değerler tanımı karşılamıyor. Her zorunlu girdiyi kabul edilen bir değerle doldurup yeniden deneyin.",
+        "task_type_requires_project": "Bu türden bir görev bir servise değil, bir projeye aittir. Onu sunan türde bir projeye ekleyin.",
+        "project_not_pinned": "Bu türden bir görev, projesinin bir tanım sabitlemesini gerektirir ve bu proje hiçbir tanım sabitlemiyor. Görevi tanım sabitleyen bir projeye ekleyin.",
+        "project_definition_changed": "Bu projenin sabitlediği tanım o zamandan beri değişti, bu yüzden çalışma, projenin hiç kabul etmediği bir tanımla çalışmak yerine durdu. Dağıtım operatörünüzden değişikliği yeni bir sürüm olarak yayımlamasını isteyin.",
+        "project_task_already_recorded": "Bu görev sonucunu projeye zaten kaydetti. Devam etmek için yeni bir görev oluşturun.",
+        "outcome_too_large_for_inline": "Sonuç saklanamayacak kadar büyük, bu yüzden kaydedilmedi. Görevi daraltıp yeniden çalıştırın.",
+        "research_nothing_to_ask": "Bu araştırma görevinin modu sorulacak bir soru bırakmıyor: genişletecek yeni bir şey ya da netleştirilecek kısmi veya engellenmiş bir şey yok. Başka bir mod seçin veya bir soru ekleyin."
       }
     },
     "action": {
@@ -5508,7 +5515,8 @@
         "research": "Araştırma",
         "planning": "Planlama",
         "media": "Medya",
-        "maintenance": "PR bakımı"
+        "maintenance": "PR bakımı",
+        "projectResearch": "Proje araştırması"
       },
       "strategyOption": {
         "specialist-panel": "Uzman paneli",

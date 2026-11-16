@@ -28,6 +28,10 @@ import * as v from 'valibot'
  *                  and no other task type is offered one. It writes code as `build` does, onto
  *                  the attached pull request's own branch, and is its own member because that
  *                  pull request was attached at creation: a run under it opens and merges none.
+ *   - `project-research` answers a research PROJECT's pinned definition against the vendor it
+ *                  describes and records a findings revision on the project. It has no
+ *                  repository to write to, so a `research` task offers ONLY these, and no other
+ *                  task type is offered one.
  *
  * The gating predicates that read it live in `pipeline-purpose.ts`, which re-exports this
  * module. The vocabulary sits apart from them because `agent-presentation.ts` has to name a
@@ -45,6 +49,7 @@ export const PIPELINE_PURPOSES = [
   'planning',
   'media',
   'maintenance',
+  'project-research',
 ] as const
 export const pipelinePurposeSchema = v.picklist(PIPELINE_PURPOSES)
 export type PipelinePurpose = v.InferOutput<typeof pipelinePurposeSchema>

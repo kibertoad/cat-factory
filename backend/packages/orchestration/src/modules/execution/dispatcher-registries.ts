@@ -80,6 +80,12 @@ import type { BinaryCandidateController } from './BinaryCandidateController.js'
 import type { ForkDecisionController } from './ForkDecisionController.js'
 import { PrReviewController, PR_REVIEW_STEP_KIND } from './PrReviewController.js'
 import { BugFishingController, BUG_FISHING_STEP_KIND } from './BugFishingController.js'
+import type { ProjectStepController } from '../projects/ProjectStepController.js'
+import {
+  projectCredentialInterceptor,
+  projectOutcomeResolvers,
+  projectStepHandler,
+} from '../projects/projectStepRegistrations.js'
 import type { CodebaseSurveyResult } from './bugFishingSurvey.js'
 import { bugFishingPassScope } from './bugFishingPass.js'
 import {
@@ -142,6 +148,10 @@ export interface DispatcherRegistryDeps {
   binaryCandidateController: BinaryCandidateController
   prReviewController: PrReviewController
   bugFishingController: BugFishingController
+  /** The project step's engine half; absent when project persistence is not wired. */
+  projectStep?: ProjectStepController
+  /** Persist and publish a run, for a completion path that must persist before it throws. */
+  persistInstance: (workspaceId: string, instance: ExecutionInstance) => Promise<void>
   mergeResolver: MergeResolver
   requirementsKind: ReviewKind<RequirementReview>
   clarityKind: ReviewKind<ClarityReview>
@@ -483,6 +493,7 @@ export function buildStepHandlerRegistry(d: DispatcherRegistryDeps): StepHandler
       canHandle: ({ step }) => step.agentKind === BUG_FISHING_STEP_KIND,
       handle: (ctx) => handleBugFishingPhase(d, ctx),
     },
+    projectStepHandler(d),
     // The generic container/inline-agent step — claims every step no more-specific handler
     // did. Highest order so it always runs last. See {@link handleAgentStep}.
     {
@@ -723,6 +734,7 @@ export function buildStepCompletionInterceptors(
       intercept: ({ workspaceId, instance, step, result }) =>
         d.ralphController.resolveRalphResult(workspaceId, instance, step, result),
     },
+    projectCredentialInterceptor(d),
   ]
   return interceptors.sort((a, b) => a.order - b.order)
 }
@@ -904,6 +916,7 @@ export function buildStepResolverRegistry(
     // {@link taskEstimateResolver}).
     taskEstimateResolver(d, TASK_ESTIMATOR_AGENT_KIND, 'predicted'),
     taskEstimateResolver(d, TASK_REASSESSOR_AGENT_KIND, 'observed'),
+    ...projectOutcomeResolvers(d),
   ]
   const map = new Map(resolvers.map((r) => [r.kind, r]))
   // Merge deployment-registered resolvers, mirroring the gate registry below. A

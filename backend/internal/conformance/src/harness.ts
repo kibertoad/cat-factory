@@ -50,6 +50,7 @@ import type {
   TaskTypeRegistry,
   ProjectKindRegistry,
   ProjectDefinitionRegistry,
+  ProjectKindModuleRegistry,
   ProjectRecordRepository,
   InlineUseCaseRegistry,
   InlineUseCaseGenerator,
@@ -859,6 +860,7 @@ export interface ConformanceAppOptions {
   projectKindRegistry?: ProjectKindRegistry
   /** Inject the project-definition registry, so a suite can pin a registered definition. */
   projectDefinitionRegistry?: ProjectDefinitionRegistry
+  projectKindModuleRegistry?: ProjectKindModuleRegistry
   /**
    * Inject the app-owned INLINE USE-CASE registry, pre-loaded with a deployment's use case, so the
    * suite can assert the public `/api/v1/use-cases` surface resolves identically on EVERY runtime

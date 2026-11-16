@@ -12,6 +12,7 @@ import {
   webUrlSchema,
 } from './project-definitions.js'
 import type { ProjectOutcome } from './project-outcomes.js'
+import { researchModeSchema, type ResearchMode } from './research-mode.js'
 
 // ---------------------------------------------------------------------------
 // The `research` project kind's own content: the spec its definitions carry (topics of
@@ -123,8 +124,7 @@ export const researchSpecValidator: ProjectDefinitionSpecValidator = {
 // ---------------------------------------------------------------------------
 
 /** What a research task asks for: the research kind's outcome `intent` vocabulary. */
-export const researchModeSchema = v.picklist(['initial', 'extend', 'clarify', 'refresh'])
-export type ResearchMode = v.InferOutput<typeof researchModeSchema>
+export { RESEARCH_MODES, researchModeSchema, type ResearchMode } from './research-mode.js'
 
 /** The id an ad-hoc question carries: namespaced to its task, so no definition can reuse it. */
 export function adhocQuestionId(taskId: string, ordinal: number): string {
@@ -198,6 +198,49 @@ export const findingsRevisionBodySchema = v.pipe(
 )
 export type FindingsRevisionBody = v.InferOutput<typeof findingsRevisionBodySchema>
 
+/** Validate a findings body read off a step or a row, or undefined when it does not parse. */
+export function parseFindingsRevisionBody(value: unknown): FindingsRevisionBody | undefined {
+  if (value === undefined || value === null) return undefined
+  const parsed = v.safeParse(findingsRevisionBodySchema, value)
+  return parsed.success ? parsed.output : undefined
+}
+
+/**
+ * What a research task was asked, fixed on its step when it starts (the generic project step
+ * state carries it as the kind's `plan`), so a replayed or resumed dispatch asks the same
+ * questions.
+ */
+export const researchTaskPlanSchema = v.object({
+  mode: researchModeSchema,
+  /** Every question id this task answers, definition and ad-hoc alike. */
+  questionIds: v.array(v.string()),
+  /** The questions this task added, by the `adhoc:` id each is answered under. */
+  adhocQuestions: v.optional(v.array(v.object({ id: v.string(), question: v.string() })), []),
+})
+export type ResearchTaskPlan = v.InferOutput<typeof researchTaskPlanSchema>
+
+/** Read a research plan off a step, or undefined when it does not parse. */
+export function parseResearchTaskPlan(value: unknown): ResearchTaskPlan | undefined {
+  const parsed = v.safeParse(researchTaskPlanSchema, value)
+  return parsed.success ? parsed.output : undefined
+}
+
+/**
+ * What the `project-researcher` agent is handed: the questions its task answers, what earlier
+ * revisions established for them, and a checkpoint its step recorded before it stopped for a
+ * credential. The engine builds it from the plan; the agent's prompt renders it.
+ */
+export interface ResearchBrief {
+  mode: ResearchMode
+  /** The definition's goal. */
+  brief: string
+  /** The questions this task answers, each with its topic, ad-hoc ones included. */
+  questions: Array<{ id: string; topic: string; question: string; answerHint?: string }>
+  /** What earlier revisions established for those questions, so a follow-up starts from it. */
+  priorFindings: Array<{ questionId: string; status: QuestionStatus; answer: string }>
+  /** Partial findings the step recorded before it stopped to wait for a credential. */
+  checkpoint?: FindingsRevisionBody
+}
 /** A research project's outcome revision, its body decoded. */
 export type FindingsRevision = ProjectOutcome<FindingsRevisionBody>
 

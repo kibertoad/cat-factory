@@ -1,3 +1,4 @@
+import type { ProjectDefinition } from '@cat-factory/contracts'
 import type {
   AgentConfigValues,
   AgentKind,
@@ -960,6 +961,11 @@ export interface AgentRunContext {
       phaseTemplate?: InitiativePresetPhaseTemplate
     }
   }
+  /**
+   * A project task's run: its project, the definition it pinned and the brief its kind built. Set
+   * by the engine's project step handler; absent on every other run.
+   */
+  project?: ProjectRunContext
 }
 
 /** A point at which the agent needs a human to choose before continuing. */
@@ -991,6 +997,28 @@ export interface AgentTokenUsage {
    * which would assert that nothing was cached.
    */
   inputClasses?: InputTokenClassCounts
+}
+
+/** What a project task's run is asked, resolved by the engine when the task's step starts. */
+export interface ProjectRunContext {
+  projectId: string
+  /** The project's kind, whose module built `brief`. */
+  kind: string
+  /** The definition the project pinned, or null for a kind that pins none. */
+  definition: ProjectDefinition | null
+  /** The project's values for the definition's `inputs`. */
+  inputs: Record<string, unknown>
+  /** The frame blocks of the services the project links, whose repos are read-only context. */
+  linkedFrameBlockIds: string[]
+  /** What the kind asks of this task, in the kind's own shape, for the kind's agent prompt. */
+  brief: unknown
+}
+
+/** A credential the agent stopped to ask a person for. */
+export interface CredentialRequest {
+  key: string
+  reason: string
+  observed: string
 }
 
 export interface AgentRunResult {
@@ -1066,6 +1094,13 @@ export interface AgentRunResult {
    * it before use. Absent for every non-`ralph` kind.
    */
   ralphVerdict?: unknown
+  /**
+   * A project run that stopped to ask a person for a credential. The engine checkpoints the
+   * partial findings in `custom` and parks the step on the credential instead of completing it.
+   */
+  credentialRequest?: CredentialRequest
+  /** The scrubbed HTTP exchanges a project run's `http_request` tool recorded, by evidence ref. */
+  httpExchanges?: Array<{ ref: string; exchange: unknown }>
   /**
    * A coding step's PRE-PR validation report: which of the service's configured check commands
    * passed against the checkout, their exit codes and bounded/secret-scrubbed output tails, and

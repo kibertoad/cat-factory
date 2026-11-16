@@ -30,6 +30,12 @@ export type AgentSurface =
   /** A container run that edits a working tree and commits + pushes (optionally opens a PR). */
   | 'container-coding'
   /**
+   * A PROJECT run: an agent for a project task, in one of our containers but with no checkout of
+   * its own, beside a browser and the access tool server for the definition's targets. Linked
+   * repos arrive read-only. Its reply is the outcome its kind records.
+   */
+  | 'container-project'
+  /**
    * A DELEGATED run: an external system the deployment registered (see kernel's
    * `DelegatedExecutor`) does the work and the platform observes it. No harness, no checkout of
    * ours, no proxy (the executor owns all three), so this surface is the one that answers "not

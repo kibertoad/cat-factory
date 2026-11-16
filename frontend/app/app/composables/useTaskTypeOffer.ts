@@ -1,5 +1,5 @@
 import { computed, watch, type Ref } from 'vue'
-import type { ProjectKindTaskType } from '@cat-factory/contracts'
+import { taskTypeRequiresProject, type ProjectKindTaskType } from '@cat-factory/contracts'
 import type { Block, CreateTaskType } from '~/types/domain'
 
 /** A task type the add-task picker offers; `recurring` is created through the schedule flow. */
@@ -13,7 +13,8 @@ const DOC_REPO_TYPES: ReadonlySet<string> = new Set(['document', 'spike'])
  *
  *  - a document repository only authors documents and spikes;
  *  - under a project root, the project's kind decides which task types it takes, and never
- *    `recurring`: a schedule attaches to a service frame, which a project is not.
+ *    `recurring`: a schedule attaches to a service frame, which a project is not;
+ *  - a research task belongs under a project, so a service never offers one.
  *
  * `defaultTaskType` is the type a fresh form opens on, and `projectEntry` the project kind's entry
  * for a type, whose `defaultPipelineId` is the pipeline the server starts such a task with.
@@ -57,10 +58,12 @@ export function useTaskTypeOffer(container: Ref<Block | undefined>, taskType: Re
       { value: 'review', label: t('board.addTask.types.review'), icon: 'i-lucide-clipboard-check' },
       { value: 'ralph', label: t('board.addTask.types.ralph'), icon: 'i-lucide-infinity' },
       { value: 'media', label: t('board.addTask.types.media'), icon: 'i-lucide-image-plus' },
+      { value: 'research', label: t('board.addTask.types.research'), icon: 'i-lucide-telescope' },
       { value: 'recurring', label: t('board.addTask.types.recurring'), icon: 'i-lucide-repeat' },
     ]
     const set = offered.value
-    return set ? all.filter((k) => set.has(k.value)) : all
+    if (set) return all.filter((k) => set.has(k.value))
+    return all.filter((k) => !taskTypeRequiresProject(k.value))
   })
 
   /** Deployment-registered task types, filtered by the same rules as the built-ins. */

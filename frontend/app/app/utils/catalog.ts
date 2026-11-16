@@ -1069,6 +1069,12 @@ export const TASK_TYPE_META: Record<string, TaskTypeMeta> = {
     color: 'var(--app-hue-pink)',
     labelKey: 'board.addTask.types.media',
   },
+  research: {
+    taskType: 'research',
+    icon: 'i-lucide-telescope',
+    color: 'var(--app-hue-violet)',
+    labelKey: 'board.addTask.types.research',
+  },
   recurring: {
     taskType: 'recurring',
     icon: 'i-lucide-repeat',

@@ -272,6 +272,8 @@ export type {
   AgentJobUpdate,
   AgentRunContext,
   AgentRunResult,
+  CredentialRequest,
+  ProjectRunContext,
   AgentTokenUsage,
   AsyncAgentExecutor,
   ReviewedPoint,

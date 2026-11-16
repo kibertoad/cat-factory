@@ -42,6 +42,15 @@ export const useProjectsStore = defineStore('projects', () => {
     return map
   })
 
+  /**
+   * The kinds the create form can make a project of. A kind that requires a definition needs one
+   * picked at creation, which this form does not collect yet, so it is hidden here rather than
+   * offered and then refused.
+   */
+  const creatableKinds = computed<ProjectKindDescriptor[]>(() =>
+    kinds.value.filter((k) => k.definition !== 'required'),
+  )
+
   function kindOf(project: Project | undefined): ProjectKindDescriptor | undefined {
     return project ? kinds.value.find((k) => k.id === project.kind) : undefined
   }
@@ -87,6 +96,7 @@ export const useProjectsStore = defineStore('projects', () => {
     catalog,
     mounts,
     kinds,
+    creatableKinds,
     kindsUnavailable,
     byRootBlock,
     kindOf,

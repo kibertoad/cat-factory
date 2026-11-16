@@ -237,6 +237,7 @@ interface MothershipAppOptions {
   taskTypeRegistry?: CoreDependencies['taskTypeRegistry']
   projectKindRegistry?: CoreDependencies['projectKindRegistry']
   projectDefinitionRegistry?: CoreDependencies['projectDefinitionRegistry']
+  projectKindModuleRegistry?: CoreDependencies['projectKindModuleRegistry']
   pipelineRegistry?: CoreDependencies['pipelineRegistry']
   testerQualityReviewer?: CoreDependencies['testerQualityReviewer']
   judgeRegistry?: CoreDependencies['judgeRegistry']
@@ -397,6 +398,7 @@ function injectedRegistries(opts: MothershipAppOptions | undefined) {
     taskTypeRegistry: opts?.taskTypeRegistry,
     projectKindRegistry: opts?.projectKindRegistry,
     projectDefinitionRegistry: opts?.projectDefinitionRegistry,
+    projectKindModuleRegistry: opts?.projectKindModuleRegistry,
     pipelineRegistry: opts?.pipelineRegistry,
     judgeRegistry: opts?.judgeRegistry,
     agentKindRegistry: opts?.agentKindRegistry,

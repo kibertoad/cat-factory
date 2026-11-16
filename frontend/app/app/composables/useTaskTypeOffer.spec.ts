@@ -84,6 +84,20 @@ describe('useTaskTypeOffer', () => {
     expect(taskType.value).toBe('bug')
   })
 
+  it('never offers a research task outside a project, and offers it to a kind that takes it', async () => {
+    const onService = await offerFor('svc')
+    expect(values(onService.offer.taskTypeChoices.value)).not.toContain('research')
+    useProjectsStore().hydrate({
+      projectCatalog: [project],
+      projectKinds: [
+        { ...researchKind, taskTypes: [{ taskType: 'research', repoAccess: 'linked-read-only' }] },
+      ],
+    })
+    const inProject = await offerFor('p1')
+    expect(values(inProject.offer.taskTypeChoices.value)).toEqual(['research'])
+    expect(inProject.offer.defaultTaskType.value).toBe('research')
+  })
+
   it('narrows a document repository to documents and spikes', async () => {
     const { offer, taskType } = await offerFor('docs')
     expect(values(offer.taskTypeChoices.value)).toEqual(['document', 'spike'])

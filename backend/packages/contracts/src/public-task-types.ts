@@ -4,6 +4,7 @@ import {
   BUG_FISHING_PHASES,
 } from './bugFishing.js'
 import * as v from 'valibot'
+import { RESEARCH_MODES } from './research-mode.js'
 import {
   descriptorFieldSchema,
   type DescriptorField,
@@ -185,6 +186,17 @@ export const BUILTIN_PUBLIC_TASK_FIELDS: Readonly<Record<string, readonly Descri
   // the same to `builtinPublicTaskFields` and the opposite to a person: this says "no per-case
   // fields", where silence would say "nobody has looked at this type yet".
   media: [],
+  // The ad-hoc questions and the named question ids are string lists with no fixed vocabulary,
+  // which no descriptor can state, so they are absent for the reason `targetPath` is. A research
+  // task is created under a project, through the project-task surface.
+  research: [
+    {
+      key: 'researchMode',
+      label: 'Research mode',
+      type: 'select',
+      options: RESEARCH_MODES.map((mode) => ({ value: mode, label: mode })),
+    },
+  ],
 }
 
 /**

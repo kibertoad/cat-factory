@@ -59,6 +59,7 @@ import {
   type ProjectKindRegistry,
   type RegisteredProjectDefinitionSource,
   type ProjectDefinitionRegistry,
+  type ProjectKindModuleRegistry,
   type ProjectKindSource,
   type ToolSecretResolver,
   type VcsProviderRegistry,
@@ -446,8 +447,13 @@ export interface NodeContainerOptions {
   /** Where project kinds are read from; set only by a mothership-mode local node. */
   projectKindSource?: ProjectKindSource
   /**
+   * The app-owned project-kind MODULE registry: each kind's code half. Defaults (inside
+   * `createCore`) to the built-in kinds' modules.
+   */
+  projectKindModuleRegistry?: ProjectKindModuleRegistry
+  /**
    * The app-owned project-definition registry: the definitions a deployment ships in code.
-   * Defaults (inside `createCore`) to an empty registry.
+   * Defaults (inside `createCore`) to an empty registry validating the modules' kinds.
    */
   projectDefinitionRegistry?: ProjectDefinitionRegistry
   /** Where registered project definitions are read from; set only by a mothership-mode node. */

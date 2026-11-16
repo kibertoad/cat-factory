@@ -1,6 +1,7 @@
 import * as v from 'valibot'
 import { descriptorFieldValuesSchema } from './form-fields.js'
 import { BUG_FISHING_MAX_PASS_BUDGET } from './bugFishing.js'
+import { researchModeSchema } from './research-mode.js'
 import { reviewEffortLevelSchema } from './review-effort-level.js'
 
 // Shared scalar schemas. Picklists mirror the frontend's `app/types/domain.ts`
@@ -167,6 +168,7 @@ export const BUILTIN_TASK_TYPES = [
   'resolve-conflicts',
   'ralph',
   'media',
+  'research',
   'recurring',
 ] as const
 /**
@@ -184,6 +186,7 @@ export const BUILTIN_CREATE_TASK_TYPES = [
   'resolve-conflicts',
   'ralph',
   'media',
+  'research',
 ] as const
 
 /**
@@ -229,6 +232,18 @@ export type CreateTaskType = v.InferOutput<typeof createTaskTypeSchema>
 export function taskTypeAttachesPullRequest(taskType: string | null | undefined): boolean {
   return taskType === 'resolve-conflicts'
 }
+
+/**
+ * Whether a task of this type belongs under a PROJECT and is refused under a service. A `research`
+ * task answers a project's pinned research definition and writes the project's findings, so a
+ * service has nothing for it to answer and nowhere for it to write.
+ */
+export function taskTypeRequiresProject(taskType: string | null | undefined): boolean {
+  return taskType === 'research'
+}
+
+/** The most ad-hoc questions one research task may add beside its definition's. */
+export const MAX_RESEARCH_ADHOC_QUESTIONS = 20
 
 /**
  * The kinds of document a `document` task can produce. Drives the document-authoring
@@ -416,6 +431,21 @@ export const taskTypeFieldsSchema = v.object({
    */
   fishingMaxPasses: v.optional(
     v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(BUG_FISHING_MAX_PASS_BUDGET)),
+  ),
+
+  // --- Research-task fields ---------------------------------------------------
+  /** Research: what the task asks for. Absent means `initial` on a project with no findings yet. */
+  researchMode: v.optional(researchModeSchema),
+  /** Research: questions this task adds beside its definition's, each answered by id `adhoc:…`. */
+  researchQuestions: v.optional(
+    v.pipe(
+      v.array(v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(2000))),
+      v.maxLength(MAX_RESEARCH_ADHOC_QUESTIONS),
+    ),
+  ),
+  /** Research: for `clarify` or `refresh`, the question ids to revisit; absent means every one. */
+  researchQuestionIds: v.optional(
+    v.pipe(v.array(v.pipe(v.string(), v.minLength(1), v.maxLength(200))), v.maxLength(500)),
   ),
 
   // --- Custom-task-type fields ----------------------------------------------

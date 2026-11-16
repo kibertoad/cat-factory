@@ -236,7 +236,8 @@
         "review": "Przegląd",
         "ralph": "Pętla Ralph",
         "bugFishing": "Polowanie na błędy",
-        "resolveConflicts": "Rozwiąż konflikty"
+        "resolveConflicts": "Rozwiąż konflikty",
+        "research": "Badanie"
       },
       "recurringWithFrame": "Zadanie cykliczne uruchamia pipeline w określonym rytmie. Kontynuuj, aby ustawić harmonogram i prompt.",
       "recurringNoFrame": "Zadanie cykliczne musi należeć do usługi. Dodaj je z ramki usługi (lub modułu w jej obrębie).",
@@ -720,7 +721,13 @@
         "project_definition_required": "Ten rodzaj projektu przypina definicję, więc jej wymaga. Wybierz ją i spróbuj ponownie.",
         "project_definition_not_accepted": "Ten rodzaj projektu nie przypina żadnej definicji. Usuń definicję lub wybierz rodzaj, który jej używa.",
         "project_definition_not_found": "Żadna definicja tego rodzaju projektu w tej organizacji nie pasuje do tego klucza i wersji. Sprawdź klucz albo zostaw wersję pustą, aby przypiąć najnowszą.",
-        "project_definition_inputs_invalid": "Wartości wejść definicji jej nie spełniają. Wypełnij każde wymagane wejście dozwoloną wartością i spróbuj ponownie."
+        "project_definition_inputs_invalid": "Wartości wejść definicji jej nie spełniają. Wypełnij każde wymagane wejście dozwoloną wartością i spróbuj ponownie.",
+        "task_type_requires_project": "Zadanie tego typu należy do projektu, nie do usługi. Dodaj je do projektu rodzaju, który je oferuje.",
+        "project_not_pinned": "Zadanie tego typu wymaga, by jego projekt przypinał definicję, a ten nie przypina żadnej. Dodaj zadanie do projektu, który ją przypina.",
+        "project_definition_changed": "Definicja przypięta przez ten projekt zmieniła się od tego czasu, więc przebieg zatrzymał się, zamiast pracować na definicji, na którą projekt nigdy się nie zgodził. Poproś operatora wdrożenia o opublikowanie zmiany jako nowej wersji.",
+        "project_task_already_recorded": "To zadanie już zapisało swój wynik w projekcie. Utwórz nowe zadanie, aby kontynuować.",
+        "outcome_too_large_for_inline": "Wynik jest zbyt duży, by go zapisać, więc nie został zapisany. Zawęź zadanie i uruchom je ponownie.",
+        "research_nothing_to_ask": "Tryb tego zadania badawczego nie pozostawia żadnego pytania: nie ma nic nowego do rozszerzenia ani nic częściowego lub zablokowanego do wyjaśnienia. Wybierz inny tryb lub dodaj pytanie."
       }
     },
     "action": {
@@ -5508,7 +5515,8 @@
         "research": "Badania",
         "planning": "Planowanie",
         "media": "Multimedia",
-        "maintenance": "Utrzymanie PR"
+        "maintenance": "Utrzymanie PR",
+        "projectResearch": "Badanie projektu"
       },
       "strategyOption": {
         "specialist-panel": "Panel specjalistów",

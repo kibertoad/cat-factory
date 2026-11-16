@@ -91,6 +91,7 @@ const SEAM_ROUTES = {
   promptFragmentRegistry: 'option',
   projectKindRegistry: 'option',
   projectDefinitionRegistry: 'option',
+  projectKindModuleRegistry: 'option',
   // The three SOURCES. Each is `option` for the same reason its registry is, and each is set by
   // exactly one caller, the local facade booting in mothership mode, which reads what the
   // deployment registered from the mothership rather than from this node's own (stale-by-
@@ -171,6 +172,7 @@ const BOOT_ROUTES = {
   promptFragmentRegistry: 'entry-point',
   projectKindRegistry: 'entry-point',
   projectDefinitionRegistry: 'entry-point',
+  projectKindModuleRegistry: 'entry-point',
   // The mothership SOURCES. Deliberately NOT entry-point options: each is the answer to "where is
   // this code-registered org state READ from", which is a property of the deployment TOPOLOGY, and
   // the local mothership boot is the one caller that knows it. A deployment that could set them
@@ -246,7 +248,8 @@ const SEAM_CONSTRUCTORS = {
   pipelineRegistry: ['PipelineRegistry', 'defaultPipelineRegistry'],
   taskTypeRegistry: ['TaskTypeRegistry', 'defaultTaskTypeRegistry'],
   projectKindRegistry: ['ProjectKindRegistry', 'defaultProjectKindRegistry'],
-  projectDefinitionRegistry: ['ProjectDefinitionRegistry'],
+  projectDefinitionRegistry: ['ProjectDefinitionRegistry', 'defaultProjectDefinitionRegistry'],
+  projectKindModuleRegistry: ['ProjectKindModuleRegistry', 'defaultProjectKindModuleRegistry'],
   inlineUseCaseRegistry: ['InlineUseCaseRegistry', 'defaultInlineUseCaseRegistry'],
   initiativePresetRegistry: ['InitiativePresetRegistry', 'defaultInitiativePresetRegistry'],
   vcsRegistry: ['VcsProviderRegistry', 'defaultVcsRegistry'],

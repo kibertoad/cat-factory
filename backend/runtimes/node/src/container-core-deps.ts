@@ -322,6 +322,7 @@ function selectNodeRegistryDeps(bundle: NodeCoreDepsBundle) {
     taskTypeRegistry: options.taskTypeRegistry,
     projectKindRegistry: options.projectKindRegistry,
     projectKindSource: options.projectKindSource,
+    projectKindModuleRegistry: options.projectKindModuleRegistry,
     projectDefinitionRegistry: options.projectDefinitionRegistry,
     registeredProjectDefinitionSource: options.registeredProjectDefinitionSource,
     // The app-owned inline use-case registry (the deployment's non-container model operations);

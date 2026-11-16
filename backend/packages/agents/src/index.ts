@@ -554,6 +554,13 @@ export {
   renderFragmentBriefPrompt,
 } from './agents/prompts/fragment-brief.js'
 export {
+  FINDINGS_SHAPE_HINT,
+  PROJECT_RESEARCHER_AGENT_KINDS,
+  PROJECT_RESEARCHER_KIND,
+  projectResearcherUserPrompt,
+  registerProjectResearcherAgent,
+} from './agents/kinds/project-researcher.js'
+export {
   ENVIRONMENT_ANALYST_KIND,
   ENVIRONMENT_ANALYST_AGENT_KINDS,
   environmentRecipeDraft,

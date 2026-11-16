@@ -605,6 +605,20 @@ export type CredentialWaitReason = (typeof CREDENTIAL_WAIT_REASONS)[number]
  *                                       account can pin. `details` names the kind, key and version.
  *  - `project_definition_inputs_invalid` the values for the definition's `inputs` do not
  *                                       satisfy them. `details.problems` lists why.
+ *  - `task_type_requires_project`       a task of a type that belongs under a project was created
+ *                                       under a service.
+ *  - `project_not_pinned`               the task's kind needs its project to pin a definition, and
+ *                                       it pins none.
+ *  - `project_definition_changed`       a registered definition no longer hashes to what the
+ *                                       project pinned, so the run refuses rather than work from a
+ *                                       definition the project never agreed to.
+ *  - `project_task_already_recorded`    the task already wrote its outcome; a follow-up is a new
+ *                                       task.
+ *  - `research_nothing_to_ask`          the research kind's own: the task's mode selects no
+ *                                       question (an `extend` with no new question, or a `clarify`
+ *                                       with nothing partial or blocked).
+ *  - `outcome_too_large_for_inline`     the outcome body is over the runtime's own row ceiling
+ *                                       and cannot be offloaded.
  *
  * The SPA keys an exhaustive `Record<ProjectReason, …>` of message keys off this.
  */
@@ -618,6 +632,12 @@ export const PROJECT_REASONS = [
   'project_definition_not_accepted',
   'project_definition_not_found',
   'project_definition_inputs_invalid',
+  'task_type_requires_project',
+  'project_not_pinned',
+  'project_definition_changed',
+  'project_task_already_recorded',
+  'research_nothing_to_ask',
+  'outcome_too_large_for_inline',
 ] as const
 
 export type ProjectReason = (typeof PROJECT_REASONS)[number]

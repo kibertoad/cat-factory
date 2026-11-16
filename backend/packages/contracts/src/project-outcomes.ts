@@ -88,3 +88,27 @@ export function encodeOutcomeStoragePolicy(policy: OutcomeStoragePolicy): string
   if (!parsed.success) throw new Error('outcome-storage policy is outside the schema')
   return JSON.stringify(parsed.output)
 }
+
+/**
+ * A project task's run state, recorded on its step when the task first starts. The sequence and
+ * the kind's plan are fixed then, so a replayed or resumed dispatch asks the same of the agent and
+ * the outcome folds in the order the task was asked. The plan and the checkpoint are the kind's
+ * own and stay `unknown` here: typing them per kind would make the workspace snapshot's type too
+ * deep to instantiate, and the engine hands both back to the kind to parse.
+ */
+export const projectStepStateSchema = v.object({
+  projectId: v.string(),
+  /** The project kind whose module planned the task. */
+  kind: v.string(),
+  seq: v.pipe(v.number(), v.integer(), v.minValue(1)),
+  stream: outcomeStreamSchema,
+  intent: outcomeIntentSchema,
+  definitionKey: v.nullable(projectDefinitionKeySchema),
+  definitionVersion: v.nullable(projectDefinitionVersionSchema),
+  plan: v.unknown(),
+  /** What the agent recorded before it stopped to wait for a credential: step state, never an outcome. */
+  checkpoint: v.optional(v.unknown()),
+  /** The outcome this task wrote, once written. */
+  outcomeId: v.optional(v.string()),
+})
+export type ProjectStepState = v.InferOutput<typeof projectStepStateSchema>
