@@ -1,5 +1,125 @@
 # @cat-factory/worker
 
+## 0.234.0
+
+### Minor Changes
+
+- c153f58: A project pins a definition of its own kind when it is created. A project kind declares whether
+  its projects pin one (`definition: 'required' | 'optional'`), and creating such a project takes a
+  `definition` field naming the key, an optional version (the highest by default) and the values for
+  the definition's `inputs`. The project records the definition's version and content hash. The
+  refusals are `project_definition_required`, `project_definition_not_accepted`,
+  `project_definition_not_found` and `project_definition_inputs_invalid`.
+  
+  Definitions are read through one port, `ProjectDefinitionSource`, keyed by kind: the ones a
+  deployment registers in code on a `ProjectDefinitionRegistry` (a new option on `start()`,
+  `startLocal()` and the Worker, constructed with each kind's spec validator) composed with an
+  account's stored ones. A mothership-mode node reads the registered ones from the mothership over
+  `GET /internal/project-definitions` and refuses with `project_definitions_unreachable` when it
+  cannot.
+  
+  A project task's outcome sequence number is claimed per task (`reserveTaskSeq`), so a replayed or
+  retried start keeps its place; a taskless outcome still takes `reserveSeq` from the same order.
+  Adds the `project_task_seqs` table on D1 (`0116_project_task_seqs.sql`) and Postgres.
+- 2665cce: A project task now runs, through one engine path for every project kind, and research is the
+  first kind that uses it.
+  
+  - A project kind ships a `ProjectKindModule`, its code half: how its definitions validate, how a
+    task is planned and its agent briefed, how a parked dispatch's checkpoint folds into the reply,
+    and which artifacts an outcome references. `ProjectKindModuleRegistry` is a new option on
+    `start()`, `startLocal()` and the Worker, defaulting to the built-in kinds' modules, and the
+    default definition registry validates exactly those kinds.
+  - The engine's `ProjectStepController` does the rest for every kind: it refuses a changed or
+    missing pinned definition, claims the task's outcome sequence when it first starts, fixes the
+    kind's plan on the step (`PipelineStep.project`), hands the agent the kind's brief
+    (`AgentRunContext.project`), parks on a credential the agent asks for with its partial output
+    kept on the step, and records one outcome per task, inline.
+  - The platform ships a built-in `research` kind (`defaultProjectKindRegistry()`, which now pins a
+    definition with `definition: 'required'`), the `research` task type (refused under a service with
+    `task_type_requires_project`), the `project-research` pipeline purpose and the `pl_research`
+    pipeline. Its `project-researcher` agent runs on the `ui` image as the new `container-project`
+    surface, dispatching the harness's `project` job.
+  - New refusals: `project_not_pinned`, `project_definition_changed`,
+    `project_task_already_recorded` and `outcome_too_large_for_inline`, plus the research kind's own
+    `research_nothing_to_ask`.
+  - The input gate does not judge a research task's description: its brief is the definition.
+  - The board's create-project form hides a kind that requires a definition until it can collect one.
+  
+  Public API 1.96.0: the task-type vocabulary gains `research`. SDKs regenerated.
+- 391c2ca: A task can link projects as read-only context. Every dispatch of the task reads each linked
+  project's current result, rendered by its kind's module (the new optional
+  `ProjectKindModule.renderContext`) or, for a kind that renders none, as the newest outcome of each
+  stream. It is summarised in the prompt's linked-context index and given in full as a
+  `project-<name>.md` file in `.cat-context/`. A research project contributes its folded findings
+  with coverage. The step records which outcome it read (`contextProjects`).
+  
+  A link is admitted only for a project of the task's organization (`project_link_invalid`) that has
+  a result to read, meaning at least one outcome (`project_has_no_result`). Links are made on the board's task inspector, over
+  `/workspaces/:workspaceId/blocks/:blockId/projects`, over the public
+  `/api/v1/tasks/{taskId}/projects` routes, with the create-time `projects` field, and through an
+  initiative item's `spawn.projects`. Public API 1.98.0; SDKs regenerated.
+  
+  Links live in a new `task_project_links` table on D1 (`0117_task_project_links.sql`) and Postgres,
+  and are dropped when either the task or the project is deleted. `ProjectRecordRepository` gains the
+  batched `listOutcomesOfProjects` and `projectsWithOutcomes` on both runtimes. The research-projects
+  initiative tracker is now ADR 0069.
+
+### Patch Changes
+
+- acb43c4: A mothership now serves its per-workspace capability credentials over the persistence RPC. The method was allow-listed but the repository was never reflected into the registry, so a mothership-mode node's capability-credential settings and dispatch-time resolve answered `... is not wired`.
+- a8fb16a: Make projects work on a mothership-mode node.
+  
+  - The board snapshot read schedules for every mounted subject, projects included, so a node's
+    persistence RPC refused the whole read and the board answered 404 once it mounted a project.
+    It now reads schedules for mounted services only.
+  - Linking services to a project, and projects to a task, checks the ids against the account's own
+    services and projects. A by-id read naming a missing id was refused over the RPC, so a node
+    answered 404 where every other runtime answers the 422 that names the bad link.
+  - An outcome that stays inline no longer resolves the account's blob store.
+  - The capability-credential store is reachable over the persistence RPC on both facades. It was
+    allow-listed but never wired, so a node's capability credential reads (a project run's vendor
+    login, the credentials checklist) failed with "not wired".
+- 1d12bc8: Projects reach the public API (OpenAPI 1.97.0), for every project kind: list the project kinds and
+  read each one's JSON Schemas, publish and read a kind's definitions, create projects and link
+  services, create and run tasks under a project (`PublicProjectTask` under
+  `/api/v1/projects/{projectId}/tasks`), read a project's outcomes and the view its kind computes, and
+  resume a run parked on a missing capability credential
+  (`POST /api/v1/runs/{runId}/credential/resume`). A definition's spec, an outcome's body and a
+  project's view are opaque in the spec. The `/api/v1/tasks/{taskId}` operations that answer a
+  `PublicTask` refuse a project task with `task_owned_by_project`; the run projection and the event
+  stream serve both.
+  
+  A `ProjectKindModule` may now declare `view` (its reading of a project's outcomes) and `schemas`
+  (the valibot schemas of its spec, outcome body and view); the research kind declares both.
+  Publishing goes through `ProjectDefinitionPublisher`, which validates the spec with the kind's
+  module through the new `validateProjectDefinition`. `ProjectRecordRepository` gains a batched
+  `listPins` on both runtimes. The SDKs are regenerated.
+- Updated dependencies [f1549d0]
+- Updated dependencies [c153f58]
+- Updated dependencies [146fad0]
+- Updated dependencies
+- Updated dependencies [a8fb16a]
+- Updated dependencies [1d12bc8]
+- Updated dependencies [2665cce]
+- Updated dependencies [391c2ca]
+  - @cat-factory/contracts@0.385.0
+  - @cat-factory/kernel@0.369.0
+  - @cat-factory/orchestration@0.332.0
+  - @cat-factory/server@0.351.0
+  - @cat-factory/agents@0.177.0
+  - @cat-factory/binary-generators@0.3.88
+  - @cat-factory/consensus@0.20.8
+  - @cat-factory/eks@0.1.428
+  - @cat-factory/gates@0.12.24
+  - @cat-factory/gitlab@0.25.7
+  - @cat-factory/integrations@0.180.1
+  - @cat-factory/observability-otel@0.24.7
+  - @cat-factory/prompt-fragments@1.1.84
+  - @cat-factory/spend@0.23.33
+  - @cat-factory/caching@0.20.122
+  - @cat-factory/observability-langfuse@0.11.88
+  - @cat-factory/provider-cloudflare@0.7.582
+
 ## 0.233.1
 
 ### Patch Changes
