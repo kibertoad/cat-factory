@@ -9288,6 +9288,138 @@
     "mount": {
       "added": "הפרויקט {title} נוסף ללוח הזה",
       "failed": "לא ניתן היה להוסיף את הפרויקט"
+    },
+    "view": {
+      "open": "פתיחת הפרויקט",
+      "title": "פרויקט: {title}",
+      "pin": "{title}, גרסה {version}",
+      "refresh": "רענון",
+      "loading": "הפרויקט נטען",
+      "unavailable": "לא ניתן היה לטעון את הפרויקט",
+      "loadFailed": "טעינת הפרויקט נכשלה",
+      "definitionChanged": "ההגדרה הרשומה כבר לא תואמת לגרסה שהפרויקט הזה קיבע, ולכן הרצות חדשות נדחות עד שהיא תפורסם כגרסה חדשה.",
+      "definitionMissing": "ההגדרה שהפרויקט הזה קיבע כבר לא זמינה לארגון הזה.",
+      "unreadableOutcomes": "חלק מהתוצאות שמורות באחסון תוכן שלא יכול להגיש אותן כרגע. הן מושמטות עד שיוכל.",
+      "tabs": {
+        "latest": "האחרון",
+        "outcomes": "היסטוריה",
+        "credentials": "פרטי גישה",
+        "storage": "אחסון"
+      },
+      "outcomes": {
+        "empty": "אף משימה עדיין לא תיעדה תוצאה",
+        "seq": "גרסה {seq}",
+        "task": "נכתבה על ידי {task}, גרסת הגדרה {version}",
+        "taskOnly": "נכתב על ידי {task}",
+        "show": "הצגה",
+        "hide": "הסתרה",
+        "openFailed": "לא ניתן היה לפתוח את הגרסה",
+        "storage": {
+          "inline": "שמורה ישירות, {size}",
+          "offloaded": "באחסון התוכן, {size}",
+          "unavailable": "לא זמינה, {size}"
+        }
+      },
+      "credentials": {
+        "none": "ההגדרה שקובעה לא מצהירה על פרטי גישה",
+        "requiredAtStart": "הרצה צריכה אותו לפני שהיא מתחילה.",
+        "askedWhenNeeded": "הסוכן מבקש אותם כשהוא מגיע לשלב שצריך אותם.",
+        "store": "ניהול פרטי הגישה של היכולות",
+        "status": {
+          "stored": "שמורים",
+          "missing": "חסרים",
+          "reserved": "שם שמור, לעולם לא נשלח"
+        }
+      },
+      "storage": {
+        "effective": "גרסאות חדשות נשמרות ישירות עד {size}; מעבר לכך, ההעברה לאחסון {offload}.",
+        "accountHint": "נקבע על ידי הארגון.",
+        "inherit": "ירושה",
+        "inherits": "יורש מהרמה הרחבה יותר",
+        "inlineUpTo": "ישירות עד {size}",
+        "inlineKb": "מגבלת שמירה ישירה (KB)",
+        "offloadLabel": "העברה לאחסון",
+        "save": "שמירה",
+        "loadFailed": "טעינת הגדרות אחסון התוצאות נכשלה",
+        "saveFailed": "שמירת הגדרות אחסון התוצאות נכשלה",
+        "tier": {
+          "account": "ארגון",
+          "workspace": "הלוח הזה",
+          "project": "הפרויקט הזה"
+        },
+        "offload": {
+          "enabled": "מופעלת",
+          "disabled": "מושבתת"
+        }
+      },
+      "fallback": {
+        "empty": "לפרויקט הזה עדיין אין תוצאה",
+        "stream": "האחרון ב-{stream}"
+      }
+    }
+  },
+  "research": {
+    "unavailable": "לא ניתן היה לטעון את הממצאים",
+    "adhoc": "שאלות שנוספו על ידי משימות",
+    "retired": "תשובות לשאלות שהגרסה הזו כבר לא שואלת",
+    "learnings": "תובנות",
+    "topicCoverage": "{answered} מתוך {total} נענו",
+    "blockedOn": "ממתין לפרטי הגישה {key}",
+    "notes": "ניסיונות מאוחרים יותר שנשמרו לצד התשובה הזו: {count}",
+    "tabs": {
+      "findings": "ממצאים"
+    },
+    "status": {
+      "answered": "נענתה",
+      "partial": "חלקית",
+      "unanswered": "לא נענתה",
+      "blocked": "חסומה"
+    },
+    "coverage": {
+      "answered": "נענו: {count}",
+      "partial": "חלקיות: {count}",
+      "unanswered": "לא נענו: {count}",
+      "blocked": "חסומות: {count}"
+    },
+    "confidence": {
+      "high": "ביטחון גבוה",
+      "medium": "ביטחון בינוני",
+      "low": "ביטחון נמוך"
+    },
+    "evidence": {
+      "httpExchange": "בקשה מוקלטת {ref}",
+      "screenshot": "צילום מסך {id}",
+      "repoPath": "קובץ במאגר {path}"
+    },
+    "mode": {
+      "initial": "ראשוני",
+      "extend": "הרחבה",
+      "clarify": "הבהרה",
+      "refresh": "רענון"
+    },
+    "modeHelp": {
+      "initial": "לענות על כל שאלה בהגדרה שקובעה.",
+      "extend": "לענות על שאלות שלא נשאלו קודם, כולל אלה שתוסיפו למטה.",
+      "clarify": "לבחון שוב תשובות חלקיות או חסומות.",
+      "refresh": "לבדוק כל תשובה קיימת מול הספק כפי שהוא עכשיו."
+    },
+    "followUp": {
+      "open": "התחלת המשך",
+      "title": "התחלת מחקר המשך",
+      "modeLabel": "מצב",
+      "titleLabel": "כותרת המשימה",
+      "questionsLabel": "שאלות להוספה",
+      "questionsHelp": "שאלה אחת בכל שורה. כל אחת נענית ונשמרת עם ממצאי הפרויקט.",
+      "revisitLabel": "שאלות לבחינה חוזרת",
+      "revisitHelp": "השאירו ריק כדי לבחון שוב כל שאלה שהמצב הזה מכסה.",
+      "submit": "התחלת מחקר",
+      "failed": "לא ניתן היה להתחיל את מחקר ההמשך",
+      "defaultTitle": {
+        "initial": "לחקור את הספק",
+        "extend": "להרחיב את המחקר",
+        "clarify": "להבהיר תשובות פתוחות",
+        "refresh": "לרענן את הממצאים"
+      }
     }
   }
 }

@@ -22,6 +22,7 @@
 // boots it). Reads `DATABASE_URL` (required) and a couple of optional knobs (below).
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
 import { AsyncFakeAgentExecutor, makeOnboardingProbe } from '@cat-factory/conformance'
+import { e2eResearchDefinitions } from './e2eResearch.ts'
 import {
   buildNodeContainer,
   DrizzleBranchProjectionRepository,
@@ -534,6 +535,8 @@ if (!env.DATABASE_URL) {
 
 const backend = await start({
   env,
+  // One code-registered research definition, so the research specs can pin a research project.
+  projectDefinitionRegistry: e2eResearchDefinitions(),
   // The composition root: the stock Node container, but with the agent executor + repo
   // bootstrapper swapped for the deterministic fakes. `start()` supplies `db`, the started
   // pg-boss `boss` (so the REAL durable runner drives runs — NOT the Noop runner) and the

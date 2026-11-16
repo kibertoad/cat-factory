@@ -6,6 +6,7 @@ import FrameSwimlanes from './FrameSwimlanes.vue'
 import InitiativeCard from './InitiativeCard.vue'
 import ResizeGrips from './ResizeGrips.vue'
 import ProjectServicesModal from '~/components/projects/ProjectServicesModal.vue'
+import { defineAsyncView } from '~/utils/asyncView'
 import AgentFailureCard from '~/components/board/AgentFailureCard.vue'
 import AgentStopButton from '~/components/board/AgentStopButton.vue'
 import AdoptionReviewModal from '~/components/bootstrap/AdoptionReviewModal.vue'
@@ -56,6 +57,12 @@ const linkedServices = computed(() =>
   }),
 )
 const servicesModalOpen = ref(false)
+// A project opens its takeover from the frame, with the reader its kind contributes.
+const projectViewOpen = ref(false)
+// Code-split: the takeover opens on a deliberate click, and most boards hold no project.
+const ProjectViewTakeover = defineAsyncView(
+  () => import('~/components/projects/view/ProjectViewTakeover.vue'),
+)
 const isShared = computed(() =>
   isProject.value ? projects.isSharedRoot(props.id) : services.isSharedFrame(props.id),
 )
@@ -540,6 +547,17 @@ const ITEM_ICON: Record<string, string | undefined> = {
                   @click.stop="servicesModalOpen = true"
                 />
                 <IconButton
+                  v-if="project"
+                  class="nodrag"
+                  data-testid="project-open-view"
+                  :size="isTouch ? 'sm' : 'xs'"
+                  variant="ghost"
+                  color="neutral"
+                  icon="i-lucide-panel-top-open"
+                  :label="t('projects.view.open')"
+                  @click.stop="projectViewOpen = true"
+                />
+                <IconButton
                   v-if="tasks.anyOffered && uiRole.fullSurface && !isProject"
                   class="nodrag"
                   data-testid="frame-hunt-bugs"
@@ -635,6 +653,12 @@ const ITEM_ICON: Record<string, string | undefined> = {
     <!-- Teleported by UModal, so it renders outside the canvas transform; kept inside the node's
          single root element so the board node stays a one-root component. -->
     <ProjectServicesModal v-if="project" v-model:open="servicesModalOpen" :project="project" />
+    <ProjectViewTakeover
+      v-if="project && projectViewOpen"
+      v-model:open="projectViewOpen"
+      :project="project"
+      :title="block?.title ?? ''"
+    />
     <AdoptionReviewModal
       v-if="reviewOpen && awaitingReview"
       :job="awaitingReview"

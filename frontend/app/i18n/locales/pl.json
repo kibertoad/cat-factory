@@ -9288,6 +9288,138 @@
     "mount": {
       "added": "Dodano projekt {title} do tej tablicy",
       "failed": "Nie udało się dodać projektu"
+    },
+    "view": {
+      "open": "Otwórz projekt",
+      "title": "Projekt: {title}",
+      "pin": "{title}, wersja {version}",
+      "refresh": "Odśwież",
+      "loading": "Wczytywanie projektu",
+      "unavailable": "Nie udało się wczytać projektu",
+      "loadFailed": "Nie udało się wczytać projektu",
+      "definitionChanged": "Zarejestrowana definicja nie odpowiada już wersji przypiętej przez ten projekt, więc nowe uruchomienia są odrzucane, dopóki nie zostanie opublikowana jako nowa wersja.",
+      "definitionMissing": "Definicja ustalona dla tego projektu nie jest już dostępna dla tej organizacji.",
+      "unreadableOutcomes": "Niektóre wyniki są przechowywane w magazynie treści, który nie może ich teraz udostępnić. Są pomijane, dopóki nie będzie mógł.",
+      "tabs": {
+        "latest": "Najnowsze",
+        "outcomes": "Historia",
+        "credentials": "Poświadczenia",
+        "storage": "Przechowywanie"
+      },
+      "outcomes": {
+        "empty": "Żadne zadanie nie zapisało jeszcze wyniku",
+        "seq": "Rewizja {seq}",
+        "task": "Zapisana przez {task}, wersja definicji {version}",
+        "taskOnly": "Zapisane przez {task}",
+        "show": "Pokaż",
+        "hide": "Ukryj",
+        "openFailed": "Nie udało się otworzyć rewizji",
+        "storage": {
+          "inline": "Zapisana bezpośrednio, {size}",
+          "offloaded": "W magazynie treści, {size}",
+          "unavailable": "Niedostępna, {size}"
+        }
+      },
+      "credentials": {
+        "none": "Ustalona definicja nie deklaruje poświadczeń",
+        "requiredAtStart": "Uruchomienie potrzebuje go przed startem.",
+        "askedWhenNeeded": "Agent prosi o nie, gdy dotrze do miejsca, które go wymaga.",
+        "store": "Zarządzaj poświadczeniami możliwości",
+        "status": {
+          "stored": "Zapisane",
+          "missing": "Brak",
+          "reserved": "Zarezerwowana nazwa, nigdy nie jest wysyłana"
+        }
+      },
+      "storage": {
+        "effective": "Nowe rewizje są zapisywane bezpośrednio do {size}; powyżej przenoszenie jest {offload}.",
+        "accountHint": "Ustawiane przez organizację.",
+        "inherit": "Dziedzicz",
+        "inherits": "Dziedziczy z szerszego poziomu",
+        "inlineUpTo": "bezpośrednio do {size}",
+        "inlineKb": "Limit zapisu bezpośredniego (KB)",
+        "offloadLabel": "Przenoszenie",
+        "save": "Zapisz",
+        "loadFailed": "Nie udało się wczytać ustawień przechowywania wyników",
+        "saveFailed": "Nie udało się zapisać ustawień przechowywania wyników",
+        "tier": {
+          "account": "Organizacja",
+          "workspace": "Ta tablica",
+          "project": "Ten projekt"
+        },
+        "offload": {
+          "enabled": "włączone",
+          "disabled": "wyłączone"
+        }
+      },
+      "fallback": {
+        "empty": "Ten projekt nie ma jeszcze żadnego wyniku",
+        "stream": "Najnowsze w {stream}"
+      }
+    }
+  },
+  "research": {
+    "unavailable": "Nie udało się wczytać wyników",
+    "adhoc": "Pytania dodane przez zadania",
+    "retired": "Odpowiedzi na pytania, których ta wersja już nie zadaje",
+    "learnings": "Wnioski",
+    "topicCoverage": "{answered} z {total} z odpowiedzią",
+    "blockedOn": "Czeka na poświadczenie {key}",
+    "notes": "Późniejsze próby zachowane obok tej odpowiedzi: {count}",
+    "tabs": {
+      "findings": "Wyniki"
+    },
+    "status": {
+      "answered": "Z odpowiedzią",
+      "partial": "Częściowa",
+      "unanswered": "Bez odpowiedzi",
+      "blocked": "Zablokowana"
+    },
+    "coverage": {
+      "answered": "Z odpowiedzią: {count}",
+      "partial": "Częściowe: {count}",
+      "unanswered": "Bez odpowiedzi: {count}",
+      "blocked": "Zablokowane: {count}"
+    },
+    "confidence": {
+      "high": "Wysoka pewność",
+      "medium": "Średnia pewność",
+      "low": "Niska pewność"
+    },
+    "evidence": {
+      "httpExchange": "Zapisane żądanie {ref}",
+      "screenshot": "Zrzut ekranu {id}",
+      "repoPath": "Plik w repozytorium {path}"
+    },
+    "mode": {
+      "initial": "Początkowe",
+      "extend": "Rozszerz",
+      "clarify": "Doprecyzuj",
+      "refresh": "Odśwież"
+    },
+    "modeHelp": {
+      "initial": "Odpowiedzieć na każde pytanie ustalonej definicji.",
+      "extend": "Odpowiedzieć na pytania wcześniej niezadane, w tym te, które dodasz poniżej.",
+      "clarify": "Ponownie sprawdzić odpowiedzi częściowe lub zablokowane.",
+      "refresh": "Sprawdzić każdą istniejącą odpowiedź u dostawcy w obecnym stanie."
+    },
+    "followUp": {
+      "open": "Rozpocznij kontynuację",
+      "title": "Rozpocznij badanie uzupełniające",
+      "modeLabel": "Tryb",
+      "titleLabel": "Tytuł zadania",
+      "questionsLabel": "Pytania do dodania",
+      "questionsHelp": "Jedno pytanie w wierszu. Każde otrzymuje odpowiedź zapisaną z wynikami projektu.",
+      "revisitLabel": "Pytania do ponownego sprawdzenia",
+      "revisitHelp": "Zostaw puste, aby sprawdzić każde pytanie objęte tym trybem.",
+      "submit": "Rozpocznij badanie",
+      "failed": "Nie udało się rozpocząć kontynuacji",
+      "defaultTitle": {
+        "initial": "Zbadaj dostawcę",
+        "extend": "Rozszerz badanie",
+        "clarify": "Doprecyzuj otwarte odpowiedzi",
+        "refresh": "Odśwież wyniki"
+      }
     }
   }
 }

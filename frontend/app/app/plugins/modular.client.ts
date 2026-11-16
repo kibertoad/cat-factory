@@ -9,13 +9,19 @@ import { createAppRegistry } from '~/modular/registry'
 import { navSlotFilter } from '~/modular/nav-contributions'
 import { createNavGates } from '~/modular/nav-gates'
 import { resultViewsModule } from '~/modular/result-views'
+import { projectViewsModule } from '~/modular/project-views'
 import { inspectorPanelsModule } from '~/modular/panels/inspector'
 import {
   environmentSetupJourney,
   environmentSetupModule,
   environmentSetupPersistence,
 } from '~/modular/journeys/environmentSetup'
-import type { AppSlots, OverlayContribution, ResultViewContribution } from '~/modular/slots'
+import type {
+  AppSlots,
+  OverlayContribution,
+  ProjectViewContribution,
+  ResultViewContribution,
+} from '~/modular/slots'
 import type { Block, CustomAgentKind, CustomTaskType } from '~/types/domain'
 
 /**
@@ -60,6 +66,7 @@ export default defineNuxtPlugin({
     // resolves (inside `installModularApp`).
     const registry = createAppRegistry({ gates: createNavGates() }, [
       resultViewsModule,
+      projectViewsModule,
       inspectorPanelsModule,
       environmentSetupModule,
     ])
@@ -107,6 +114,8 @@ export default defineNuxtPlugin({
     // the first time `<AppOverlayHost>` mounts one. The slot is static after this resolve, so
     // the host's own reactive re-resolve is a cheap read this has already validated.
     resolveComponentRegistry((slots.appOverlays ?? []) as OverlayContribution[])
+    // And for the project readers: two readers claiming one kind throw at BOOT.
+    resolveComponentRegistry((slots.projectViews ?? []) as ProjectViewContribution[])
     // Consumer agent kinds + task types contributed as CODE to the static `agentKinds` /
     // `taskTypes` slots (module slots resolve once, so the static base is the full set).
     useAgentsStore().registerConsumerKinds((slots.agentKinds ?? []) as CustomAgentKind[])

@@ -61,6 +61,10 @@ import type { WorkspaceMetadataFieldDefinition } from './workspace-metadata'
  *    `resultViews` uses). This is the one host surface a consumer flatly could not
  *    extend before — a nav item's `run` closure now has something to open. First-party
  *    modals stay hand-mounted in `index.vue`; the seam is for consumer overlays.
+ *  - `projectViews`: a project kind's reader ({@link ProjectViewContribution}), keyed by the
+ *    kind id, rendering the kind's opaque `view` on the project takeover. The takeover owns what
+ *    every kind shares (pin, outcomes, credentials, storage) and falls back to a generic outcome
+ *    reader for a kind with no entry, so a new kind is readable before anyone writes its view.
  *
  * The index signature is mutable (`unknown[]`) to satisfy the runtime's
  * `SlotMap` constraint while `unknown[]` still meets `useReactiveSlots`'
@@ -77,6 +81,7 @@ export interface AppSlots {
   tutorialTours: TutorialTour[]
   externalTools: ExternalToolContribution[]
   workspaceMetadataFields: WorkspaceMetadataFieldDefinition[]
+  projectViews: ProjectViewContribution[]
   [key: string]: unknown[]
 }
 
@@ -103,3 +108,15 @@ export type ResultViewContribution = ComponentEntry<Component>
  * chrome (see the consumer-extensions guide).
  */
 export type OverlayContribution = ComponentEntry<Component>
+
+/**
+ * One project kind's reader, addressed by the kind id (`research`). Its component receives the
+ * `project` and its `board` view (`ProjectBoardView`, whose `view` is the kind's own shape)
+ * and owns the kind's actions, such as starting a follow-up.
+ */
+export interface ProjectViewContribution extends ComponentEntry<Component> {
+  /** The i18n key of the reader's tab label. */
+  labelKey: string
+  /** The takeover header icon. */
+  icon?: string
+}

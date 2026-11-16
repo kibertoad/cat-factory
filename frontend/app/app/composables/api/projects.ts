@@ -1,15 +1,22 @@
 import {
   createProjectContract,
+  getOutcomeStoragePolicyContract,
+  getProjectBoardViewContract,
+  getProjectOutcomeContract,
   listPinnableProjectDefinitionsContract,
   listProjectCatalogContract,
   mountProjectContract,
   setProjectServicesContract,
+  setOutcomeStoragePolicyContract,
   unmountProjectContract,
 } from '@cat-factory/contracts'
 import type { SendParams } from './client'
 import type { ApiContext, Position } from './context'
 
 type CreateProjectBody = NonNullable<SendParams<typeof createProjectContract>['body']>
+type SetOutcomeStoragePolicyBody = NonNullable<
+  SendParams<typeof setOutcomeStoragePolicyContract>['body']
+>
 
 /** Projects: account-owned peers of services, mounted onto boards. */
 export function projectsApi({ send, ws }: ApiContext) {
@@ -38,5 +45,26 @@ export function projectsApi({ send, ws }: ApiContext) {
 
     unmountProject: (workspaceId: string, projectId: string) =>
       send(unmountProjectContract, { pathPrefix: ws(workspaceId), pathParams: { projectId } }),
+
+    getProjectBoardView: (workspaceId: string, projectId: string) =>
+      send(getProjectBoardViewContract, {
+        pathPrefix: ws(workspaceId),
+        pathParams: { projectId },
+      }),
+
+    getProjectOutcome: (workspaceId: string, projectId: string, outcomeId: string) =>
+      send(getProjectOutcomeContract, {
+        pathPrefix: ws(workspaceId),
+        pathParams: { projectId, outcomeId },
+      }),
+
+    getOutcomeStoragePolicy: (workspaceId: string, projectId?: string) =>
+      send(getOutcomeStoragePolicyContract, {
+        pathPrefix: ws(workspaceId),
+        queryParams: projectId ? { projectId } : {},
+      }),
+
+    setOutcomeStoragePolicy: (workspaceId: string, body: SetOutcomeStoragePolicyBody) =>
+      send(setOutcomeStoragePolicyContract, { pathPrefix: ws(workspaceId), body }),
   }
 }
