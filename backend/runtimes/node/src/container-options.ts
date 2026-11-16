@@ -57,6 +57,8 @@ import {
   type InlineUseCaseRegistry,
   type TaskTypeRegistry,
   type ProjectKindRegistry,
+  type RegisteredProjectDefinitionSource,
+  type ProjectDefinitionRegistry,
   type ProjectKindSource,
   type ToolSecretResolver,
   type VcsProviderRegistry,
@@ -443,6 +445,13 @@ export interface NodeContainerOptions {
   projectKindRegistry?: ProjectKindRegistry
   /** Where project kinds are read from; set only by a mothership-mode local node. */
   projectKindSource?: ProjectKindSource
+  /**
+   * The app-owned project-definition registry: the definitions a deployment ships in code.
+   * Defaults (inside `createCore`) to an empty registry.
+   */
+  projectDefinitionRegistry?: ProjectDefinitionRegistry
+  /** Where registered project definitions are read from; set only by a mothership-mode node. */
+  registeredProjectDefinitionSource?: RegisteredProjectDefinitionSource
   /**
    * The app-owned INLINE USE-CASE registry (the deployment's non-container model operations).
    * Rides its own option like `taskTypeRegistry`; defaults (inside `createCore`) to

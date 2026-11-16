@@ -434,6 +434,9 @@ export const UNAVAILABLE_REASONS = [
   // A mothership-mode node could not read the project kinds from the mothership, so a project
   // write or a task under a project was refused rather than judged against no kinds at all.
   'project_kinds_unreachable',
+  // The same for the project definitions a deployment registers in code: a project was not
+  // pinned, or a project run not dispatched, rather than judged against none.
+  'project_definitions_unreachable',
   'foundational_builtins_unreachable',
   'connection_credentials_unreadable',
   'vcs_capability_unsupported',
@@ -596,6 +599,12 @@ export type CredentialWaitReason = (typeof CREDENTIAL_WAIT_REASONS)[number]
  *                                       account.
  *  - `project_has_unfinished_tasks`     deleting the project would discard tasks that have not
  *                                       finished; finish or delete them first.
+ *  - `project_definition_required`      the kind requires a definition and the create named none.
+ *  - `project_definition_not_accepted`  the create named a definition for a kind that pins none.
+ *  - `project_definition_not_found`     the key and version name no definition of the kind the
+ *                                       account can pin. `details` names the kind, key and version.
+ *  - `project_definition_inputs_invalid` the values for the definition's `inputs` do not
+ *                                       satisfy them. `details.problems` lists why.
  *
  * The SPA keys an exhaustive `Record<ProjectReason, …>` of message keys off this.
  */
@@ -605,6 +614,10 @@ export const PROJECT_REASONS = [
   'project_has_no_writable_repo',
   'project_service_link_invalid',
   'project_has_unfinished_tasks',
+  'project_definition_required',
+  'project_definition_not_accepted',
+  'project_definition_not_found',
+  'project_definition_inputs_invalid',
 ] as const
 
 export type ProjectReason = (typeof PROJECT_REASONS)[number]

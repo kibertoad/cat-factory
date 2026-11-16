@@ -64,6 +64,13 @@ export type {
   StoredProjectDefinition,
 } from './project-outcome-repositories.js'
 export { type ProjectKindSource, registryProjectKindSource } from './project-kinds.js'
+export {
+  type ProjectDefinitionSource,
+  type RegisteredProjectDefinitionSource,
+  type ResolvedProjectDefinition,
+  composeProjectDefinitionSource,
+  registryProjectDefinitionSource,
+} from './project-definitions.js'
 export type { Clock, IdGenerator } from './runtime.js'
 export {
   type LogFields,

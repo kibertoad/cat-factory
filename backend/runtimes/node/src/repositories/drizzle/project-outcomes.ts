@@ -22,6 +22,7 @@ import {
   projectOutcomeSeqs,
   projectOutcomes,
   projectPins,
+  projectTaskSeqs,
 } from '../../db/schema.js'
 
 const CHUNK = 500
@@ -128,6 +129,7 @@ export async function deleteProjectRecords(
 ): Promise<void> {
   await tx.delete(projectOutcomes).where(inArray(projectOutcomes.project_id, projectIds))
   await tx.delete(projectOutcomeSeqs).where(inArray(projectOutcomeSeqs.project_id, projectIds))
+  await tx.delete(projectTaskSeqs).where(inArray(projectTaskSeqs.project_id, projectIds))
   await tx.delete(projectPins).where(inArray(projectPins.project_id, projectIds))
   await tx
     .delete(outcomeStoragePolicies)
@@ -179,6 +181,27 @@ export class DrizzleProjectRecordRepository implements ProjectRecordRepository {
       .returning({ next: projectOutcomeSeqs.next_seq })
     if (!row) throw new Error(`could not reserve an outcome sequence for project '${projectId}'`)
     return row.next - 1
+  }
+
+  async reserveTaskSeq(projectId: string, taskId: string): Promise<number> {
+    const existing = await this.taskSeq(taskId)
+    if (existing !== null) return existing
+    const seq = await this.reserveSeq(projectId)
+    await this.db
+      .insert(projectTaskSeqs)
+      .values({ task_id: taskId, project_id: projectId, seq })
+      .onConflictDoNothing({ target: projectTaskSeqs.task_id })
+    const claimed = await this.taskSeq(taskId)
+    if (claimed === null) throw new Error(`project task '${taskId}' lost its sequence claim`)
+    return claimed
+  }
+
+  private async taskSeq(taskId: string): Promise<number | null> {
+    const [row] = await this.db
+      .select({ seq: projectTaskSeqs.seq })
+      .from(projectTaskSeqs)
+      .where(eq(projectTaskSeqs.task_id, taskId))
+    return row?.seq ?? null
   }
 
   async insertOutcome(row: ProjectOutcomeRow): Promise<boolean> {

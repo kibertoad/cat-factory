@@ -231,7 +231,8 @@ version can never reuse one.
 Findings are the research kind's outcome body. Each research task writes one outcome revision
 (a **findings revision**) on the project's `main` stream, and the project's current findings are
 the research kind's fold over those revisions by question id. Revisions are ordered by the
-per-project sequence taken when the TASK starts, so two follow-ups that run at once fold in the
+per-project sequence each TASK claims the first time it starts (a replayed or retried start
+reads back the same number), so two follow-ups that run at once fold in the
 order they were asked, whatever order they finish in. Per question, a newer `answered` or
 `partial` answer replaces an older one; a newer `unanswered` or `blocked` never replaces an
 answer with content (`answered` or `partial`) and is kept beside it as a note, so a `refresh` that ran out of budget or lost a
@@ -288,7 +289,7 @@ org state the node must fetch rather than hold a stale copy of.
 
 ### 2. The research agent and its tools
 
-A built-in `researcher` agent kind, `container-explore` on the `ui` image (Playwright and Chromium
+A built-in `project-researcher` agent kind, `container-explore` on the `ui` image (Playwright and Chromium
 are already there), with structured output for the findings shape above.
 
 The harness half below is not research's: it is a `project` job kind that any project kind's run
@@ -517,7 +518,7 @@ A new linked-context kind beside documents and tracker tasks:
 - **What projects reuse from initiatives**: the descriptor form vocabulary and its renderer
   (`descriptorFieldEntries`, `DescriptorFields.vue`) for definition `inputs`; the app-owned
   registry shape of `InitiativePresetRegistry` for `ProjectKindRegistry`; per-agent-kind
-  `promptAdditions` on a research definition for org steering of the `researcher`, rather than
+  `promptAdditions` on a research definition for org steering of the `project-researcher`, rather than
   folding it into `brief`; and the `followUps` shape (open, promoted, dismissed) for run
   `learnings`, so a learning can later be promoted into an ad-hoc question.
 
@@ -538,19 +539,28 @@ Still open:
 | 2   | Contracts + kernel: the generic project definition envelope and `ProjectDefinitionRegistry` with per-kind spec validators and the content hash, the outcome envelope, the outcome-storage policy resolver; the research kind's spec, findings body and fold. Pure, unit-tested. The registry is wired on `start()`/`startLocal()` in slice 5, where a run first reads it. | done      | #2503, #2507 |
 | 3   | Project outcome persistence, both facades + conformance against two kinds: definitions, pins, the outcome sequence, outcome revisions (first write wins), the policy tiers. Mothership buckets.                                                                                                                                                                           | done      | #2507        |
 | 4   | Harness: the `project` job kind with no checkout (linked repos as `referenceRepos`), the access tool server (`fill_secret`, `http_request`, `request_credential`) with its target-origin check and response scrub, Playwright MCP in `Dockerfile.ui`. Image bump.                                                                                                         | in review | #2508        |
-| 5   | Engine: the `ProjectKindModule` registration (outcome schema, fold, summary, context renderer, artifact refs), the research kind's module, the `researcher` kind, the `research` task type and pipeline, repo-less dispatch, outcome write with offload, the `outcome` artifact kind and its project reclaim, follow-up modes.                                            | todo      |              |
+| 5a  | Engine groundwork: the `ProjectDefinitionSource` read port keyed by kind (registry plus store, `/internal/project-definitions` for a mothership node), the `ProjectDefinitionRegistry` option on every entry point, the kind's `definition` declaration and the pin at project creation, the per-task outcome sequence.                                                   | in review | #2510        |
+| 5b  | Engine: the `ProjectKindModule` registration (outcome schema, fold, summary, context renderer, artifact refs), the research kind's module, the `project-researcher` kind, the `research` task type and pipeline, repo-less dispatch, outcome write, follow-up modes.                                                                                                      | todo      | #2511        |
+| 5c  | Outcome offload with the `outcome` artifact kind and its project reclaim; picking a definition on the board.                                                                                                                                                                                                                                                              | todo      | #2512        |
 | 6   | Credential hand-off: the `project-definition` credential subject (store-only, reserved keys refused), the generalized `credentialWait` and its resume rule, the capability variant of `CredentialWaitNotice`, pre-dispatch admission, `credential_required` notification, resume re-check. Conformance.                                                                   | in review | #2509        |
 | 7   | Public API + SDK surface + website page, including the `/api/v1/projects/{projectId}/tasks` resource and the `task_owned_by_project` refusal.                                                                                                                                                                                                                             | todo      |              |
 | 8   | SPA: the kind-keyed outcome view seam with its generic fallback, the research findings reader, follow-ups; i18n; e2e spec.                                                                                                                                                                                                                                                | todo      |              |
 | 9   | Task linking: the `projects` linked-context kind rendered by each kind's `renderContext`, `.cat-context/projects/`, recorded revision. An optional `projects` field on `InitiativeItemSpawn`, so tasks an initiative spawns carry a project as linked context.                                                                                                            | todo      |              |
 
 Slices 1 (1a to 1c, in order), 2 and 4 are independent and can run in parallel. Slice 5 needs 1 to 4 and 6: the
-`researcher` kind ships after the park, so a research run never meets a missing credential with
+`project-researcher` kind ships after the park, so a research run never meets a missing credential with
 nowhere to wait. Slice 9 needs 1, 2, 3 and 5, since a project is linkable only once a research
 run has written a revision.
 
 ## Gotchas found during design
 
+- **The agent kind is `project-researcher`.** A `researcher` kind already exists: the repo-reading
+  investigator the `pl_complex` pipeline runs before design. Reusing the name would collide in the
+  agent-kind registry, so the research kind's agent takes its own.
+- **A kind declares whether it pins a definition** (`definition: 'required' | 'optional'`), never
+  what the definition holds, so `ProjectService` pins every kind the same way. A kind requiring one
+  refuses a create without it, and a kind pinning none refuses one that names a definition. A
+  definition is looked up by the project's own kind, so a key under another kind never resolves.
 - **Repo resolution has deliberately no fallback** ("NO first repo"). A project root resolving to
   its linked services' repos is a new, explicit rule, and a project task whose type needs a
   writable repo must be refused at admission, never pointed at a guessed one.

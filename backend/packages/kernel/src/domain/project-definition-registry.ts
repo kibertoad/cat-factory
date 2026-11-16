@@ -83,9 +83,14 @@ export class ProjectDefinitionRegistry {
 
   /** Every registered version of `kind`, keys in registration order and versions ascending. */
   list(kind: string): ProjectDefinition[] {
-    return [...this.byKey.values()]
-      .flatMap((versions) => [...versions.values()].sort((a, b) => a.version - b.version))
-      .filter((definition) => definition.kind === kind)
+    return this.all().filter((definition) => definition.kind === kind)
+  }
+
+  /** Every registered version of every kind, in the order {@link list} gives. */
+  all(): ProjectDefinition[] {
+    return [...this.byKey.values()].flatMap((versions) =>
+      [...versions.values()].sort((a, b) => a.version - b.version),
+    )
   }
 
   private parse(input: unknown): ProjectDefinition {

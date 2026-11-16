@@ -1,6 +1,6 @@
 import { bigint, integer, pgTable, primaryKey, text, uniqueIndex } from 'drizzle-orm/pg-core'
 
-// What projects of any kind keep. Mirrors D1 migration 0115. Definition specs and outcome bodies
+// What projects of any kind keep. Mirrors D1 migrations 0115 and 0116. Definition specs and outcome bodies
 // are opaque JSON; the project kind owns their shape.
 
 /** Account-published project definitions, immutable per version. */
@@ -32,6 +32,17 @@ export const projectOutcomeSeqs = pgTable('project_outcome_seqs', {
   project_id: text('project_id').primaryKey(),
   next_seq: integer('next_seq').notNull(),
 })
+
+/** The outcome sequence number each project task claimed when it first started. */
+export const projectTaskSeqs = pgTable(
+  'project_task_seqs',
+  {
+    task_id: text('task_id').primaryKey(),
+    project_id: text('project_id').notNull(),
+    seq: integer('seq').notNull(),
+  },
+  (t) => [uniqueIndex('idx_project_task_seqs_seq').on(t.project_id, t.seq)],
+)
 
 /** Outcome revisions, written once each. Exactly one of the two body columns is set. */
 export const projectOutcomes = pgTable(

@@ -695,7 +695,8 @@
         "assistant_reply_unreadable": "Asistanın modeli, bu platformun karar olarak uygulayamayacağı bir yanıt verdi. Yeniden ifade etmek nadiren işe yarar: model ayarlarından asistan için başka bir model seçin.",
         "delegated_executor_failed": "Dış yürütücü bu adımı başlatamadı. Sorun bu kurulumda değil, işi yapan sistemde: onun kendi günlüklerine bakıp yeniden deneyin.",
         "delegated_work_branch_unprepared": "Platform, bu adımın yürütücüsünün gönderildiği çalışma dalını hazırlayamadı, bu yüzden hiçbir şey başlatılmadı. Ya depo bağlantısının bu dala yazma izni yok ya da görev henüz var olmayan bir dalı belirtiyor: ayrıntılar hangisi olduğunu söylüyor.",
-        "attached_pr_provider_unreachable": "Depo sağlayıcısı yanıt vermedi, bu yüzden pull request denetlenemedi ve görev oluşturulmadı. Burada ayarlanacak bir şey yok: birazdan yeniden deneyin."
+        "attached_pr_provider_unreachable": "Depo sağlayıcısı yanıt vermedi, bu yüzden pull request denetlenemedi ve görev oluşturulmadı. Burada ayarlanacak bir şey yok: birazdan yeniden deneyin.",
+        "project_definitions_unreachable": "Bu dağıtımın proje tanımları şu anda okunamadı, bu yüzden istek tamamlanmadı. Yanlış yapılandırılmış bir şey yok ve bir değişiklik gerekmiyor: bağlantı düzeldiğinde yeniden deneyin."
       }
     },
     "reason": {
@@ -715,7 +716,11 @@
         "task_type_not_offered_by_project": "Bu projenin türü bu tipte görev almıyor. Formun onun için sunduğu tiplerden birini seçin.",
         "project_has_no_writable_repo": "Bu çalıştırmanın bir adımı yazabileceği bir depoya ihtiyaç duyuyor ve projenin deposu yok: bağlı servislerin depoları salt okunur bağlamdır. Yalnızca okuyan ve raporlayan bir pipeline seçin.",
         "project_service_link_invalid": "Bağlı servislerden biri artık yok ya da başka bir kuruluşa ait. Panoyu yeniden yükleyip bağlı servisleri tekrar seçin.",
-        "project_has_unfinished_tasks": "Bu projenin hâlâ bitmemiş görevleri var. Önce onları bitirin ya da silin."
+        "project_has_unfinished_tasks": "Bu projenin hâlâ bitmemiş görevleri var. Önce onları bitirin ya da silin.",
+        "project_definition_required": "Bu proje türü bir tanım sabitler, bu yüzden bir tanıma ihtiyaç duyar. Bir tanım seçip yeniden deneyin.",
+        "project_definition_not_accepted": "Bu proje türü tanım sabitlemez. Tanımı kaldırın veya tanım kullanan bir tür seçin.",
+        "project_definition_not_found": "Bu kuruluşta o anahtar ve sürümle eşleşen bu türde bir proje tanımı yok. Anahtarı kontrol edin ya da en yenisini sabitlemek için sürümü boş bırakın.",
+        "project_definition_inputs_invalid": "Tanımın girdileri için verilen değerler tanımı karşılamıyor. Her zorunlu girdiyi kabul edilen bir değerle doldurup yeniden deneyin."
       }
     },
     "action": {

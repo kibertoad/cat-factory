@@ -1,6 +1,11 @@
 import type { Project } from '@cat-factory/contracts'
 import type { Block, WorkspaceMount, WorkspaceSnapshot } from '@cat-factory/kernel'
-import { ProjectKindRegistry, SIMPLE_PIPELINE_ID } from '@cat-factory/kernel'
+import {
+  ProjectKindRegistry,
+  ProjectDefinitionRegistry,
+  SIMPLE_PIPELINE_ID,
+  projectDefinitionContentHash,
+} from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
 import type { ConformanceHarness } from '../harness.js'
 
@@ -23,6 +28,45 @@ function kinds(): ProjectKindRegistry {
       { taskType: 'spike', repoAccess: 'linked-read-only', defaultPipelineId: SIMPLE_PIPELINE_ID },
     ],
   })
+  registry.register({
+    id: 'vendor-study',
+    label: 'Vendor study',
+    definition: 'required',
+    taskTypes: [{ taskType: 'spike', repoAccess: 'none', defaultPipelineId: SIMPLE_PIPELINE_ID }],
+  })
+  return registry
+}
+
+function vendorDefinition(version: number) {
+  return {
+    kind: 'vendor-study',
+    key: 'acme:vendor',
+    version,
+    title: 'Vendor',
+    spec: { brief: 'Learn how the vendor integrates.' },
+    inputs: [
+      { key: 'region', label: 'Region', type: 'text' as const, required: true },
+      {
+        key: 'depth',
+        label: 'Depth',
+        type: 'select' as const,
+        default: 'shallow',
+        options: [
+          { value: 'shallow', label: 'Shallow' },
+          { value: 'deep', label: 'Deep' },
+        ],
+      },
+      { key: 'notes', label: 'Notes', type: 'text' as const },
+    ],
+  }
+}
+
+// The kind's own spec is opaque here: the platform pins whatever the kind's validator accepts.
+function definitions(): ProjectDefinitionRegistry {
+  const registry = new ProjectDefinitionRegistry([
+    { kind: 'vendor-study', parseSpec: (definition) => ({ ok: true, value: definition.spec }) },
+  ])
+  registry.registerAll([vendorDefinition(1), vendorDefinition(2)])
   return registry
 }
 
@@ -33,7 +77,10 @@ function reasonOf(body: unknown): unknown {
 export function defineCoreProjectsConformance(harness: ConformanceHarness): void {
   describe('projects', () => {
     async function setup() {
-      const app = harness.makeApp(undefined, { projectKindRegistry: kinds() })
+      const app = harness.makeApp(undefined, {
+        projectKindRegistry: kinds(),
+        projectDefinitionRegistry: definitions(),
+      })
       const home = await app.createOrgWorkspace({ seed: true })
       const accountId = (await app.workspaceRepository().accountOf(home.workspace.id))!
       return { app, home, wsId: home.workspace.id, accountId }
@@ -66,7 +113,7 @@ export function defineCoreProjectsConformance(harness: ConformanceHarness): void
         'project',
       )
       expect(snap.projectCatalog?.find((p) => p.id === created.body.project.id)?.mountCount).toBe(1)
-      expect(snap.projectKinds?.map((k) => k.id)).toEqual(['research'])
+      expect(snap.projectKinds?.map((k) => k.id)).toEqual(['research', 'vendor-study'])
       // A project root is not a service frame: the service catalog never lists it.
       expect(
         snap.serviceCatalog?.some((s) => s.frameBlockId === created.body.project.rootBlockId),
@@ -81,6 +128,60 @@ export function defineCoreProjectsConformance(harness: ConformanceHarness): void
       const badLink = await createProject(app, wsId, { serviceIds: ['svc_missing'] })
       expect(badLink.status).toBe(422)
       expect(reasonOf(badLink.body)).toBe('project_service_link_invalid')
+    })
+
+    it('pins the definition a kind requires, with its hash and inputs', async () => {
+      const { app, wsId } = await setup()
+      const latest = await createProject(app, wsId, {
+        kind: 'vendor-study',
+        definition: { key: 'acme:vendor', inputs: { region: 'eu', notes: '' } },
+      })
+      expect(latest.status).toBe(201)
+      const pinned = await app.projectRecordRepository().getPin(latest.body.project.id)
+      expect(pinned).toMatchObject({
+        definitionKey: 'acme:vendor',
+        definitionVersion: 2,
+        definitionHash: await projectDefinitionContentHash(
+          definitions().get('vendor-study', 'acme:vendor', 2)!,
+        ),
+      })
+      // The declared default answers an omitted field, and an unfilled one is not pinned.
+      expect(pinned?.inputs).toEqual({ region: 'eu', depth: 'shallow' })
+      const exact = await createProject(app, wsId, {
+        kind: 'vendor-study',
+        definition: { key: 'acme:vendor', version: 1, inputs: { region: 'us' } },
+      })
+      expect(exact.status).toBe(201)
+      expect(
+        (await app.projectRecordRepository().getPin(exact.body.project.id))?.definitionVersion,
+      ).toBe(1)
+    })
+
+    it('refuses a definition that is missing, misplaced, unknown or under-filled', async () => {
+      const { app, wsId } = await setup()
+      const cases: Array<[Record<string, unknown>, string]> = [
+        [{ kind: 'vendor-study' }, 'project_definition_required'],
+        [{ definition: { key: 'acme:vendor' } }, 'project_definition_not_accepted'],
+        [
+          {
+            kind: 'vendor-study',
+            definition: { key: 'acme:vendor', version: 9 },
+          },
+          'project_definition_not_found',
+        ],
+        [
+          { kind: 'vendor-study', definition: { key: 'acme:vendor', inputs: {} } },
+          'project_definition_inputs_invalid',
+        ],
+      ]
+      for (const [body, reason] of cases) {
+        const refused = await createProject(app, wsId, body)
+        expect(refused.status).toBe(422)
+        expect(reasonOf(refused.body)).toBe(reason)
+      }
+      // A refused create writes nothing.
+      const snap = (await app.call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)).body
+      expect(snap.projectCatalog ?? []).toEqual([])
     })
 
     it('links services of its own account and replaces the links', async () => {

@@ -153,6 +153,7 @@ export function projectRecordDeletes(
     db
       .prepare(`DELETE FROM project_outcome_seqs WHERE project_id IN (${projectIds})`)
       .bind(...binds),
+    db.prepare(`DELETE FROM project_task_seqs WHERE project_id IN (${projectIds})`).bind(...binds),
     db.prepare(`DELETE FROM project_pins WHERE project_id IN (${projectIds})`).bind(...binds),
     db
       .prepare(
@@ -163,7 +164,7 @@ export function projectRecordDeletes(
   ]
 }
 
-/** A project's pin, outcome sequence and outcome revisions (migration 0115). */
+/** A project's pin, outcome sequence and outcome revisions (migrations 0115, 0116). */
 export class D1ProjectRecordRepository implements ProjectRecordRepository {
   constructor(private readonly deps: { db: D1Database }) {}
 
@@ -210,6 +211,30 @@ export class D1ProjectRecordRepository implements ProjectRecordRepository {
       .first<{ seq: number }>()
     if (!row) throw new Error(`could not reserve an outcome sequence for project '${projectId}'`)
     return row.seq
+  }
+
+  async reserveTaskSeq(projectId: string, taskId: string): Promise<number> {
+    const existing = await this.taskSeq(taskId)
+    if (existing !== null) return existing
+    const seq = await this.reserveSeq(projectId)
+    await this.deps.db
+      .prepare(
+        `INSERT INTO project_task_seqs (task_id, project_id, seq) VALUES (?, ?, ?)
+         ON CONFLICT (task_id) DO NOTHING`,
+      )
+      .bind(taskId, projectId, seq)
+      .run()
+    const claimed = await this.taskSeq(taskId)
+    if (claimed === null) throw new Error(`project task '${taskId}' lost its sequence claim`)
+    return claimed
+  }
+
+  private async taskSeq(taskId: string): Promise<number | null> {
+    const row = await this.deps.db
+      .prepare(`SELECT seq FROM project_task_seqs WHERE task_id = ?`)
+      .bind(taskId)
+      .first<{ seq: number }>()
+    return row?.seq ?? null
   }
 
   async insertOutcome(row: ProjectOutcomeRow): Promise<boolean> {
