@@ -2,6 +2,8 @@ import { timingSafeEqual } from 'node:crypto'
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
 import { reportedBodyCapabilities } from './capability-report.js'
 import { parseAgentJob, parseInlineJob } from './job.js'
+import { parseProjectJob } from './project/project-job.js'
+import { handleProject } from './project/project-mode.js'
 import { handleAgent } from './agent.js'
 import { handleInline } from './inline.js'
 import { redactSecrets } from './git.js'
@@ -109,6 +111,13 @@ const KINDS: Record<string, KindEntry> = {
   inline: defineKind(parseInlineJob, handleInline, (job) => ({
     harness: job.harness,
     model: job.model,
+  })),
+  // A project run: an agent over a browser and the access tool server against the project's
+  // targets, with no checkout of its own. See project/project-mode.ts.
+  project: defineKind(parseProjectJob, handleProject, (job) => ({
+    ...(job.workspaceId ? { workspaceId: job.workspaceId } : {}),
+    ...(job.executionId ? { executionId: job.executionId } : {}),
+    targets: job.access.targets.length,
   })),
 }
 
