@@ -63,6 +63,7 @@ function outcomeStore(opts: {
   return new ProjectOutcomeStore({
     blockRepository: {
       findById: async () => ({ workspaceId: 'ws_home', ownerId: project.id, block: {} as never }),
+      findByIds: async () => [],
     },
     workspaceRepository: { accountOf: async () => 'acc_1' },
     records: opts.repo,

@@ -623,3 +623,9 @@ Projects reach the public API, for every project kind. New operations:
 A definition's `spec`, an outcome's `body` and a project's `view` are opaque in the spec, so a new project kind needs no SDK release. A project task has no service, so the `/api/v1/tasks/{taskId}` operations that answer a `PublicTask` refuse it with `422`, reason `task_owned_by_project`, rather than invent a `serviceId`. That refusal can only be met by a task created after projects existed, under a project; every task a 1.96.0 consumer could address is a service task and answers as before. `GET /api/v1/tasks/{taskId}/run` and the task event stream answer for both. The error vocabulary gains `task_owned_by_project`, `project_definition_invalid`, and the conflict reasons `project_definition_version_exists`, `project_definition_key_registered`, `project_homed_elsewhere` and `credential_wait_personal_in_app`.
 
 Additive. A consumer built against 1.96.0 keeps parsing.
+
+## 1.98.0
+
+A task can link projects as read-only context: `GET`/`POST /api/v1/tasks/{taskId}/projects` lists and links one, `POST .../projects/detach` unlinks it, and `POST /api/v1/services/{serviceId}/tasks` takes an optional `projects` list. A linked project's current result reaches the task's agents at every dispatch. A link is refused with `422`, reason `project_link_invalid` (another organization's project, or none) or `project_has_no_result` (a project no task has recorded an outcome in yet). The three routes answer a task under a service and a task under a project alike.
+
+Additive. A consumer built against 1.97.0 keeps parsing.

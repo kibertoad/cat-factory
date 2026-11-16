@@ -677,8 +677,38 @@ export function linkedContextSection(
   context: AgentRunContext,
   opts: { materialized?: boolean } = {},
 ): string {
-  const { contextDocs, contextTasks } = context.block
-  return renderLinkedContext(contextDocs, contextTasks, opts)
+  const { contextDocs, contextTasks, contextProjects } = context.block
+  return (
+    renderLinkedContext(contextDocs, contextTasks, opts) +
+    renderLinkedProjects(contextProjects, opts)
+  )
+}
+
+/**
+ * The projects linked to the block as read-only context: what other work found (a research
+ * project's findings, say). A container kind gets an index pointing at the materialised files; an
+ * inline kind gets the results themselves, clamped to the inline budget with the cut marked.
+ */
+export function renderLinkedProjects(
+  projects: AgentRunContext['block']['contextProjects'],
+  opts: { materialized?: boolean } = {},
+): string {
+  if (!projects?.length) return ''
+  const heading = (p: NonNullable<typeof projects>[number]) =>
+    `${p.title} (${p.kind} project${p.revision ? `, revision ${p.revision.seq}` : ''})`
+  if (opts.materialized) {
+    return `\n${[
+      '',
+      'Linked projects (results other work produced, read-only). The full result of each is a',
+      `\`project-<name>.md\` file in the \`${CONTEXT_DIR}/\` directory of your checkout.`,
+      ...projects.map((p) => `- ${heading(p)}: ${p.summary} ${p.coverage}.`),
+    ].join('\n')}`
+  }
+  const share = Math.max(1, Math.floor(CONTEXT_BUDGET.inlineBodyTokens / projects.length))
+  const lines = ['', 'Linked projects (results other work produced, read-only):']
+  for (const p of projects)
+    lines.push(`### ${heading(p)}`, p.coverage, clampToTokens(p.body, share))
+  return `\n${lines.join('\n')}`
 }
 
 /**

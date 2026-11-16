@@ -54,7 +54,11 @@ export type {
   WorkspaceMountPatch,
   WorkspaceMountRepository,
 } from './service-repositories.js'
-export type { ProjectRepository } from './project-repositories.js'
+export type {
+  ProjectRepository,
+  TaskProjectLink,
+  TaskProjectLinkRepository,
+} from './project-repositories.js'
 export type {
   OutcomeStoragePolicyRepository,
   ProjectDefinitionRepository,

@@ -49,9 +49,9 @@ function contextFileName(base: string, used: Set<string>): string {
 export function buildContextFiles(context: AgentRunContext): {
   files: { path: string; title: string; url: string; content: string }[]
 } {
-  const { contextDocs, contextTasks } = context.block
+  const { contextDocs, contextTasks, contextProjects } = context.block
   const files: { path: string; title: string; url: string; content: string }[] = []
-  if (!contextDocs?.length && !contextTasks?.length) return { files }
+  if (!contextDocs?.length && !contextTasks?.length && !contextProjects?.length) return { files }
   const used = new Set<string>()
   const omitted: ContextReferenceRef[] = []
   let bytes = 0
@@ -84,6 +84,10 @@ export function buildContextFiles(context: AgentRunContext): {
     fit(doc.title, doc.url, doc.title, doc.body || doc.excerpt, doc.freshness)
   for (const task of contextTasks ?? [])
     fit(`[${task.key}] ${task.title}`, task.url, task.key, renderTaskContext(task))
+  // A linked project's result, named `project-<title>.md` so the prompt index can point at it. The
+  // harness writes every context file flat into the context directory.
+  for (const project of contextProjects ?? [])
+    fit(project.title, '', `project-${project.title}`, project.body)
   assertContextReferencesFit(omitted, {
     totalBytes,
     budgetBytes: CONTEXT_BUDGET.maxContextFileBytes,

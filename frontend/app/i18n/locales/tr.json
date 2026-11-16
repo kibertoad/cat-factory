@@ -730,7 +730,9 @@
         "outcome_too_large_for_inline": "Sonuç saklanamayacak kadar büyük, bu yüzden kaydedilmedi. Görevi daraltıp yeniden çalıştırın.",
         "research_nothing_to_ask": "Bu araştırma görevinin modu sorulacak bir soru bırakmıyor: genişletecek yeni bir şey ya da netleştirilecek kısmi veya engellenmiş bir şey yok. Başka bir mod seçin veya bir soru ekleyin.",
         "task_owned_by_project": "Bu görev, hizmeti olmayan bir projeye ait. Bunun yerine projenin görev adresini kullanın.",
-        "project_definition_invalid": "Tanım, yapısı ya da proje türü tarafından reddedildi. Yanıt her sorunu listeler; bunları düzeltip yeniden yayımlayın."
+        "project_definition_invalid": "Tanım, yapısı ya da proje türü tarafından reddedildi. Yanıt her sorunu listeler; bunları düzeltip yeniden yayımlayın.",
+        "project_link_invalid": "Bu proje yok veya başka bir kuruluşa ait. Bu kuruluşun bir projesini bağlayın.",
+        "project_has_no_result": "Bu projenin henüz okunacak bir sonucu yok. Önce içinde bir görev çalıştırın, sonra bağlayın."
       }
     },
     "action": {
@@ -9288,6 +9290,18 @@
     "mount": {
       "added": "{title} projesi bu panoya eklendi",
       "failed": "Proje eklenemedi"
+    },
+    "taskLinks": {
+      "title": "Bağlı projeler",
+      "hint": "Bu görev üzerinde çalışan ajanlar, bir araştırma projesinin bulguları gibi her bağlı projenin güncel sonucunu okur.",
+      "pick": "Bir proje seçin",
+      "link": "Bağla",
+      "unlink": "Proje bağlantısını kaldır",
+      "empty": "Bağlı proje yok.",
+      "linked": "Proje bağlandı",
+      "loadFailed": "Bağlı projeler yüklenemedi",
+      "linkFailed": "Proje bağlanamadı",
+      "unlinkFailed": "Proje bağlantısı kaldırılamadı"
     },
     "view": {
       "open": "Projeyi aç",

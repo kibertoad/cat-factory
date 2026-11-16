@@ -131,6 +131,7 @@ import { D1DirectoryRepository } from './repositories/D1DirectoryRepository'
 import { D1WorkspaceMemberRepository } from './repositories/D1WorkspaceMemberRepository'
 import { D1WorkspaceMountRepository } from './repositories/D1WorkspaceMountRepository'
 import { D1ProjectRepository } from './repositories/D1ProjectRepository'
+import { D1TaskProjectLinkRepository } from './repositories/D1TaskProjectLinkRepository'
 import {
   D1OutcomeStoragePolicyRepository,
   D1ProjectDefinitionRepository,
@@ -480,6 +481,7 @@ function selectWorkerCorePersistence(
   | 'projectDefinitionRepository'
   | 'projectRecordRepository'
   | 'outcomeStoragePolicyRepository'
+  | 'taskProjectLinkRepository'
   | 'tokenUsageRepository'
 > {
   const { db, clock } = deps
@@ -502,6 +504,7 @@ function selectWorkerCorePersistence(
     projectDefinitionRepository: new D1ProjectDefinitionRepository({ db }),
     projectRecordRepository: new D1ProjectRecordRepository({ db }),
     outcomeStoragePolicyRepository: new D1OutcomeStoragePolicyRepository({ db }),
+    taskProjectLinkRepository: new D1TaskProjectLinkRepository({ db }),
     tokenUsageRepository: new D1TokenUsageRepository({ db }),
   }
 }

@@ -361,6 +361,8 @@ export const MAX_DOCUMENT_TITLE_CHARS = 200
 
 /** Context documents ONE task creation may attach (imported and uploaded together). */
 export const MAX_TASK_DOCUMENTS = 10
+/** How many projects a created task may link as context; matches the board's own cap. */
+export const MAX_TASK_PROJECTS = 20
 
 /** A page NAMED in a document source the workspace has connected. See {@link publicTaskDocumentSchema}. */
 export const publicTaskSourceDocumentSchema = v.object({
@@ -480,6 +482,16 @@ export const createPublicTaskSchema = v.object({
    * known here. Overflowing it refuses the run's first dispatch and names what did not fit.
    */
   documents: v.optional(v.pipe(v.array(publicTaskDocumentSchema), v.maxLength(MAX_TASK_DOCUMENTS))),
+  /**
+   * Projects to link to the new task as read-only context, by id. Omitted or empty ⇒ none.
+   *
+   * Each must belong to the task's organization and have a result to read (a research project
+   * with at least one findings revision); otherwise the whole creation is refused with a `422`,
+   * `details.reason` `project_link_invalid` or `project_has_no_result`, before the task is written.
+   */
+  projects: v.optional(
+    v.pipe(v.array(v.pipe(v.string(), v.minLength(1))), v.maxLength(MAX_TASK_PROJECTS)),
+  ),
   /**
    * The per-case values for the chosen `taskType`'s form, keyed by field. Omitted ⇒ an unfilled
    * task, exactly as before.

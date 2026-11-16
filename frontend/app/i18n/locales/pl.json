@@ -730,7 +730,9 @@
         "outcome_too_large_for_inline": "Wynik jest zbyt duży, by go zapisać, więc nie został zapisany. Zawęź zadanie i uruchom je ponownie.",
         "research_nothing_to_ask": "Tryb tego zadania badawczego nie pozostawia żadnego pytania: nie ma nic nowego do rozszerzenia ani nic częściowego lub zablokowanego do wyjaśnienia. Wybierz inny tryb lub dodaj pytanie.",
         "task_owned_by_project": "To zadanie należy do projektu, który nie ma usługi. Zamiast tego użyj adresu zadań projektu.",
-        "project_definition_invalid": "Definicję odrzuca jej struktura lub jej rodzaj projektu. Odpowiedź wymienia każdy problem; popraw je i opublikuj ponownie."
+        "project_definition_invalid": "Definicję odrzuca jej struktura lub jej rodzaj projektu. Odpowiedź wymienia każdy problem; popraw je i opublikuj ponownie.",
+        "project_link_invalid": "Ten projekt nie istnieje albo należy do innej organizacji. Powiąż projekt tej organizacji.",
+        "project_has_no_result": "Ten projekt nie ma jeszcze wyniku do odczytania. Najpierw uruchom w nim zadanie, a potem go połącz."
       }
     },
     "action": {
@@ -9288,6 +9290,18 @@
     "mount": {
       "added": "Dodano projekt {title} do tej tablicy",
       "failed": "Nie udało się dodać projektu"
+    },
+    "taskLinks": {
+      "title": "Powiązane projekty",
+      "hint": "Agenci pracujący nad tym zadaniem czytają bieżący wynik każdego powiązanego projektu, na przykład ustalenia projektu badawczego.",
+      "pick": "Wybierz projekt",
+      "link": "Powiąż",
+      "unlink": "Usuń powiązanie projektu",
+      "empty": "Żaden projekt nie jest powiązany.",
+      "linked": "Projekt powiązany",
+      "loadFailed": "Nie udało się wczytać powiązanych projektów",
+      "linkFailed": "Nie udało się powiązać projektu",
+      "unlinkFailed": "Nie udało się usunąć powiązania projektu"
     },
     "view": {
       "open": "Otwórz projekt",

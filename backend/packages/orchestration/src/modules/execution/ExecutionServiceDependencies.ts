@@ -1,3 +1,4 @@
+import type { LinkedProjectsResolver } from './linked-context.js'
 import type { RefinedRequirementsWriteback } from './review-kinds.js'
 import type {
   AccountRepository,
@@ -253,6 +254,11 @@ export interface ExecutionServiceDependencies {
    * no refresh and no freshness note.
    */
   documentRefresher?: LinkedDocumentRefresher
+  /**
+   * Optional: the projects linked to a block as context, rendered by their kinds. Forwarded to
+   * {@link AgentContextBuilder}; absent → no project is read.
+   */
+  linkedProjects?: LinkedProjectsResolver
   /**
    * Optional: when the task-source integration is configured, tracker issues
    * linked to a block are resolved here and fed to the agent as extra context.

@@ -24,13 +24,14 @@ import {
 } from '@cat-factory/contracts'
 import { ValidationError } from './errors.js'
 import type { ProjectKindModule, ProjectTaskInput } from './project-kind-module.js'
+import { renderResearchContext } from './research-context.js'
 
 // ---------------------------------------------------------------------------
 // The RESEARCH project kind the platform ships: its descriptor and its module. A research
 // project pins a research definition (topics of questions about a vendor), and each `research`
 // task answers some of those questions and records one findings revision on the project's
 // `main` stream. Everything here is the kind's own; the engine reaches it only through the
-// `ProjectKindModule` interface. Design: `docs/initiatives/research-projects.md`.
+// `ProjectKindModule` interface. Design: `backend/docs/adr/0069-projects-and-research-projects.md`.
 // ---------------------------------------------------------------------------
 
 /** The agent kind a research task dispatches. */
@@ -262,6 +263,8 @@ export const researchKindModule: ProjectKindModule<FindingsRevisionBody> = {
     const parsed = definition ? parseResearchDefinition(definition) : undefined
     return researchProjectView(parsed?.ok ? parsed.value.spec.topics : [], outcomes)
   },
+
+  renderContext: renderResearchContext,
 
   schemas: {
     spec: researchSpecSchema,

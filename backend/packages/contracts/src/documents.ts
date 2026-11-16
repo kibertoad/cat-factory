@@ -320,6 +320,20 @@ export const stepContextDocumentSchema = v.object({
 export type StepContextDocument = v.InferOutput<typeof stepContextDocumentSchema>
 
 /**
+ * A project a dispatch read as linked context, and which result of it: for a research project the
+ * latest findings revision the fold included, so a reader can tell what the agent saw after a
+ * follow-up has moved the fold. `revisionId` is null when the project contributed no revision.
+ */
+export const stepContextProjectSchema = v.object({
+  projectId: v.string(),
+  title: v.string(),
+  kind: v.string(),
+  revisionId: v.nullable(v.string()),
+  seq: v.nullable(v.number()),
+})
+export type StepContextProject = v.InferOutput<typeof stepContextProjectSchema>
+
+/**
  * The role a workspace+`DocKind`-scoped document link plays for the forward document-authoring
  * track (WS1 items 2–4). A `template` link's parsed sections REPLACE the built-in skeleton for
  * that kind (singular per kind — linking a new one replaces the prior override); `exemplar`

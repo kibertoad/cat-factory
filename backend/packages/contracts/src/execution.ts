@@ -22,7 +22,7 @@ import { foundationalServiceSelectionSchema } from './foundational-services.js'
 import { binaryOutputReportSchema } from './binary-outputs.js'
 import { binaryCandidateStepStateSchema } from './binary-candidates.js'
 import { stepToolServersSchema } from './tool-servers.js'
-import { stepContextDocumentSchema } from './documents.js'
+import { stepContextDocumentSchema, stepContextProjectSchema } from './documents.js'
 import { incorporateAfterSchema } from './requirements.js'
 // The polling-GATE and the human-verdict-gate step-state clusters each live in their own
 // module (the `forkDecision.ts` / `judge.ts` shape); `PipelineStep` composes them back in below.
@@ -1024,6 +1024,11 @@ export const pipelineStepSchema = v.object({
    * list would state the same fact and the empty array is not written.
    */
   contextDocuments: v.optional(v.array(stepContextDocumentSchema)),
+  /**
+   * The projects this step's last dispatch read as linked context, each with the result it read.
+   * Absent means none, for the reason `contextDocuments` gives.
+   */
+  contextProjects: v.optional(v.array(stepContextProjectSchema)),
   /**
    * The workspace agent-prompt revision this step was PINNED to at dispatch — the sibling of
    * {@link skillVersions}, and pinned for the same reason: what a step ran under must be

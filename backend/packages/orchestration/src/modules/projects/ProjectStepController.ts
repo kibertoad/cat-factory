@@ -30,7 +30,7 @@ import type { ProjectOutcomeStore, StoredOutcome } from './ProjectOutcomeStore.j
 // starts, what it checkpoints when it stops for a credential, and the outcome it records when it
 // completes. The kind's module is called only where the content matters (planning the task,
 // briefing the agent, folding a checkpoint, finishing the body). Design:
-// `docs/initiatives/research-projects.md`.
+// `backend/docs/adr/0069-projects-and-research-projects.md`.
 // ---------------------------------------------------------------------------
 
 export interface ProjectStepControllerDeps {

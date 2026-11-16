@@ -1,3 +1,4 @@
+import type { TaskProjectLinkService } from '../projects/TaskProjectLinkService.js'
 import type {
   Block,
   BlockRepository,
@@ -17,6 +18,7 @@ import type {
 import {
   ConflictError,
   DomainError,
+  ValidationError,
   describeError,
   getErrorMessage,
   noopLogger,
@@ -57,6 +59,11 @@ export interface InitiativeLoopServiceDependencies {
   resolveRunRepoContext?: ResolveRunRepoContext
   /** Stamps a spawned task with the frame's service (in-org sharing). Absent ⇒ no service link. */
   serviceRepository?: ServiceRepository
+  /**
+   * Links the projects an item's spawn names to the spawned task, under the same rules a link made
+   * on the board meets. Absent ⇒ an item naming projects is blocked rather than spawned without them.
+   */
+  taskProjectLinks?: Pick<TaskProjectLinkService, 'link' | 'unlinkAll'>
   /**
    * Where the loop reports the failures it isolates. Every tick is swallowed by design (one bad
    * initiative must not stall the others), which without this makes a permanently-wedged
@@ -107,6 +114,19 @@ export class InitiativeLoopService {
 
   constructor(private readonly deps: InitiativeLoopServiceDependencies) {
     this.log = (deps.logger ?? noopLogger).child({ service: 'initiativeLoop' })
+  }
+
+  /** Link the projects a spawn names, refusing (so the item blocks) when linking is not wired. */
+  private async linkSpawnedProjects(
+    workspaceId: string,
+    blockId: string,
+    projectIds: readonly string[] | undefined,
+  ): Promise<void> {
+    if (!projectIds?.length) return
+    if (!this.deps.taskProjectLinks) {
+      throw new ValidationError('This item links projects, and linking projects is not configured')
+    }
+    await this.deps.taskProjectLinks.link(workspaceId, blockId, [...projectIds])
   }
 
   /**
@@ -464,6 +484,7 @@ export class InitiativeLoopService {
     const block = this.buildTaskBlock(spawnedBlockId, item, frame, entity.blockId)
     try {
       await this.deps.blockRepository.insert(workspaceId, block, serviceId)
+      await this.linkSpawnedProjects(workspaceId, block.id, item.spawn?.projects)
       // Thread the item's preset-authored per-run gate override (slice 2) into the spawned run:
       // a docs-refresh task with human-review off runs its gates disabled, on runs them enabled.
       // System-initiated (no initiator / activation), manual origin — hence the leading undefineds.
@@ -496,7 +517,10 @@ export class InitiativeLoopService {
       await runBestEffort(
         this.log,
         'initiative.rollbackSpawnedBlock',
-        () => this.deps.blockRepository.deleteMany(workspaceId, [block.id]),
+        async () => {
+          await this.deps.taskProjectLinks?.unlinkAll(workspaceId, block.id)
+          await this.deps.blockRepository.deleteMany(workspaceId, [block.id])
+        },
         { workspaceId, blockId: block.id, itemId: item.id },
       )
       const reason = error instanceof DomainError ? error.details?.reason : undefined

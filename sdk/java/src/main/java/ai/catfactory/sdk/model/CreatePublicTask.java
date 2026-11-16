@@ -18,6 +18,7 @@ import org.jspecify.annotations.Nullable;
  * @param fragmentIds May be absent entirely.
  * @param modelPresetId May be absent entirely. Length 1..120.
  * @param pipelineId May be absent entirely. Length 1..120.
+ * @param projects May be absent entirely.
  * @param riskPolicyId May be absent entirely. Length 1..120.
  * @param taskType May be absent entirely.
  * @param ticket May be absent entirely.
@@ -42,6 +43,9 @@ public record CreatePublicTask(
 
     /** May be absent entirely. Length 1..120. */
     @JsonInclude(JsonInclude.Include.NON_NULL) @JsonProperty("pipelineId") @Nullable String pipelineId,
+
+    /** May be absent entirely. */
+    @JsonInclude(JsonInclude.Include.NON_NULL) @JsonProperty("projects") @Nullable List<String> projects,
 
     /** May be absent entirely. Length 1..120. */
     @JsonInclude(JsonInclude.Include.NON_NULL) @JsonProperty("riskPolicyId") @Nullable String riskPolicyId,
@@ -74,6 +78,7 @@ public record CreatePublicTask(
         private @Nullable List<String> fragmentIds;
         private @Nullable String modelPresetId;
         private @Nullable String pipelineId;
+        private @Nullable List<String> projects;
         private @Nullable String riskPolicyId;
         private @Nullable String taskType;
         private @Nullable PublicTaskTicket ticket;
@@ -115,6 +120,12 @@ public record CreatePublicTask(
             return this;
         }
 
+        /** Set {@code projects}. */
+        public Builder projects(@Nullable List<String> projects) {
+            this.projects = projects;
+            return this;
+        }
+
         /** Set {@code riskPolicyId}. */
         public Builder riskPolicyId(@Nullable String riskPolicyId) {
             this.riskPolicyId = riskPolicyId;
@@ -141,7 +152,7 @@ public record CreatePublicTask(
 
         /** Build the {@link CreatePublicTask}. */
         public CreatePublicTask build() {
-            return new CreatePublicTask(description, documents, fields, fragmentIds, modelPresetId, pipelineId, riskPolicyId, taskType, ticket, title);
+            return new CreatePublicTask(description, documents, fields, fragmentIds, modelPresetId, pipelineId, projects, riskPolicyId, taskType, ticket, title);
         }
     }
 }

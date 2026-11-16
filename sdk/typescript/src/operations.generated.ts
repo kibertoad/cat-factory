@@ -17,6 +17,7 @@ import type {
   AskGuidedReview,
   AssessPublicPullRequest,
   AttachPublicTaskDocumentRequest,
+  AttachPublicTaskProjectRequest,
   ConnectPublicEnvironmentRequest,
   ConnectPublicEnvironmentResponse,
   CreateHeadlessPublicApiKey,
@@ -78,6 +79,8 @@ import type {
   ListPublicRiskPoliciesResponse,
   ListPublicTaskDocumentsResponse,
   ListPublicTaskDocumentsResponseDocument,
+  ListPublicTaskProjectsResponse,
+  ListPublicTaskProjectsResponseProject,
   ListPublicTaskTypesResponse,
   ListPublicUseCasesResponse,
   ListPublicUseCasesResponseUseCase,
@@ -650,6 +653,19 @@ export class TasksResource {
   }
 
   /**
+   * attachPublicTaskProject
+   * `POST /api/v1/tasks/{taskId}/projects` — operation `attachPublicTaskProject`.
+   */
+  attachProject(taskId: string, body: AttachPublicTaskProjectRequest, options: RequestOptions = {}): Promise<ListPublicTaskProjectsResponseProject> {
+    return this.#transport.request<ListPublicTaskProjectsResponseProject>({
+      method: 'POST',
+      path: `/api/v1/tasks/${encodePathSegment(taskId)}/projects`,
+      body,
+      options,
+    })
+  }
+
+  /**
    * Create a task under a service
    * Create a task inside a service frame the key’s workspace owns. The task starts in the `planned` state; start it with the start endpoint. Optionally file it FROM a tracker ticket, and/or attach the requirements documents it is to be built against (named in a connected document source, or uploaded inline): the only way to get spec-sized input onto a repository-touching run.
    * `POST /api/v1/services/{serviceId}/tasks` — operation `createPublicTask`.
@@ -685,6 +701,19 @@ export class TasksResource {
     return this.#transport.requestNoContent({
       method: 'POST',
       path: `/api/v1/tasks/${encodePathSegment(taskId)}/documents/detach`,
+      body,
+      options,
+    })
+  }
+
+  /**
+   * detachPublicTaskProject
+   * `POST /api/v1/tasks/{taskId}/projects/detach` — operation `detachPublicTaskProject`.
+   */
+  detachProject(taskId: string, body: AttachPublicTaskProjectRequest, options: RequestOptions = {}): Promise<void> {
+    return this.#transport.requestNoContent({
+      method: 'POST',
+      path: `/api/v1/tasks/${encodePathSegment(taskId)}/projects/detach`,
       body,
       options,
     })
@@ -755,6 +784,18 @@ export class TasksResource {
     return this.#transport.request<ListPublicTaskDocumentsResponse>({
       method: 'GET',
       path: `/api/v1/tasks/${encodePathSegment(taskId)}/documents`,
+      options,
+    })
+  }
+
+  /**
+   * listPublicTaskProjects
+   * `GET /api/v1/tasks/{taskId}/projects` — operation `listPublicTaskProjects`.
+   */
+  listProjects(taskId: string, options: RequestOptions = {}): Promise<ListPublicTaskProjectsResponse> {
+    return this.#transport.request<ListPublicTaskProjectsResponse>({
+      method: 'GET',
+      path: `/api/v1/tasks/${encodePathSegment(taskId)}/projects`,
       options,
     })
   }

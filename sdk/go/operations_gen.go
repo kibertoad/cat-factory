@@ -1200,6 +1200,21 @@ func (s *TasksService) AttachDocument(ctx context.Context, taskID string, body A
 	return &out, nil
 }
 
+// AttachProject attachPublicTaskProject
+// POST /api/v1/tasks/{taskId}/projects (operation attachPublicTaskProject).
+func (s *TasksService) AttachProject(ctx context.Context, taskID string, body AttachPublicTaskProjectRequest) (*ListPublicTaskProjectsResponseProject, error) {
+	req := requestSpec{
+		Method: "POST",
+		Path:   fmt.Sprintf("/api/v1/tasks/%s/projects", pathEscape(taskID)),
+		Body:   body,
+	}
+	var out ListPublicTaskProjectsResponseProject
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
 // Create create a task under a service
 // Create a task inside a service frame the key’s workspace owns. The task starts in the `planned`
 // state; start it with the start endpoint. Optionally file it FROM a tracker ticket, and/or
@@ -1241,6 +1256,17 @@ func (s *TasksService) DetachDocument(ctx context.Context, taskID string, body D
 	req := requestSpec{
 		Method: "POST",
 		Path:   fmt.Sprintf("/api/v1/tasks/%s/documents/detach", pathEscape(taskID)),
+		Body:   body,
+	}
+	return s.client.requestNoContent(ctx, req)
+}
+
+// DetachProject detachPublicTaskProject
+// POST /api/v1/tasks/{taskId}/projects/detach (operation detachPublicTaskProject).
+func (s *TasksService) DetachProject(ctx context.Context, taskID string, body AttachPublicTaskProjectRequest) error {
+	req := requestSpec{
+		Method: "POST",
+		Path:   fmt.Sprintf("/api/v1/tasks/%s/projects/detach", pathEscape(taskID)),
 		Body:   body,
 	}
 	return s.client.requestNoContent(ctx, req)
@@ -1339,6 +1365,20 @@ func (s *TasksService) ListDocuments(ctx context.Context, taskID string) (*ListP
 		Path:   fmt.Sprintf("/api/v1/tasks/%s/documents", pathEscape(taskID)),
 	}
 	var out ListPublicTaskDocumentsResponse
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// ListProjects listPublicTaskProjects
+// GET /api/v1/tasks/{taskId}/projects (operation listPublicTaskProjects).
+func (s *TasksService) ListProjects(ctx context.Context, taskID string) (*ListPublicTaskProjectsResponse, error) {
+	req := requestSpec{
+		Method: "GET",
+		Path:   fmt.Sprintf("/api/v1/tasks/%s/projects", pathEscape(taskID)),
+	}
+	var out ListPublicTaskProjectsResponse
 	if err := s.client.request(ctx, req, &out); err != nil {
 		return nil, err
 	}

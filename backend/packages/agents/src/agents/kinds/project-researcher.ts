@@ -10,7 +10,7 @@ import type { AgentKindDefinition, AgentKindRegistry } from './registry.js'
 // harness's access tool server (`fill_secret`, `http_request`, `request_credential`). It has no
 // checkout: the linked services' repos arrive read-only as reference repos. Its reply is the
 // findings revision body, which the engine validates and records on the project. Design:
-// `docs/initiatives/research-projects.md`.
+// `backend/docs/adr/0069-projects-and-research-projects.md`.
 // ---------------------------------------------------------------------------
 
 export const PROJECT_RESEARCHER_KIND = 'project-researcher'

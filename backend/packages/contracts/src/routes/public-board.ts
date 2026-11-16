@@ -5,7 +5,10 @@ import {
   detachPublicTaskDocumentSchema,
   publicAttachedDocumentListSchema,
   publicAttachedDocumentSchema,
+  publicLinkedProjectListSchema,
+  publicLinkedProjectSchema,
   publicRepoListSchema,
+  publicTaskProjectSchema,
   publicTaskDependencySchema,
 } from '../public-board.js'
 import { publicServiceSchema, publicTaskSchema } from '../public-api.js'
@@ -179,6 +182,50 @@ export const detachPublicTaskDocumentContract = withMinScope(
     requestPathParamsSchema: taskIdParams,
     pathResolver: ({ taskId }) => `/api/v1/tasks/${taskId}/documents/detach`,
     requestBodySchema: detachPublicTaskDocumentSchema,
+    responsesByStatusCode: { 204: noBodyResponse(), ...errorResponses },
+  }),
+)
+
+// ---- a task's linked projects -------------------------------------------------
+
+/**
+ * The projects a task links as read-only context. Serves a task under a service and a task under a
+ * project alike, since it returns no `PublicTask`.
+ */
+export const listPublicTaskProjectsContract = withMinScope(
+  'read',
+  defineApiContract({
+    method: 'get',
+    requestPathParamsSchema: taskIdParams,
+    pathResolver: ({ taskId }) => `/api/v1/tasks/${taskId}/projects`,
+    responsesByStatusCode: { 200: publicLinkedProjectListSchema, ...errorResponses },
+  }),
+)
+
+/**
+ * Link a project to a task as read-only context. The project must belong to the task's
+ * organization and have a result to read (`422`, `project_link_invalid` or
+ * `project_has_no_result`). Linking a project already linked returns the existing link.
+ */
+export const attachPublicTaskProjectContract = withMinScope(
+  'write',
+  defineApiContract({
+    method: 'post',
+    requestPathParamsSchema: taskIdParams,
+    pathResolver: ({ taskId }) => `/api/v1/tasks/${taskId}/projects`,
+    requestBodySchema: publicTaskProjectSchema,
+    responsesByStatusCode: { 201: publicLinkedProjectSchema, ...errorResponses },
+  }),
+)
+
+/** Unlink a project from a task. Idempotent, and the project itself is untouched. */
+export const detachPublicTaskProjectContract = withMinScope(
+  'write',
+  defineApiContract({
+    method: 'post',
+    requestPathParamsSchema: taskIdParams,
+    pathResolver: ({ taskId }) => `/api/v1/tasks/${taskId}/projects/detach`,
+    requestBodySchema: publicTaskProjectSchema,
     responsesByStatusCode: { 204: noBodyResponse(), ...errorResponses },
   }),
 )

@@ -264,6 +264,31 @@ export class DrizzleProjectRecordRepository implements ProjectRecordRepository {
     return rows.map(rowToOutcome)
   }
 
+  async listOutcomesOfProjects(projectIds: string[]): Promise<ProjectOutcomeRow[]> {
+    const rows: ProjectOutcomeRow[] = []
+    for (let i = 0; i < projectIds.length; i += CHUNK) {
+      const chunk = await this.db
+        .select()
+        .from(projectOutcomes)
+        .where(inArray(projectOutcomes.project_id, projectIds.slice(i, i + CHUNK)))
+        .orderBy(asc(projectOutcomes.project_id), asc(projectOutcomes.seq))
+      rows.push(...chunk.map(rowToOutcome))
+    }
+    return rows
+  }
+
+  async projectsWithOutcomes(projectIds: string[]): Promise<string[]> {
+    const found: string[] = []
+    for (let i = 0; i < projectIds.length; i += CHUNK) {
+      const rows = await this.db
+        .selectDistinct({ projectId: projectOutcomes.project_id })
+        .from(projectOutcomes)
+        .where(inArray(projectOutcomes.project_id, projectIds.slice(i, i + CHUNK)))
+      for (const row of rows) found.push(row.projectId)
+    }
+    return found
+  }
+
   async deleteByProjects(projectIds: string[]): Promise<void> {
     for (let i = 0; i < projectIds.length; i += CHUNK) {
       const chunk = projectIds.slice(i, i + CHUNK)

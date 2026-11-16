@@ -11,6 +11,9 @@ import { ProjectBoardViews } from '../modules/projects/ProjectBoardViews.js'
 import { ProjectDefinitionPublisher } from '../modules/projects/ProjectDefinitionPublisher.js'
 import { ProjectOutcomeReader } from '../modules/projects/ProjectOutcomeReader.js'
 import { ProjectService } from '../modules/projects/ProjectService.js'
+import { TaskProjectLinkService } from '../modules/projects/TaskProjectLinkService.js'
+import { projectContextContributor } from '../modules/projects/projectContext.js'
+import { createBlockHomes } from '../modules/board/blockHomes.js'
 import { createProjectOutcomeStore } from '../modules/projects/createProjectStepController.js'
 import type { CoreDependencies } from './dependencies.js'
 
@@ -53,7 +56,8 @@ export function createProjectsModule(
     events,
     logger: deps.logger,
   })
-  const { projectDefinitionRepository, outcomeStoragePolicyRepository } = deps
+  const { projectDefinitionRepository, outcomeStoragePolicyRepository, taskProjectLinkRepository } =
+    deps
   const outcomes = createProjectOutcomeStore(deps, projectRecordRepository)
   const getMounted = (workspaceId: string, projectId: string) =>
     service.getMounted(workspaceId, projectId)
@@ -83,6 +87,29 @@ export function createProjectsModule(
             assertProjectMounted: async (workspaceId, projectId) => {
               await getMounted(workspaceId, projectId)
             },
+          }),
+        }
+      : {}),
+    ...(taskProjectLinkRepository
+      ? {
+          taskLinks: new TaskProjectLinkService({
+            links: taskProjectLinkRepository,
+            projectRepository,
+            blockRepository: deps.blockRepository,
+            resolveBlock: createBlockHomes({
+              blockRepository: deps.blockRepository,
+              ...(deps.workspaceMountRepository
+                ? { workspaceMountRepository: deps.workspaceMountRepository }
+                : {}),
+            }).resolveBlock,
+            workspaceRepository: deps.workspaceRepository,
+            context: projectContextContributor({
+              records: projectRecordRepository,
+              outcomes,
+              definitions: sources.projectDefinitions,
+              modules: sources.projectKindModules,
+            }),
+            clock: deps.clock,
           }),
         }
       : {}),

@@ -23,7 +23,7 @@ import {
 // The public PROJECTS surface (`/api/v1/projects`, `/api/v1/project-kinds`): the project kinds a
 // deployment offers, the definitions an account publishes for them, projects and their service
 // links, the tasks under a project, and a project's outcomes. Design:
-// `docs/initiatives/research-projects.md`.
+// `backend/docs/adr/0069-projects-and-research-projects.md`.
 //
 // Nothing here knows a kind. A definition's `spec`, an outcome's `body` and a project's `view`
 // are opaque, and each kind serves their JSON Schemas from `GET /api/v1/project-kinds/{kind}`, so

@@ -35,6 +35,7 @@ export type RunContextAdmissionDeps = Pick<
   | 'documentRepository'
   | 'documentUrlResolver'
   | 'documentRefresher'
+  | 'linkedProjects'
   | 'taskRepository'
   | 'requirementReviewRepository'
   | 'docInterviewRepository'
@@ -95,6 +96,7 @@ export function buildRunContextAndAdmission(
     documents: deps.documentRepository,
     documentUrlResolver: deps.documentUrlResolver,
     documentRefresher: deps.documentRefresher,
+    linkedProjects: deps.linkedProjects,
     tasks: deps.taskRepository,
     requirementReviews: deps.requirementReviewRepository,
     docInterviews: deps.docInterviewRepository,

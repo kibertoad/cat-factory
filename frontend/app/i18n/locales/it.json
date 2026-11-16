@@ -6620,7 +6620,9 @@
         "outcome_too_large_for_inline": "Il risultato è troppo grande per essere salvato, quindi non è stato registrato. Restringi l'attività ed eseguila di nuovo.",
         "research_nothing_to_ask": "La modalità di questa attività di ricerca non lascia alcuna domanda da porre: niente di nuovo da aggiungere, o niente di parziale o bloccato da chiarire. Scegli un'altra modalità o aggiungi una domanda.",
         "task_owned_by_project": "Questa attività appartiene a un progetto, che non ha un servizio. Usa invece l'indirizzo delle attività del progetto.",
-        "project_definition_invalid": "La definizione è rifiutata dalla sua struttura o dal suo tipo di progetto. La risposta elenca ogni problema; correggili e pubblica di nuovo."
+        "project_definition_invalid": "La definizione è rifiutata dalla sua struttura o dal suo tipo di progetto. La risposta elenca ogni problema; correggili e pubblica di nuovo.",
+        "project_link_invalid": "Quel progetto non esiste o appartiene a un'altra organizzazione. Collega un progetto di questa organizzazione.",
+        "project_has_no_result": "Quel progetto non ha ancora un risultato da leggere. Esegui prima un'attività al suo interno, poi collegalo."
       }
     },
     "action": {
@@ -9288,6 +9290,18 @@
     "mount": {
       "added": "Progetto {title} aggiunto a questa bacheca",
       "failed": "Non è stato possibile aggiungere il progetto"
+    },
+    "taskLinks": {
+      "title": "Progetti collegati",
+      "hint": "Gli agenti che lavorano a questa attività leggono il risultato attuale di ogni progetto collegato, come i risultati di un progetto di ricerca.",
+      "pick": "Scegli un progetto",
+      "link": "Collega",
+      "unlink": "Scollega il progetto",
+      "empty": "Nessun progetto collegato.",
+      "linked": "Progetto collegato",
+      "loadFailed": "Impossibile caricare i progetti collegati",
+      "linkFailed": "Impossibile collegare il progetto",
+      "unlinkFailed": "Impossibile scollegare il progetto"
     },
     "view": {
       "open": "Apri progetto",

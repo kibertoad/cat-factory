@@ -59,7 +59,21 @@ export interface LinkedContextSources {
    * {@link reportUnmatchedUrls}). Absent ⇒ they are dropped as before.
    */
   logger?: Logger
+  /**
+   * The projects linked to the block, each rendered by its kind. Throws when a linked project
+   * cannot be read, which breaks the run naming it. Absent ⇒ no project is linked.
+   */
+  projects?: LinkedProjectsResolver
 }
+
+/** A project linked to a block as context, in the shape `AgentRunContext.block` carries it. */
+export type LinkedContextProject = NonNullable<AgentRunContext['block']['contextProjects']>[number]
+
+/** Resolve the projects linked to a block, rendered for a dispatch. */
+export type LinkedProjectsResolver = (
+  workspaceId: string,
+  blockId: string,
+) => Promise<LinkedContextProject[]>
 
 /**
  * Build the URL→document canonicaliser from the configured document providers, so a Figma/Notion
@@ -136,6 +150,7 @@ type LinkedContextDoc = NonNullable<AgentRunContext['block']['contextDocs']>[num
 export interface LinkedContext {
   docs: LinkedContextDoc[]
   tasks: NonNullable<AgentRunContext['block']['contextTasks']>
+  projects: LinkedContextProject[]
 }
 
 /** What a caller of {@link resolveLinkedContext} steers, beyond the block it is resolving for. */
@@ -266,6 +281,8 @@ export async function resolveLinkedContext(
   return {
     docs: refreshed.map(({ record, freshness }) => toContextDoc(record, freshness)),
     tasks: [...tasks.values()].map((t) => toContextTask(t)),
+    // A linked project that cannot be read throws here, breaking the run that names it.
+    projects: (await sources.projects?.(workspaceId, blockId)) ?? [],
   }
 }
 

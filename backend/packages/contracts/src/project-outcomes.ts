@@ -9,7 +9,7 @@ import {
 // Each outcome is one immutable revision in a named stream; the kind owns the body's shape, the
 // vocabulary of `intent`, and how a stream's revisions fold into its current state. The platform
 // stores, orders, sizes and reclaims revisions without reading their bodies. Design:
-// `docs/initiatives/research-projects.md`.
+// `backend/docs/adr/0069-projects-and-research-projects.md`.
 // ---------------------------------------------------------------------------
 
 const slug = v.pipe(v.string(), v.regex(/^[a-z][a-z0-9-]{0,39}$/, 'must be a lowercase slug'))

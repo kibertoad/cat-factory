@@ -101,6 +101,7 @@ import {
 } from './modules/providers/ApiKeyController.js'
 import { serviceMountController } from './modules/services/ServiceMountController.js'
 import { projectController } from './modules/projects/ProjectController.js'
+import { taskProjectLinkController } from './modules/projects/TaskProjectLinkController.js'
 import { serviceSpecController } from './modules/serviceSpec/ServiceSpecController.js'
 import {
   linearOAuthController,
@@ -121,6 +122,7 @@ import { projectKindsInternalController } from './modules/projects/ProjectKindsI
 import { projectDefinitionsInternalController } from './modules/projects/ProjectDefinitionsInternalController.js'
 import { agentKindsController } from './modules/agentKinds/AgentKindsController.js'
 import { publicApiController } from './modules/publicApi/PublicApiController.js'
+import { publicTaskProjectController } from './modules/publicApi/PublicTaskProjectController.js'
 import { publicBoardController } from './modules/publicApi/PublicBoardController.js'
 import { publicProvisioningController } from './modules/publicApi/PublicProvisioningController.js'
 import { publicTrackerController } from './modules/publicApi/PublicTrackerController.js'
@@ -177,6 +179,7 @@ function registerPublicApiControllers<E extends AppEnv>(app: Hono<E>): void {
   // in-controller key auth; service creation is `admin` (board structure), the task-level writes
   // `write`. See backend/docs/public-api.md.
   app.route('/', publicBoardController())
+  app.route('/', publicTaskProjectController())
   // DEPLOYMENT PROVISIONING (`/api/v1/repos/bootstrap`, `/api/v1/environments/connections`,
   // `PATCH /api/v1/services/:serviceId`, and the reads naming what this deployment has WIRED).
   // What a caller does BEFORE there is a board to shape, which is why it is not part of the board
@@ -559,6 +562,7 @@ export const WORKSPACE_CONTROLLERS: readonly ControllerEntry[] = [
   { name: 'trackerSettings', mount: WORKSPACE_MOUNT, build: () => trackerSettingsController() },
   { name: 'serviceMount', mount: WORKSPACE_MOUNT, build: () => serviceMountController() },
   { name: 'project', mount: WORKSPACE_MOUNT, build: () => projectController() },
+  { name: 'task-project-link', mount: WORKSPACE_MOUNT, build: () => taskProjectLinkController() },
   // The board's outcome-storage tiers (its own and its projects'): `settings.manage`.
   {
     name: 'outcomeStoragePolicy',

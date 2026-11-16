@@ -1,3 +1,5 @@
+import type { TaskProjectLinkService } from '@cat-factory/orchestration'
+import { requireCapability } from '../../http/guards.js'
 import { UNATTRIBUTED_BLOCK_EDIT_AUTHORITY } from '@cat-factory/contracts'
 import type { Block, CreatePublicTaskInput } from '@cat-factory/contracts'
 import type { Logger } from '@cat-factory/kernel'
@@ -48,6 +50,8 @@ export interface PublicTaskCreationDeps {
   documents: ServerContainer['documents']
   /** The merged best-practice catalog a named `fragmentIds` is checked against; absent ⇒ a 503. */
   fragmentLibrary: ServerContainer['fragmentLibrary']
+  /** Links projects to a task as context; absent ⇒ a 503 for a create that names `projects`. */
+  taskProjectLinks: TaskProjectLinkService | undefined
   logger: Logger
 }
 
@@ -59,6 +63,7 @@ export function taskCreationDeps(container: ServerContainer): PublicTaskCreation
     tasks: container.tasks,
     documents: container.documents,
     fragmentLibrary: container.fragmentLibrary,
+    taskProjectLinks: container.projects?.taskLinks,
     logger: container.logger,
   }
 }
@@ -77,7 +82,7 @@ export async function createTaskWithAttachments(
   serviceId: string,
   body: CreatePublicTaskInput,
 ): Promise<Block> {
-  const { ticket, documents, fields: _fields, ...rest } = body
+  const { ticket, documents, projects, fields: _fields, ...rest } = body
   // The caller's `fields` bag becomes the internal per-type shape BEFORE anything is resolved: it
   // is a pure, deterministic refusal, so it must land ahead of the outbound ticket/document
   // fetches, exactly like the container check below.
@@ -103,6 +108,12 @@ export async function createTaskWithAttachments(
   const input = { ...rest, ...(taskTypeFields ? { taskTypeFields } : {}) }
   const linkage = ticket ? await resolveTicket(deps, workspaceId, ticket) : null
   const attachment = documents?.length ? await resolveDocuments(deps, workspaceId, documents) : null
+  // Projects are admitted before the task exists, like the documents above, so a refused link
+  // writes nothing.
+  const projectLinks = projects?.length
+    ? requireCapability(deps.taskProjectLinks, 'Linking projects to tasks is not configured')
+    : null
+  if (projectLinks && projects) await projectLinks.assertLinkable(workspaceId, projects)
 
   // Unattributed by the same reading the headless RUN start gets (ADR 0037): an API key holds
   // scopes, not a workspace tier, so no role-scoped merge restriction applies to it and none can
@@ -121,6 +132,14 @@ export async function createTaskWithAttachments(
     // a state that then refuses every future filing of that ticket.
     try {
       await attachment.attach(block.id)
+    } catch (error) {
+      await releaseUnattachedTask(deps, workspaceId, block.id)
+      throw error
+    }
+  }
+  if (projectLinks && projects) {
+    try {
+      await projectLinks.link(workspaceId, block.id, projects)
     } catch (error) {
       await releaseUnattachedTask(deps, workspaceId, block.id)
       throw error

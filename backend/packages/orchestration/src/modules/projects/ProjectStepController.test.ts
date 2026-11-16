@@ -147,6 +147,7 @@ function harness(opts: {
         }
   const blockRepository = {
     findById: async () => ({ workspaceId: 'ws_1', ownerId: 'prj_1', block: task }),
+    findByIds: async () => [],
   }
   const definitions = {
     get: async () => resolved,
@@ -169,6 +170,8 @@ function harness(opts: {
     },
     getOutcome: async (_projectId: string, id: string) => rows.find((r) => r.id === id) ?? null,
     listOutcomes: async () => rows,
+    listOutcomesOfProjects: async () => rows,
+    projectsWithOutcomes: async () => (rows.length ? ['prj_1'] : []),
     deleteByProjects: async () => {},
   }
   const ctrl = new ProjectStepController({

@@ -279,6 +279,24 @@ export function defineProjectOutcomePersistenceSuite(
       expect(await repos.records.listOutcomes(projectId, 'absent')).toEqual([])
     })
 
+    it('reads the outcomes of several projects at once, and which projects hold one', async () => {
+      const repos = makeRepos()
+      const a = await pinnedProject(repos)
+      const b = await pinnedProject(repos)
+      const none = await pinnedProject(repos)
+      await repos.records.insertOutcome(outcome(a, unique('out'), 2, {}))
+      await repos.records.insertOutcome(outcome(a, unique('out'), 1, {}))
+      await repos.records.insertOutcome(outcome(b, unique('out'), 1, {}))
+      const rows = await repos.records.listOutcomesOfProjects([a, b, none])
+      expect(rows.filter((r) => r.projectId === a).map((r) => r.seq)).toEqual([1, 2])
+      expect(rows.filter((r) => r.projectId === b)).toHaveLength(1)
+      expect(rows.filter((r) => r.projectId === none)).toEqual([])
+      expect(new Set(await repos.records.projectsWithOutcomes([a, b, none]))).toEqual(
+        new Set([a, b]),
+      )
+      expect(await repos.records.listOutcomesOfProjects([])).toEqual([])
+    })
+
     it('round-trips an offloaded body reference', async () => {
       const repos = makeRepos()
       const projectId = await pinnedProject(repos)
