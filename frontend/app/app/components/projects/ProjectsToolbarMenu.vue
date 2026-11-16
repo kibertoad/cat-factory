@@ -25,7 +25,7 @@ async function mountProject(projectId: string, title: string) {
 }
 
 const createItems = computed(() => {
-  if (projects.creatableKinds.length) {
+  if (projects.kinds.length) {
     return [
       {
         label: t('projects.toolbar.newProject'),

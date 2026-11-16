@@ -697,7 +697,8 @@
         "delegated_executor_failed": "Zewnętrzny executor nie zdołał uruchomić tego kroku. Problem leży w systemie wykonującym pracę, a nie w tej instalacji: sprawdź jego własne logi i spróbuj ponownie.",
         "delegated_work_branch_unprepared": "Platforma nie mogła przygotować gałęzi roboczej, na którą wysyłany jest executor tego kroku, więc nic nie zostało uruchomione. Albo połączenie z repozytorium nie ma prawa zapisu, albo zadanie wskazuje gałąź, która jeszcze nie istnieje: szczegóły mówią, co z tego.",
         "attached_pr_provider_unreachable": "Dostawca repozytorium nie odpowiedział, więc nie udało się sprawdzić pull requesta i nie utworzono zadania. Nie trzeba tu niczego konfigurować: spróbuj ponownie za chwilę.",
-        "project_definitions_unreachable": "Nie udało się teraz odczytać definicji projektów tego wdrożenia, więc żądanie nie zostało wykonane. Nic nie jest źle skonfigurowane i nie trzeba nic zmieniać: spróbuj ponownie, gdy połączenie wróci."
+        "project_definitions_unreachable": "Nie udało się teraz odczytać definicji projektów tego wdrożenia, więc żądanie nie zostało wykonane. Nic nie jest źle skonfigurowane i nie trzeba nic zmieniać: spróbuj ponownie, gdy połączenie wróci.",
+        "outcome_body_unavailable": "Ten wynik projektu jest przechowywany w magazynie treści, który nie może go teraz udostępnić. Z żądaniem wszystko w porządku: spróbuj ponownie, gdy magazyn będzie dostępny."
       }
     },
     "reason": {
@@ -9259,7 +9260,12 @@
       "servicesHelp": "Jego zadania mogą czytać repozytoria tych usług jako kontekst.",
       "submit": "Utwórz projekt",
       "created": "Utworzono projekt {title}",
-      "failed": "Nie udało się utworzyć projektu"
+      "failed": "Nie udało się utworzyć projektu",
+      "definitionLabel": "Definicja badania",
+      "definitionHelp": "Co badanie ma ustalić. Jej wersja zostaje przypięta do tego projektu.",
+      "definitionOption": "{title} (wersja {version})",
+      "noDefinitions": "Ta organizacja nie ma jeszcze żadnej definicji badania. Najpierw musi ją opublikować administrator.",
+      "definitionsFailed": "Nie udało się wczytać definicji badań"
     },
     "linkServices": {
       "title": "Powiązane usługi",

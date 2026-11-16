@@ -52,6 +52,7 @@ import type {
   ProjectDefinitionRegistry,
   ProjectKindModuleRegistry,
   ProjectRecordRepository,
+  OutcomeStoragePolicyRepository,
   InlineUseCaseRegistry,
   InlineUseCaseGenerator,
   WorkspaceMemberRepository,
@@ -322,6 +323,8 @@ export interface ConformanceApp {
   blockRepository(): BlockRepository
   /** The facade's project-record repository, so the projects suite can read what a create pinned. */
   projectRecordRepository(): ProjectRecordRepository
+  /** The facade's outcome-storage policy tiers, so a suite can lower a project's threshold. */
+  outcomeStoragePolicyRepository(): OutcomeStoragePolicyRepository
   /**
    * The facade's workspace repository over its real store, so the workspace-RBAC suite can
    * assert the `accessRowOf` / `setAccessMode` access-mode round-trip identically on D1 and

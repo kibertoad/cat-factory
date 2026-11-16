@@ -772,7 +772,8 @@
         "delegated_executor_failed": "The external executor could not start this step. The problem is in the system that runs the work, not in this deployment: check its own logs and try again.",
         "delegated_work_branch_unprepared": "The platform could not prepare the work branch this step's executor is dispatched onto, so nothing was started. Either the repository connection cannot write to it, or the task names a branch that does not exist yet: the details say which.",
         "attached_pr_provider_unreachable": "The repository provider did not answer, so the pull request could not be checked and no task was created. Nothing needs setting up here: try again in a moment.",
-        "project_definitions_unreachable": "This deployment's project definitions could not be read just now, so the request was not completed. Nothing is misconfigured and no change is needed: try again once the connection recovers."
+        "project_definitions_unreachable": "This deployment's project definitions could not be read just now, so the request was not completed. Nothing is misconfigured and no change is needed: try again once the connection recovers.",
+        "outcome_body_unavailable": "This project's result is kept in content storage, which cannot serve it right now. Nothing is wrong with the request: try again once storage is available."
       }
     },
     "reason": {
@@ -9593,7 +9594,12 @@
       "servicesHelp": "Its tasks can read these services' repositories as context.",
       "submit": "Create project",
       "created": "Project {title} created",
-      "failed": "Could not create the project"
+      "failed": "Could not create the project",
+      "definitionLabel": "Research definition",
+      "definitionHelp": "What the research sets out to find. Its version is fixed for this project.",
+      "definitionOption": "{title} (version {version})",
+      "noDefinitions": "No research definition is available to this organization yet. An administrator publishes one first.",
+      "definitionsFailed": "Could not load the research definitions"
     },
     "linkServices": {
       "title": "Linked services",

@@ -621,6 +621,7 @@ export function makeMothershipConformanceApp(
     // Direct-store probes read the mothership's authoritative Postgres, like seedService.
     blockRepository: () => mothershipRepos().blockRepository,
     projectRecordRepository: () => mothershipRepos().projectRecordRepository,
+    outcomeStoragePolicyRepository: () => mothershipRepos().outcomeStoragePolicyRepository,
     workspaceRepository: () => new DrizzleWorkspaceRepository(db),
     workspaceMemberRepository: () => new DrizzleWorkspaceMemberRepository(db),
     initiativeRepository: () => mothershipRepos().initiativeRepository,

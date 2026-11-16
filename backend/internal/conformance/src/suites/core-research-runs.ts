@@ -3,7 +3,8 @@ import type { Block, ExecutionInstance, WorkspaceSnapshot } from '@cat-factory/k
 import { RESEARCH_PIPELINE_ID, defaultProjectDefinitionRegistry } from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
 import type { FakeAgentOptions } from '../FakeAgentExecutor.js'
-import type { ConformanceHarness } from '../harness.js'
+import type { ConformanceHarness, ConformanceAppOptions } from '../harness.js'
+import { memoryBinaryArtifactStore } from './shared.js'
 
 // Research runs, the built-in project kind driven through the generic project step: a `research`
 // task under a research project dispatches the `project-researcher` step with its kind's brief,
@@ -51,10 +52,13 @@ function reasonOf(body: unknown): unknown {
 
 export function defineCoreResearchRunsConformance(harness: ConformanceHarness): void {
   describe('research runs', () => {
-    async function setup(agentOptions: FakeAgentOptions = {}) {
+    async function setup(
+      agentOptions: FakeAgentOptions = {},
+      appOptions: ConformanceAppOptions = {},
+    ) {
       const app = harness.makeApp(
         { asyncKinds: ['project-researcher'], ...agentOptions },
-        { projectDefinitionRegistry: definitions() },
+        { projectDefinitionRegistry: definitions(), ...appOptions },
       )
       const home = await app.createOrgWorkspace({ seed: true })
       const wsId = home.workspace.id
@@ -140,6 +144,13 @@ export function defineCoreResearchRunsConformance(harness: ConformanceHarness): 
       expect(checkpoint.findings.map((f) => f.questionId)).toEqual(['scheme'])
       expect(step.project?.outcomeId).toBeUndefined()
 
+      const early = await app.call(
+        'POST',
+        `/workspaces/${wsId}/executions/${exec.id}/credential/resume`,
+      )
+      expect(early.status).toBe(409)
+      expect(reasonOf(early.body)).toBe('capability_credential_still_missing')
+
       // Once the credential is stored the run resumes from its checkpoint: the resumed dispatch
       // answers only what the checkpoint left open, and the one outcome it records is the merge.
       const stored = await app.call(
@@ -158,6 +169,62 @@ export function defineCoreResearchRunsConformance(harness: ConformanceHarness): 
       const finished = done.steps.find((s) => s.agentKind === 'project-researcher')!
       expect(finished.project).toMatchObject({ seq: 1, outcomeId: `pout_${exec.blockId}` })
       expect(finished.output).toContain('2 answered')
+    })
+
+    it('offloads a body over the threshold and reads it back for the next task', async () => {
+      const store = memoryBinaryArtifactStore()
+      const { app, wsId, project } = await setup(
+        {},
+        { resolveBinaryArtifactStore: () => Promise.resolve(store) },
+      )
+      await app
+        .outcomeStoragePolicyRepository()
+        .set('project', project.id, { inlineMaxBytes: 16, offload: 'enabled' })
+      const first = await runTask(app, wsId, project)
+      expect(first.exec.status).toBe('done')
+      const offloaded = await store.listByBlock(wsId, project.rootBlockId)
+      expect(offloaded.map((a) => a.kind)).toEqual(['outcome'])
+      // A refresh asks the questions the offloaded revision answered, so its body was read back.
+      const second = await runTask(app, wsId, project, { researchMode: 'refresh' })
+      expect(second.exec.status).toBe('done')
+      expect(
+        (
+          second.exec.steps.find((s) => s.agentKind === 'project-researcher')?.project?.plan as
+            | { questionIds: string[] }
+            | undefined
+        )?.questionIds,
+      ).toEqual(['scheme', 'scopes'])
+    })
+
+    it('carries an offloaded body to the board that inherits the project', async () => {
+      const store = memoryBinaryArtifactStore()
+      const { app, wsId, project } = await setup(
+        {},
+        { resolveBinaryArtifactStore: () => Promise.resolve(store) },
+      )
+      await app
+        .outcomeStoragePolicyRepository()
+        .set('project', project.id, { inlineMaxBytes: 16, offload: 'enabled' })
+      expect((await runTask(app, wsId, project)).exec.status).toBe('done')
+      const accountId = (await app.workspaceRepository().accountOf(wsId))!
+      const other = await app.createWorkspaceInAccount(accountId, null, { name: 'Other board' })
+      const otherId = other.workspace.id
+      await app.call('POST', `/workspaces/${otherId}/projects/${project.id}/mount`, {})
+      expect((await app.call('DELETE', `/workspaces/${wsId}`)).status).toBe(204)
+      expect((await store.listByBlock(otherId, project.rootBlockId)).map((a) => a.kind)).toEqual([
+        'outcome',
+      ])
+      const refresh = await runTask(app, otherId, project, { researchMode: 'refresh' })
+      expect(refresh.exec.status).toBe('done')
+    })
+
+    it('keeps a small body inline when no content storage is configured', async () => {
+      const { app, wsId, project } = await setup()
+      await app
+        .outcomeStoragePolicyRepository()
+        .set('project', project.id, { inlineMaxBytes: 16, offload: 'enabled' })
+      const { exec } = await runTask(app, wsId, project)
+      expect(exec.status).toBe('done')
     })
 
     it('refuses a research task under a service', async () => {

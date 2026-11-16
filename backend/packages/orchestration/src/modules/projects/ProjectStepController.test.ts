@@ -13,9 +13,11 @@ import {
   type PipelineStep,
   type ProjectKindModule,
   type ProjectOutcomeRow,
+  type ProjectRecordRepository,
   type ResolvedProjectDefinition,
 } from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
+import { ProjectOutcomeStore } from './ProjectOutcomeStore.js'
 import { ProjectStepController, outcomeIdFor } from './ProjectStepController.js'
 
 const definition: ProjectDefinition = {
@@ -64,12 +66,14 @@ const notesModule: ProjectKindModule<{ note: string }> = {
   finish: ({ reply }) => ({ body: reply, output: `noted: ${reply.note}` }),
   describe: ({ body }) => `noted: ${body.note}`,
   artifactRefs: () => [],
+  definitionSummary: (definition) => definition.title,
 }
 
 function body(statuses: Record<string, 'answered' | 'partial' | 'blocked'>): FindingsRevisionBody {
   return {
     summary: '',
     learnings: [],
+    adhocQuestions: [],
     findings: Object.entries(statuses).map(([questionId, status]) => ({
       questionId,
       status,
@@ -141,34 +145,41 @@ function harness(opts: {
           inputs: {},
           ...opts.pin,
         }
+  const blockRepository = {
+    findById: async () => ({ workspaceId: 'ws_1', ownerId: 'prj_1', block: task }),
+  }
+  const definitions = {
+    get: async () => resolved,
+    latest: async () => resolved,
+    list: async () => [resolved],
+  }
+  const records: ProjectRecordRepository = {
+    getPin: async () => pin,
+    insertPin: async () => {},
+    reserveSeq: async () => seqs.size + 1 + rows.length,
+    reserveTaskSeq: async (_projectId: string, taskId: string) => {
+      if (!seqs.has(taskId)) seqs.set(taskId, seqs.size + 1 + rows.length)
+      return seqs.get(taskId)!
+    },
+    insertOutcome: async (row: ProjectOutcomeRow) => {
+      if (rows.some((r) => r.id === row.id)) return false
+      rows.push(row)
+      return true
+    },
+    getOutcome: async (_projectId: string, id: string) => rows.find((r) => r.id === id) ?? null,
+    listOutcomes: async () => rows,
+    deleteByProjects: async () => {},
+  }
   const ctrl = new ProjectStepController({
-    blockRepository: {
-      findById: async () => ({ workspaceId: 'ws_1', ownerId: 'prj_1', block: task }),
-    },
+    blockRepository,
     projectRepository: { get: async () => project },
-    workspaceRepository: { accountOf: async () => 'acc_1' },
-    definitions: {
-      get: async () => resolved,
-      latest: async () => resolved,
-      list: async () => [resolved],
-    },
-    records: {
-      getPin: async () => pin,
-      insertPin: async () => {},
-      reserveSeq: async () => seqs.size + 1 + rows.length,
-      reserveTaskSeq: async (_projectId: string, taskId: string) => {
-        if (!seqs.has(taskId)) seqs.set(taskId, seqs.size + 1 + rows.length)
-        return seqs.get(taskId)!
-      },
-      insertOutcome: async (row: ProjectOutcomeRow) => {
-        if (rows.some((r) => r.id === row.id)) return false
-        rows.push(row)
-        return true
-      },
-      getOutcome: async (_projectId: string, id: string) => rows.find((r) => r.id === id) ?? null,
-      listOutcomes: async () => rows,
-      deleteByProjects: async () => {},
-    },
+    definitions,
+    records,
+    outcomes: new ProjectOutcomeStore({
+      blockRepository,
+      workspaceRepository: { accountOf: async () => 'acc_1' },
+      records,
+    }),
     modules,
     clock: { now: () => 5 },
   })

@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import type {
   CreateProjectInput,
+  PinnableProjectDefinition,
   Project,
   ProjectKindDescriptor,
   WorkspaceMount,
@@ -42,15 +43,6 @@ export const useProjectsStore = defineStore('projects', () => {
     return map
   })
 
-  /**
-   * The kinds the create form can make a project of. A kind that requires a definition needs one
-   * picked at creation, which this form does not collect yet, so it is hidden here rather than
-   * offered and then refused.
-   */
-  const creatableKinds = computed<ProjectKindDescriptor[]>(() =>
-    kinds.value.filter((k) => k.definition !== 'required'),
-  )
-
   function kindOf(project: Project | undefined): ProjectKindDescriptor | undefined {
     return project ? kinds.value.find((k) => k.id === project.kind) : undefined
   }
@@ -71,6 +63,12 @@ export const useProjectsStore = defineStore('projects', () => {
     const created = await api.createProject(ws.requireId(), input)
     await ws.refresh()
     return created
+  }
+
+  /** The definition versions of `kind` this board's account can pin on a new project. */
+  async function listPinnableDefinitions(kind: string): Promise<PinnableProjectDefinition[]> {
+    const ws = useWorkspaceStore()
+    return api.listPinnableProjectDefinitions(ws.requireId(), kind)
   }
 
   async function setServices(projectId: string, serviceIds: string[]) {
@@ -96,13 +94,13 @@ export const useProjectsStore = defineStore('projects', () => {
     catalog,
     mounts,
     kinds,
-    creatableKinds,
     kindsUnavailable,
     byRootBlock,
     kindOf,
     mountable,
     isSharedRoot,
     hydrate,
+    listPinnableDefinitions,
     create,
     setServices,
     mount,

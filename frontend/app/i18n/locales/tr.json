@@ -697,7 +697,8 @@
         "delegated_executor_failed": "Dış yürütücü bu adımı başlatamadı. Sorun bu kurulumda değil, işi yapan sistemde: onun kendi günlüklerine bakıp yeniden deneyin.",
         "delegated_work_branch_unprepared": "Platform, bu adımın yürütücüsünün gönderildiği çalışma dalını hazırlayamadı, bu yüzden hiçbir şey başlatılmadı. Ya depo bağlantısının bu dala yazma izni yok ya da görev henüz var olmayan bir dalı belirtiyor: ayrıntılar hangisi olduğunu söylüyor.",
         "attached_pr_provider_unreachable": "Depo sağlayıcısı yanıt vermedi, bu yüzden pull request denetlenemedi ve görev oluşturulmadı. Burada ayarlanacak bir şey yok: birazdan yeniden deneyin.",
-        "project_definitions_unreachable": "Bu dağıtımın proje tanımları şu anda okunamadı, bu yüzden istek tamamlanmadı. Yanlış yapılandırılmış bir şey yok ve bir değişiklik gerekmiyor: bağlantı düzeldiğinde yeniden deneyin."
+        "project_definitions_unreachable": "Bu dağıtımın proje tanımları şu anda okunamadı, bu yüzden istek tamamlanmadı. Yanlış yapılandırılmış bir şey yok ve bir değişiklik gerekmiyor: bağlantı düzeldiğinde yeniden deneyin.",
+        "outcome_body_unavailable": "Bu projenin sonucu içerik depolamasında tutuluyor ve depolama şu anda bunu sunamıyor. İstekte bir sorun yok: depolama kullanılabilir olduğunda yeniden deneyin."
       }
     },
     "reason": {
@@ -9259,7 +9260,12 @@
       "servicesHelp": "Görevleri bu servislerin depolarını bağlam olarak okuyabilir.",
       "submit": "Proje oluştur",
       "created": "{title} projesi oluşturuldu",
-      "failed": "Proje oluşturulamadı"
+      "failed": "Proje oluşturulamadı",
+      "definitionLabel": "Araştırma tanımı",
+      "definitionHelp": "Araştırmanın ortaya çıkarmak istediği şey. Sürümü bu proje için sabitlenir.",
+      "definitionOption": "{title} (sürüm {version})",
+      "noDefinitions": "Bu kuruluş için henüz kullanılabilir bir araştırma tanımı yok. Önce bir yöneticinin yayımlaması gerekiyor.",
+      "definitionsFailed": "Araştırma tanımları yüklenemedi"
     },
     "linkServices": {
       "title": "Bağlı servisler",

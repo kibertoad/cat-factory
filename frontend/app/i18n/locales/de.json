@@ -6587,7 +6587,8 @@
         "delegated_executor_failed": "Der externe Executor konnte diesen Schritt nicht starten. Das Problem liegt im System, das die Arbeit ausführt, nicht in dieser Installation: prüfe dessen Logs und versuche es erneut.",
         "delegated_work_branch_unprepared": "Die Plattform konnte den Arbeitsbranch nicht bereitstellen, auf den der Executor dieses Schritts geschickt wird, daher wurde nichts gestartet. Entweder darf die Repository-Verbindung nicht darauf schreiben, oder die Aufgabe nennt einen Branch, den es noch nicht gibt: die Details sagen, was davon.",
         "attached_pr_provider_unreachable": "Der Repository-Anbieter hat nicht geantwortet, daher konnte der Pull Request nicht geprüft werden und es wurde keine Aufgabe angelegt. Hier muss nichts eingerichtet werden: versuche es gleich noch einmal.",
-        "project_definitions_unreachable": "Die Projektdefinitionen dieser Installation konnten gerade nicht gelesen werden, deshalb wurde die Anfrage nicht ausgeführt. Es ist nichts falsch konfiguriert und keine Änderung nötig: versuchen Sie es erneut, sobald die Verbindung wieder steht."
+        "project_definitions_unreachable": "Die Projektdefinitionen dieser Installation konnten gerade nicht gelesen werden, deshalb wurde die Anfrage nicht ausgeführt. Es ist nichts falsch konfiguriert und keine Änderung nötig: versuchen Sie es erneut, sobald die Verbindung wieder steht.",
+        "outcome_body_unavailable": "Dieses Projektergebnis liegt im Inhaltsspeicher, der es gerade nicht ausliefern kann. Mit der Anfrage ist alles in Ordnung: versuchen Sie es erneut, sobald der Speicher verfügbar ist."
       }
     },
     "reason": {
@@ -9259,7 +9260,12 @@
       "servicesHelp": "Seine Aufgaben können die Repositorys dieser Services als Kontext lesen.",
       "submit": "Projekt anlegen",
       "created": "Projekt {title} angelegt",
-      "failed": "Das Projekt konnte nicht angelegt werden"
+      "failed": "Das Projekt konnte nicht angelegt werden",
+      "definitionLabel": "Recherche-Definition",
+      "definitionHelp": "Was die Recherche herausfinden soll. Ihre Version wird für dieses Projekt festgelegt.",
+      "definitionOption": "{title} (Version {version})",
+      "noDefinitions": "Für diese Organisation ist noch keine Recherche-Definition verfügbar. Zuerst muss eine Administratorin oder ein Administrator eine veröffentlichen.",
+      "definitionsFailed": "Die Recherche-Definitionen konnten nicht geladen werden"
     },
     "linkServices": {
       "title": "Verknüpfte Services",

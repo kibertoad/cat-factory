@@ -88,7 +88,21 @@ export function memoryBinaryArtifactStore(): BinaryArtifactStore & {
     seed(record, bytes) {
       rows.set(record.id, { record, bytes })
     },
-    store: () => Promise.reject(new Error('seed() directly in conformance')),
+    store: ({ meta, blob }) => {
+      const id = `art_mem_${rows.size + 1}`
+      const record: BinaryArtifactRecord = {
+        ...meta,
+        id,
+        document: meta.document ?? null,
+        byteSize: blob.byteLength,
+        hash: id,
+        storage: 'memory',
+        storageKey: id,
+        createdAt: Date.now(),
+      }
+      rows.set(id, { record, bytes: blob })
+      return Promise.resolve(record)
+    },
     getMetadata: (workspaceId, id) => Promise.resolve(owned(workspaceId, id)?.record ?? null),
     getBlob: (workspaceId, id) => Promise.resolve(owned(workspaceId, id)?.bytes ?? null),
     getBlobWithMetadata: (workspaceId, id) => {

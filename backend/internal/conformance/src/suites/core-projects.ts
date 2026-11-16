@@ -1,10 +1,12 @@
 import type { Project } from '@cat-factory/contracts'
 import type { Block, WorkspaceMount, WorkspaceSnapshot } from '@cat-factory/kernel'
 import {
+  ProjectKindModuleRegistry,
   ProjectKindRegistry,
   ProjectDefinitionRegistry,
   SIMPLE_PIPELINE_ID,
   projectDefinitionContentHash,
+  type ProjectKindModule,
 } from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
 import type { ConformanceHarness } from '../harness.js'
@@ -61,11 +63,31 @@ function vendorDefinition(version: number) {
   }
 }
 
-// The kind's own spec is opaque here: the platform pins whatever the kind's validator accepts.
+// The kind's own spec is opaque here: the platform pins whatever the kind's module accepts, and
+// lists a definition by the summary the module writes. Its tasks never run in this suite.
+const vendorStudyModule: ProjectKindModule<unknown> = {
+  kind: 'vendor-study',
+  agentKind: 'vendor-studier',
+  outcomeSchemaVersion: 1,
+  parseSpec: (definition) => ({ ok: true, value: definition.spec }),
+  parseOutcome: (_version, value) => value,
+  planTask: () => ({ intent: 'study', stream: 'main', plan: {} }),
+  brief: () => ({}),
+  mergeCheckpoint: (_earlier, later) => later,
+  finish: ({ reply }) => ({ body: reply, output: '' }),
+  describe: () => '',
+  artifactRefs: () => [],
+  definitionSummary: (definition) => (definition.spec as { brief: string }).brief,
+}
+
+function modules(): ProjectKindModuleRegistry {
+  const registry = new ProjectKindModuleRegistry()
+  registry.register(vendorStudyModule)
+  return registry
+}
+
 function definitions(): ProjectDefinitionRegistry {
-  const registry = new ProjectDefinitionRegistry([
-    { kind: 'vendor-study', parseSpec: (definition) => ({ ok: true, value: definition.spec }) },
-  ])
+  const registry = new ProjectDefinitionRegistry(modules().all())
   registry.registerAll([vendorDefinition(1), vendorDefinition(2)])
   return registry
 }
@@ -79,6 +101,7 @@ export function defineCoreProjectsConformance(harness: ConformanceHarness): void
     async function setup() {
       const app = harness.makeApp(undefined, {
         projectKindRegistry: kinds(),
+        projectKindModuleRegistry: modules(),
         projectDefinitionRegistry: definitions(),
       })
       const home = await app.createOrgWorkspace({ seed: true })
@@ -128,6 +151,32 @@ export function defineCoreProjectsConformance(harness: ConformanceHarness): void
       const badLink = await createProject(app, wsId, { serviceIds: ['svc_missing'] })
       expect(badLink.status).toBe(422)
       expect(reasonOf(badLink.body)).toBe('project_service_link_invalid')
+    })
+
+    it("lists one kind's pinnable definition versions with their inputs and no spec", async () => {
+      const { app, wsId } = await setup()
+      const listed = await app.call<Array<Record<string, unknown>>>(
+        'GET',
+        `/workspaces/${wsId}/project-kinds/vendor-study/definitions`,
+      )
+      expect(listed.status).toBe(200)
+      expect(listed.body).toEqual(
+        [1, 2].map((version) => ({
+          kind: 'vendor-study',
+          key: 'acme:vendor',
+          version,
+          title: 'Vendor',
+          summary: 'Learn how the vendor integrates.',
+          inputs: vendorDefinition(version).inputs,
+          origin: 'registered',
+        })),
+      )
+      // A kind with no module of its own lists nothing rather than definitions it cannot pin.
+      const other = await app.call<unknown[]>(
+        'GET',
+        `/workspaces/${wsId}/project-kinds/research-elsewhere/definitions`,
+      )
+      expect(other.body).toEqual([])
     })
 
     it('pins the definition a kind requires, with its hash and inputs', async () => {

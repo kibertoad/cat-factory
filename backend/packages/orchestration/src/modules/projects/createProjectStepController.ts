@@ -1,5 +1,6 @@
 import type { ProjectDefinitionSource, ProjectKindModuleRegistry } from '@cat-factory/kernel'
 import type { CoreDependencies } from '../../container/dependencies.js'
+import { ProjectOutcomeStore } from './ProjectOutcomeStore.js'
 import { ProjectStepController } from './ProjectStepController.js'
 
 /**
@@ -12,16 +13,25 @@ export function createProjectStepController(
 ): ProjectStepController | undefined {
   const { projectRepository, projectRecordRepository } = deps
   if (!projectRepository || !projectRecordRepository) return undefined
-  return new ProjectStepController({
+  const outcomes = new ProjectOutcomeStore({
     blockRepository: deps.blockRepository,
-    projectRepository,
-    ...(deps.serviceRepository ? { serviceRepository: deps.serviceRepository } : {}),
     workspaceRepository: deps.workspaceRepository,
-    definitions: sources.definitions,
     records: projectRecordRepository,
     ...(deps.outcomeStoragePolicyRepository
       ? { policies: deps.outcomeStoragePolicyRepository }
       : {}),
+    ...(deps.resolveBinaryArtifactStore
+      ? { resolveBinaryArtifactStore: deps.resolveBinaryArtifactStore }
+      : {}),
+    logger: deps.logger,
+  })
+  return new ProjectStepController({
+    blockRepository: deps.blockRepository,
+    projectRepository,
+    ...(deps.serviceRepository ? { serviceRepository: deps.serviceRepository } : {}),
+    definitions: sources.definitions,
+    records: projectRecordRepository,
+    outcomes,
     modules: sources.modules,
     clock: deps.clock,
   })

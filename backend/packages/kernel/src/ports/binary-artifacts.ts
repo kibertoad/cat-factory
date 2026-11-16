@@ -60,8 +60,11 @@ export type BinaryArtifactStorageKind = BuiltinBinaryArtifactStorageKind | (stri
  * diagram). It reaches the agents working the task as TASK material, never as a design to match, so
  * it joins no visual-confirmation pairing. It is part of the task's definition rather than run
  * debris, so it is retained like an asset and reclaimed with its block.
+ *
+ * `outcome` is a project's outcome body, of any project kind, that was too large to store in its
+ * outcome row. It is anchored on the project's root block, retained, and reclaimed with it.
  */
-export type BinaryArtifactKind = 'screenshot' | 'reference' | 'asset' | 'context'
+export type BinaryArtifactKind = 'screenshot' | 'reference' | 'asset' | 'context' | 'outcome'
 
 /**
  * The artifact kinds the age-based retention sweep may reclaim, as the ONE statement both
@@ -72,7 +75,11 @@ export type BinaryArtifactKind = 'screenshot' | 'reference' | 'asset' | 'context
  * new kind forever, which nothing would ever surface. A `context` image lives as long as its task
  * does: {@link BinaryArtifactStore.pruneByBlocks} reclaims it when the block is deleted.
  */
-export const RETAINED_BINARY_ARTIFACT_KINDS: readonly BinaryArtifactKind[] = ['asset', 'context']
+export const RETAINED_BINARY_ARTIFACT_KINDS: readonly BinaryArtifactKind[] = [
+  'asset',
+  'context',
+  'outcome',
+]
 
 /**
  * The retained kinds whose lifetime is their BLOCK's, so the age sweep reclaims a row of one once
@@ -82,7 +89,10 @@ export const RETAINED_BINARY_ARTIFACT_KINDS: readonly BinaryArtifactKind[] = ['a
  * its backstop: a blob delete that failed there, a best-effort reclaim that never ran, and a delete
  * path that does not call it all leave a row no later delete would ever name.
  */
-export const BLOCK_ANCHORED_BINARY_ARTIFACT_KINDS: readonly BinaryArtifactKind[] = ['context']
+export const BLOCK_ANCHORED_BINARY_ARTIFACT_KINDS: readonly BinaryArtifactKind[] = [
+  'context',
+  'outcome',
+]
 
 /**
  * The document an artifact was rendered FROM, when it came from one.

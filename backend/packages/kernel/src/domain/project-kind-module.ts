@@ -62,6 +62,8 @@ export interface ProjectKindModule<Body = unknown> extends ProjectDefinitionSpec
   describe(input: { plan: unknown; seq: number; body: Body }): string
   /** The binary artifacts a body references, for the outcome's `artifactRefs`. */
   artifactRefs(body: Body): string[]
+  /** A one-line summary of a definition of this kind, for a picker that lists definitions. */
+  definitionSummary(definition: ProjectDefinition): string
 }
 
 /**
