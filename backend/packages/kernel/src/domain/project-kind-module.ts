@@ -1,6 +1,7 @@
 import type {
   ProjectDefinition,
   ProjectDefinitionSpecValidator,
+  ProjectKindSchemas,
   ProjectOutcome,
 } from '@cat-factory/contracts'
 import type { Block } from './types.js'
@@ -64,6 +65,21 @@ export interface ProjectKindModule<Body = unknown> extends ProjectDefinitionSpec
   artifactRefs(body: Body): string[]
   /** A one-line summary of a definition of this kind, for a picker that lists definitions. */
   definitionSummary(definition: ProjectDefinition): string
+  /**
+   * The project's current state as this kind reads its outcomes, served opaquely by the public
+   * API. A kind without one has no view; a reader lists its outcomes instead.
+   */
+  view?(input: ProjectViewInput<Body>): unknown
+  /** The schemas of this kind's own shapes, served so a client can type what the API leaves opaque. */
+  schemas?: ProjectKindSchemas
+}
+
+/** What a module reads to compute a project's current view. */
+export interface ProjectViewInput<Body> {
+  definition: ProjectDefinition | null
+  inputs: Record<string, unknown>
+  /** Every outcome of the project, `seq` ascending, bodies decoded by this module. */
+  outcomes: ReadonlyArray<ProjectOutcome<Body>>
 }
 
 /**

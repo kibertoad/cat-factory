@@ -17,6 +17,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 import { toJsonSchema, toJsonSchemaDefs } from '@valibot/to-json-schema'
 import { addHandDocumentedRoutes } from './openapi/hand-documented-routes.mjs'
 import { DIRECTORY_OPERATION_DOCS } from './openapi/directory-docs.mjs'
+import { PROJECT_COMPONENT_SCHEMAS, PROJECT_OPERATION_DOCS } from './openapi/project-docs.mjs'
 import { WEBHOOKS } from './openapi/webhooks.mjs'
 import { API_PREFIX, STATUS_DESCRIPTIONS } from './openapi/spec-constants.mjs'
 
@@ -64,7 +65,7 @@ export const SERVED_OPENAPI_PATH = resolve(
 // it against `origin/main` after every merge rather than trusting a clean one, and write the new
 // entry in the history doc, which is what makes the next collision arrive as a conflict.
 
-const API_VERSION = '1.96.0'
+const API_VERSION = '1.97.0'
 
 /**
  * Named DTOs hoisted into `components.schemas` (so client codegen gets named types and
@@ -120,6 +121,7 @@ const COMPONENT_SCHEMAS = {
   PublicKaizenEntryCombo: 'publicKaizenEntryComboSchema',
   PublicKaizenEntryList: 'publicKaizenEntryListSchema',
   AcknowledgeKaizenEntry: 'acknowledgeKaizenEntrySchema',
+  ...PROJECT_COMPONENT_SCHEMAS,
   // Guided PR review: every shape a session view nests is hoisted, so clients get named types.
   GuidedReviewSessionView: 'guidedReviewSessionViewSchema',
   GuidedReviewThreadView: 'guidedReviewThreadViewSchema',
@@ -1116,6 +1118,7 @@ const OPERATION_DOCS = {
       'The same in-repo specification the service read serves, read at the branch THIS RUN pushed its work to rather than at the repository default. That is the tree a run’s verdicts were made against: while its pull request is open, every requirement the run itself ADDED is absent from the default branch, so joining `requirements` rows from `GET /api/v1/runs/{runId}/report` or `…/outcome` against the service read leaves exactly those rows without a criterion. `provenance` names the branch and the commit, so a caller can see which tree it got. `anchor` carries one value the service read cannot answer, `not_read`: nothing was read, because the run’s spec read is gated on a tester having reported so that the tree served is the one the verdicts were made against, and `provenance` is null there and only there. The refusals are the service read’s: a `503` with `reason: "spec_read_failed"` for a repository that could not be read, `"spec_ref_unresolved"` for a branch that would not resolve, `"vcs_not_configured"` for a deployment or workspace that wired no version control. An outage never reaches a `200`.',
   },
   ...DIRECTORY_OPERATION_DOCS,
+  ...PROJECT_OPERATION_DOCS,
   listPublicKeys: {
     tag: 'Keys',
     summary: "List the workspace's API keys",

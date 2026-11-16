@@ -69,6 +69,12 @@ export class ProjectOutcomeStore {
     return Promise.all(rows.map(async (row) => ({ row, json: await readJson(row, home) })))
   }
 
+  /** One outcome of the project with its body's JSON, or null when the project has none by `id`. */
+  async get(project: OutcomeProject, id: string): Promise<StoredOutcome | null> {
+    const row = await this.deps.records.getOutcome(project.id, id)
+    return row ? { row, json: await this.jsonOf(project, row) } : null
+  }
+
   /**
    * Write a task's outcome once and return the body on record. An outcome already written under
    * `row.id` is kept as it is, so a replayed completion stores nothing twice and gets the recorded

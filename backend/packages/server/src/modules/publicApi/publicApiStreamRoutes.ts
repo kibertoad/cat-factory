@@ -230,8 +230,8 @@ export function registerTaskRunStreamRoute(app: Hono<AppEnv>): void {
     const { auth } = gate
     const taskId = c.req.param('taskId')
     const container = c.get('container')
-    const found = await container.boardService.getServiceTask(auth.workspaceId, taskId)
-    if (!found) {
+    // The event stream names no service, so it serves a project task as well as a service one.
+    if (!(await container.boardService.getBoardTask(auth.workspaceId, taskId))) {
       return c.json({ error: { code: 'not_found', message: 'Task not found' } }, 404)
     }
     const run = await container.executionRepository.getByBlock(auth.workspaceId, taskId)

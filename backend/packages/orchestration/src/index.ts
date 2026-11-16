@@ -526,3 +526,4 @@ export {
   type ProjectsModule,
   createCore,
 } from './container.js'
+export type { MountedProject } from './modules/projects/ProjectService.js'

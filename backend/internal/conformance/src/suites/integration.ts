@@ -4,6 +4,7 @@ import { defineCredentialsConformance } from './integration-credentials.js'
 import { defineEnvironmentsConformance } from './integration-environments.js'
 import { defineProvisioningConformance } from './integration-provisioning.js'
 import { definePublicBoardConformance } from './integration-public-board.js'
+import { definePublicProjectsConformance } from './integration-public-projects.js'
 import { definePublicDebugConformance } from './integration-public-debug.js'
 import { definePublicDecisionsConformance } from './integration-public-decisions.js'
 import { definePublicEvidenceConformance } from './integration-public-evidence.js'
@@ -32,6 +33,7 @@ export function defineIntegrationConformance(harness: ConformanceHarness): void 
     definePublicDecisionsConformance(harness)
     definePublicDebugConformance(harness)
     definePublicBoardConformance(harness)
+    definePublicProjectsConformance(harness)
     definePublicPresetConformance(harness)
     definePublicFragmentConformance(harness)
     definePublicEvidenceConformance(harness)

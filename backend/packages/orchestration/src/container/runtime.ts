@@ -44,6 +44,9 @@ export function resolveCoreRuntime(dependencies: CoreDependencies) {
   const projectDefinitionRegistry =
     dependencies.projectDefinitionRegistry ??
     new ProjectDefinitionRegistry(projectKindModuleRegistry.all())
+  const registeredProjectDefinitions =
+    dependencies.registeredProjectDefinitionSource ??
+    registryProjectDefinitionSource(projectDefinitionRegistry)
   // Resolved ONCE and shared by the two entries below: the registry itself (which the boot
   // validation and the snapshot read) and the default `builtin`-tier source that wraps it. A
   // second `defaultFoundationalServiceRegistry()` call would hand the catalog a different
@@ -82,10 +85,9 @@ export function resolveCoreRuntime(dependencies: CoreDependencies) {
     projectDefinitionRegistry,
     // The one read of project definitions: the registered ones (this process's registry, or a
     // mothership node's remote source) composed with the account's stored ones.
+    registeredProjectDefinitions,
     projectDefinitions: composeProjectDefinitionSource({
-      registered:
-        dependencies.registeredProjectDefinitionSource ??
-        registryProjectDefinitionSource(projectDefinitionRegistry),
+      registered: registeredProjectDefinitions,
       stored: dependencies.projectDefinitionRepository,
     }),
     // The deployment's non-container model operations. Empty by default for the same reason the

@@ -62,6 +62,10 @@ const UNATTENDED: Record<string, { origins: string[]; why: string }> = {
     origins: ["'public-api'"],
     why: 'both `/api/v1` start paths: the caller is an integration holding a key, not a person.',
   },
+  'server:modules/publicApi/taskRunActions.ts': {
+    origins: ["'public-api'"],
+    why: 'the `/api/v1` start and retry shared by service and project tasks: the caller is an integration.',
+  },
   'orchestration:modules/recurring/RecurringPipelineService.ts': {
     // `'ui'` belongs here too: this file also hosts run-now, which IS attended, and it states
     // that explicitly rather than falling through to the default it happens to agree with.

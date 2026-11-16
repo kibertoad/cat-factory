@@ -803,7 +803,9 @@
         "project_definition_changed": "The definition this project pinned has changed since, so the run stopped rather than work from a definition the project never agreed to. Ask your deployment operator to publish the change as a new version.",
         "project_task_already_recorded": "This task already recorded its result on the project. Create a new task to follow up.",
         "outcome_too_large_for_inline": "The result is too large to store, so it was not recorded. Narrow the task and run it again.",
-        "research_nothing_to_ask": "This research task's mode leaves no question to ask: nothing new to extend with, or nothing partial or blocked to clarify. Pick another mode or add a question."
+        "research_nothing_to_ask": "This research task's mode leaves no question to ask: nothing new to extend with, or nothing partial or blocked to clarify. Pick another mode or add a question.",
+        "task_owned_by_project": "This task belongs to a project, which has no service. Use the project's task address instead.",
+        "project_definition_invalid": "The definition is refused by its envelope or by its kind. The response lists each problem; fix them and publish again."
       }
     },
     "action": {
@@ -900,7 +902,11 @@
         "refined_requirements_unavailable": "No refined requirements yet",
         "no_linked_issues": "No linked tracker issue",
         "capability_credential_still_missing": "Credential still missing",
-        "credential_wait_unrecorded": "Cannot resume this wait"
+        "credential_wait_unrecorded": "Cannot resume this wait",
+        "project_definition_version_exists": "Version already published",
+        "project_definition_key_registered": "Namespace taken",
+        "project_homed_elsewhere": "Project homed on another board",
+        "credential_wait_personal_in_app": "Renew in the app"
       },
       "description": {
         "dependencies_unmet": "This task depends on others that aren't finished yet. Complete or unblock them, then start it again.",
@@ -969,7 +975,11 @@
         "refined_requirements_unavailable": "The review has not produced a revised document yet, or is rewriting it now. Wait for the incorporation to finish, then update again.",
         "no_linked_issues": "This task has no tracker issue linked to it. Link the issue it came from, then update again.",
         "capability_credential_still_missing": "The credential this step needs is still not stored for this workspace. Store it in the capability credentials settings, then resume the run.",
-        "credential_wait_unrecorded": "This wait was recorded before the platform tracked what a wait is for, so it cannot be resumed. Restart the run instead."
+        "credential_wait_unrecorded": "This wait was recorded before the platform tracked what a wait is for, so it cannot be resumed. Restart the run instead.",
+        "project_definition_version_exists": "This definition version is already published and cannot change. Publish a new version instead.",
+        "project_definition_key_registered": "This namespace belongs to definitions the deployment ships. Publish under your organization's own namespace.",
+        "project_homed_elsewhere": "A project's tasks are created and run on the board that homes it. Open that board to work on them.",
+        "credential_wait_personal_in_app": "A lapsed personal credential is renewed by the run's initiator, with their password, in the app."
       },
       "action": {
         "connectGitHub": "Connect GitHub",

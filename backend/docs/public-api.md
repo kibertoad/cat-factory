@@ -2783,6 +2783,29 @@ curl -s -X POST -H "$AUTH" -H 'content-type: application/json' \
 curl -s -H "$AUTH" "$BASE/api/v1/kaizen/entries?agentKind=coder&since=$LAST_SWEEP_MS"
 ```
 
+### Projects (`/api/v1/projects`, `/api/v1/project-kinds`)
+
+Projects are account-owned peers of services, mounted onto boards. A project's kind decides what
+its definition's `spec`, its outcomes' `body` and its `view` hold; this surface serves them
+opaquely and the kind serves their JSON Schemas, so no kind's types reach the SDKs. The built-in
+kind is `research`. Design: [`research-projects.md`](../../docs/initiatives/research-projects.md).
+
+| Method / path                                                           | Scope           | Behaviour                                                                                                                                      |
+| ----------------------------------------------------------------------- | --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /api/v1/project-kinds`, `GET .../{kind}`                           | `read`          | The kinds the deployment offers; one kind with the JSON Schemas of its spec, outcome body and view.                                            |
+| `GET /api/v1/project-kinds/{kind}/definitions`, `GET .../{key}`         | `read`          | Definitions of the kind the key's account can pin: the deployment's, then its own, with content hashes.                                        |
+| `PUT /api/v1/project-kinds/{kind}/definitions/{key}/versions/{version}` | `admin`         | Publish an immutable version, its spec validated by the kind. `422` `project_definition_invalid`, `409` `_version_exists` / `_key_registered`. |
+| `GET`, `POST /api/v1/projects`, `GET .../{projectId}`                   | `read`, `write` | The projects the key's board mounts; create one homed there, with the definition its kind pins.                                                |
+| `POST .../{projectId}/services`, `.../services/unlink`, `.../mount`     | `write`         | Link and unlink services (by the `serviceId` `/api/v1/services` serves); mount on the key's board.                                             |
+| `GET`, `POST .../{projectId}/tasks`, `GET .../tasks/{taskId}`           | `read`, `write` | Project tasks, as `PublicProjectTask`. Writes need the board that homes the project (`409` `project_homed_elsewhere`).                         |
+| `POST .../tasks/{taskId}/start`, `/stop`, `/retry`                      | `write`         | The same admission as the service-task routes, shared through `taskRunActions.ts`.                                                             |
+| `GET .../{projectId}/outcomes`, `.../outcomes/{outcomeId}`, `.../view`  | `read`          | The outcomes without bodies (`?stream=` narrows), one outcome with its body, and the view its kind computes.                                   |
+| `POST /api/v1/runs/{runId}/credential/resume`                           | `decide`        | Resume a run parked on a missing capability credential once it resolves.                                                                       |
+
+The `/api/v1/tasks/{taskId}` operations answering a `PublicTask` refuse a project task with `422`
+`task_owned_by_project` (it has no `serviceId` to report); the run projection and the event stream
+serve both owners.
+
 ### Guided PR review (`/api/v1/guided-reviews`)
 
 The sessions the app's guided review window drives, so another UI can offer the same experience.

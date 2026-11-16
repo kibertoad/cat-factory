@@ -98,6 +98,9 @@ const UNATTRIBUTED: Record<string, string> = {
     'the `/api/v1` task CREATION route, on the same API-key reading as the patch route above. ' +
     'Stated at the route rather than inside `addServiceTask`, because that method takes a full ' +
     '`AddTaskInput` and is reached by callers that DO have a tier.',
+  'server:modules/publicApi/PublicProjectController.ts':
+    'the `/api/v1` project task CREATION route, on the same API-key reading as the service task ' +
+    'creation route above: a key holds scopes rather than a workspace tier.',
   'orchestration:container/modules.ts':
     'the tracker intake path: a ticket arriving on a schedule or a webhook delivery is filed by ' +
     'nobody, so there is no session and no tier, and inventing one would scope an entire ' +

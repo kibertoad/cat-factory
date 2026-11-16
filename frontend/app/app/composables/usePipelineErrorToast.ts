@@ -163,6 +163,8 @@ const REASON_DESCRIPTION_KEYS: Record<
   project_task_already_recorded: 'errors.reason.description.project_task_already_recorded',
   research_nothing_to_ask: 'errors.reason.description.research_nothing_to_ask',
   outcome_too_large_for_inline: 'errors.reason.description.outcome_too_large_for_inline',
+  task_owned_by_project: 'errors.reason.description.task_owned_by_project',
+  project_definition_invalid: 'errors.reason.description.project_definition_invalid',
   credential_wait_not_initiator: 'errors.reason.description.credential_wait_not_initiator',
   gate_config_fields_invalid: 'errors.reason.description.gate_config_fields_invalid',
   approvals_chain_stale: 'errors.reason.description.approvals_chain_stale',

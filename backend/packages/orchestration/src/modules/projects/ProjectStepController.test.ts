@@ -155,6 +155,7 @@ function harness(opts: {
   }
   const records: ProjectRecordRepository = {
     getPin: async () => pin,
+    listPins: async () => (pin ? [pin] : []),
     insertPin: async () => {},
     reserveSeq: async () => seqs.size + 1 + rows.length,
     reserveTaskSeq: async (_projectId: string, taskId: string) => {

@@ -58,10 +58,8 @@ describe('ProjectDefinitionRegistry', () => {
       /invalid project definition/,
     )
     expect(() => defs.register({ ...notes(1), kind: 'unknown' })).toThrow(/no spec validator/)
-    expect(() => defs.register(notes(1, 42))).toThrow(/invalid notes definition/)
-    expect(() => defs.register({ ...research(1), targets: [] })).toThrow(
-      /invalid research definition/,
-    )
+    expect(() => defs.register(notes(1, 42))).toThrow(/notes definition/)
+    expect(() => defs.register({ ...research(1), targets: [] })).toThrow(/research definition/)
   })
 
   it('refuses re-registering a version with different content, and accepts an identical one', () => {

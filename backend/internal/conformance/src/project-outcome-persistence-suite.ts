@@ -177,6 +177,17 @@ export function defineProjectOutcomePersistenceSuite(
       expect(await repos.records.reserveSeq(projectId)).toBe(2)
     })
 
+    it('reads the pins of many projects at once, skipping the ones that pin nothing', async () => {
+      const repos = makeRepos()
+      const first = await pinnedProject(repos)
+      const second = await pinnedProject(repos)
+      const pinless = unique('prj')
+      const pins = await repos.records.listPins([first, pinless, second])
+      expect(pins.map((pin) => pin.projectId).sort()).toEqual([first, second].sort())
+      expect(pins[0]).toMatchObject({ definitionKey: 'acme:vendor', inputs: { vendor: 'Example' } })
+      expect(await repos.records.listPins([])).toEqual([])
+    })
+
     it('gives each task one sequence number, kept across replayed starts', async () => {
       const repos = makeRepos()
       const projectId = await pinnedProject(repos)

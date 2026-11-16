@@ -38,6 +38,8 @@ import type {} from '@cat-factory/kernel'
 
 import { ServiceMountService } from './modules/services/ServiceMountService.js'
 import { ProjectService } from './modules/projects/ProjectService.js'
+import type { ProjectDefinitionPublisher } from './modules/projects/ProjectDefinitionPublisher.js'
+import type { ProjectOutcomeReader } from './modules/projects/ProjectOutcomeReader.js'
 import { createInlineUseCaseService } from './container/use-case-service.js'
 import type { InlineUseCaseService } from './modules/useCases/InlineUseCaseService.js'
 
@@ -145,6 +147,7 @@ import type {
   ProjectDefinitionRegistry,
   ProjectKindModuleRegistry,
   ProjectDefinitionSource,
+  ProjectRecordRepository,
   VcsWebUrls,
 } from '@cat-factory/kernel'
 
@@ -753,6 +756,16 @@ export interface ServicesModule {
 
 export interface ProjectsModule {
   service: ProjectService
+  /** Every project's own records: its pin, outcome sequence and outcomes. */
+  records: ProjectRecordRepository
+  /** The definitions a project can pin, every kind's. */
+  definitions: ProjectDefinitionSource
+  /** Each kind's code half, for what only the kind understands. */
+  modules: ProjectKindModuleRegistry
+  /** A project's outcomes and its kind's view of them. */
+  outcomes: ProjectOutcomeReader
+  /** Absent when the facade wires no definition store. */
+  publisher?: ProjectDefinitionPublisher
 }
 
 /** Assemble the in-org service-sharing module when its repositories are wired. */
@@ -852,6 +865,8 @@ export function createCore(injected: CoreDependencies): Core {
       promptFragments,
       projectKinds,
       projectDefinitions,
+      registeredProjectDefinitions: runtime.registeredProjectDefinitions,
+      projectKindModules: projectKindModuleRegistry,
       getSpendService: () => spendServiceRef,
       getEnvironmentHandlerSeeder: () => environmentHandlerSeederRef,
       getSharedStackSeeder: () => sharedStackSeederRef,

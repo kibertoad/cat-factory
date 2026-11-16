@@ -60,7 +60,10 @@ const ATTRIBUTED = [
  * role scoping existed — so the old reason survives as the accessor's `null` branch rather than as
  * a whole route's exemption.
  */
-const KEY_BOUND = ['server:modules/publicApi/PublicApiController.ts']
+const KEY_BOUND = [
+  'server:modules/publicApi/PublicApiController.ts',
+  'server:modules/publicApi/taskRunActions.ts',
+]
 
 /**
  * Routes that deliberately pin NO role, with the reason. These are not oversights and must not

@@ -1,4 +1,8 @@
-import type { ProjectDefinitionSource, ProjectKindModuleRegistry } from '@cat-factory/kernel'
+import type {
+  ProjectDefinitionSource,
+  ProjectKindModuleRegistry,
+  ProjectRecordRepository,
+} from '@cat-factory/kernel'
 import type { CoreDependencies } from '../../container/dependencies.js'
 import { ProjectOutcomeStore } from './ProjectOutcomeStore.js'
 import { ProjectStepController } from './ProjectStepController.js'
@@ -13,18 +17,7 @@ export function createProjectStepController(
 ): ProjectStepController | undefined {
   const { projectRepository, projectRecordRepository } = deps
   if (!projectRepository || !projectRecordRepository) return undefined
-  const outcomes = new ProjectOutcomeStore({
-    blockRepository: deps.blockRepository,
-    workspaceRepository: deps.workspaceRepository,
-    records: projectRecordRepository,
-    ...(deps.outcomeStoragePolicyRepository
-      ? { policies: deps.outcomeStoragePolicyRepository }
-      : {}),
-    ...(deps.resolveBinaryArtifactStore
-      ? { resolveBinaryArtifactStore: deps.resolveBinaryArtifactStore }
-      : {}),
-    logger: deps.logger,
-  })
+  const outcomes = createProjectOutcomeStore(deps, projectRecordRepository)
   return new ProjectStepController({
     blockRepository: deps.blockRepository,
     projectRepository,
@@ -34,5 +27,24 @@ export function createProjectStepController(
     outcomes,
     modules: sources.modules,
     clock: deps.clock,
+  })
+}
+
+/** The one outcome store a process builds, shared by the step controller and the outcome reader. */
+export function createProjectOutcomeStore(
+  deps: CoreDependencies,
+  records: ProjectRecordRepository,
+): ProjectOutcomeStore {
+  return new ProjectOutcomeStore({
+    blockRepository: deps.blockRepository,
+    workspaceRepository: deps.workspaceRepository,
+    records,
+    ...(deps.outcomeStoragePolicyRepository
+      ? { policies: deps.outcomeStoragePolicyRepository }
+      : {}),
+    ...(deps.resolveBinaryArtifactStore
+      ? { resolveBinaryArtifactStore: deps.resolveBinaryArtifactStore }
+      : {}),
+    logger: deps.logger,
   })
 }

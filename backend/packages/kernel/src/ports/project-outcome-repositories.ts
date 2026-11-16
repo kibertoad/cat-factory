@@ -49,6 +49,8 @@ export interface ProjectOutcomeRow extends ProjectOutcomeMeta {
 /** A project's own records: its pinned definition, its outcome sequence and its outcomes. */
 export interface ProjectRecordRepository {
   getPin(projectId: string): Promise<ProjectPin | null>
+  /** The pins of the given projects, in no order; a project that pins nothing has none. */
+  listPins(projectIds: string[]): Promise<ProjectPin[]>
   insertPin(pin: ProjectPin): Promise<void>
   /**
    * Atomically take the project's next outcome sequence number (1, 2, 3, ...). Taken when the

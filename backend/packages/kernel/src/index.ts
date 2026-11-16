@@ -1190,6 +1190,7 @@ export { type TaskContextView, renderTaskContext } from './shared/tasks-prompt.l
 export {
   ProjectDefinitionRegistry,
   projectDefinitionContentHash,
+  validateProjectDefinition,
 } from './domain/project-definition-registry.js'
 
 // The account, workspace and project tiers of the outcome-storage policy, and where an outcome
@@ -1216,6 +1217,7 @@ export {
   ProjectKindModuleRegistry,
   type ProjectTaskInput,
   type ProjectTaskPlan,
+  type ProjectViewInput,
 } from './domain/project-kind-module.js'
 export {
   PROJECT_RESEARCHER_AGENT_KIND,

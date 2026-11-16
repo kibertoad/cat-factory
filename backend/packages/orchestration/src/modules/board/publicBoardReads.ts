@@ -7,7 +7,7 @@ import type {
   ServiceRepository,
 } from '@cat-factory/kernel'
 import { NotFoundError, ValidationError } from '@cat-factory/kernel'
-import { serviceOf } from './board.logic.js'
+import { rootOf, serviceOf } from './board.logic.js'
 
 // The external `/api/v1` board surface (see PublicApiController), extracted from BoardService as a
 // cohesive collaborator: one small deps object of bound call-backs, with the service keeping thin
@@ -248,10 +248,11 @@ export class PublicBoardReads {
   /**
    * Fetch a board task + its enclosing service frame, scoped to the workspace. Returns null when
    * no such task exists in the workspace, it is not a `task`-level block, it is a headless
-   * `internal` anchor, or it has no resolvable enclosing service frame — so the caller (and any
-   * external key) sees only real, board-visible tasks it owns. The frame is returned in full (not
-   * just its id) so a caller can gate on service state (e.g. refuse to START a task under an
-   * archived service, while still allowing its status to be READ).
+   * `internal` anchor, or it has no resolvable enclosing service frame, so the caller (and any
+   * external key) sees only real, board-visible tasks it owns. A task under a PROJECT is refused
+   * with `task_owned_by_project` rather than reported missing: it exists, at another address.
+   * The frame is returned in full (not just its id) so a caller can gate on service state (e.g.
+   * refuse to START a task under an archived service, while still allowing its status to be READ).
    */
   async getServiceTask(
     workspaceId: string,
@@ -262,8 +263,28 @@ export class PublicBoardReads {
     const block = blocks.find((b) => b.id === taskId)
     if (!block || block.level !== 'task' || block.internal) return null
     const frame = serviceOf(blocks, block)
-    if (!frame) return null
-    return { block, service: frame }
+    if (frame) return { block, service: frame }
+    const root = rootOf(blocks, block)
+    if (root?.level === 'project') {
+      // A project task has no service for a `PublicTask` to name; it has its own resource.
+      throw new ValidationError('This task belongs to a project', {
+        reason: 'task_owned_by_project',
+        projectRootId: root.id,
+      })
+    }
+    return null
+  }
+
+  /**
+   * A board task in the workspace, under a service or a project; null for anything else (a
+   * missing id, a frame, a headless anchor). Backs the public reads that return no `PublicTask`,
+   * which serve both owners.
+   */
+  async getBoardTask(workspaceId: string, taskId: string): Promise<Block | null> {
+    await this.deps.requireWorkspace(workspaceId)
+    const block = await this.deps.blockRepository.get(workspaceId, taskId)
+    if (!block || block.level !== 'task' || block.internal) return null
+    return block
   }
 
   /**

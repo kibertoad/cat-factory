@@ -562,6 +562,21 @@ public final class DecisionsClient {
     }
 
     /**
+     * Resume a run parked on a missing credential
+     * Resume a run parked because a step needs a capability credential (a vendor login, say) that
+     * was not stored. Store it first through the capability-credentials settings; a resume while
+     * the key still does not resolve is `409` with `details.reason:
+     * "capability_credential_still_missing"`. A wait on a lapsed personal credential is `409` with
+     * `credential_wait_personal_in_app`: only the run's initiator renews it, in the app. Requires
+     * a `decide` key.
+     * {@code POST /api/v1/runs/{runId}/credential/resume} (operation {@code
+     * resumePublicRunCredential}).
+     */
+    public PublicCredentialResume resumeCredential(String runId) {
+        return transport.request("POST", "/api/v1/runs/" + Transport.pathSegment(runId) + "/credential/resume", null, Map.of(), new TypeReference<PublicCredentialResume>() {});
+    }
+
+    /**
      * Resume a stalled PR deep review
      * Re-dispatch the reviewer for only the slices that never reported, re-aggregating the
      * findings from the slice reports already captured, so a review whose final aggregation turn

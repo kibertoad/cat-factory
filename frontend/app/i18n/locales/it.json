@@ -6618,7 +6618,9 @@
         "project_definition_changed": "La definizione fissata da questo progetto è cambiata nel frattempo, quindi l'esecuzione si è fermata invece di lavorare su una definizione che il progetto non ha mai accettato. Chiedi all'operatore del deployment di pubblicare la modifica come nuova versione.",
         "project_task_already_recorded": "Questa attività ha già registrato il suo risultato nel progetto. Crea una nuova attività per proseguire.",
         "outcome_too_large_for_inline": "Il risultato è troppo grande per essere salvato, quindi non è stato registrato. Restringi l'attività ed eseguila di nuovo.",
-        "research_nothing_to_ask": "La modalità di questa attività di ricerca non lascia alcuna domanda da porre: niente di nuovo da aggiungere, o niente di parziale o bloccato da chiarire. Scegli un'altra modalità o aggiungi una domanda."
+        "research_nothing_to_ask": "La modalità di questa attività di ricerca non lascia alcuna domanda da porre: niente di nuovo da aggiungere, o niente di parziale o bloccato da chiarire. Scegli un'altra modalità o aggiungi una domanda.",
+        "task_owned_by_project": "Questa attività appartiene a un progetto, che non ha un servizio. Usa invece l'indirizzo delle attività del progetto.",
+        "project_definition_invalid": "La definizione è rifiutata dalla sua struttura o dal suo tipo di progetto. La risposta elenca ogni problema; correggili e pubblica di nuovo."
       }
     },
     "action": {
@@ -6709,7 +6711,11 @@
         "refined_requirements_unavailable": "Nessun requisito raffinato per ora",
         "no_linked_issues": "Nessuna issue collegata",
         "capability_credential_still_missing": "Credenziale ancora mancante",
-        "credential_wait_unrecorded": "Impossibile riprendere questa attesa"
+        "credential_wait_unrecorded": "Impossibile riprendere questa attesa",
+        "project_definition_version_exists": "Versione già pubblicata",
+        "project_definition_key_registered": "Spazio dei nomi occupato",
+        "project_homed_elsewhere": "Progetto ospitato su un'altra bacheca",
+        "credential_wait_personal_in_app": "Rinnova nell'app"
       },
       "description": {
         "dependencies_unmet": "Questa attività dipende da altre non ancora completate. Completale o sbloccale, poi avviala di nuovo.",
@@ -6775,7 +6781,11 @@
         "refined_requirements_unavailable": "La revisione non ha ancora prodotto un documento rivisto, oppure lo sta riscrivendo ora. Attendi la fine dell’incorporazione, poi aggiorna di nuovo.",
         "no_linked_issues": "Questa attività non ha issue del tracker collegate. Collega la issue da cui proviene, poi aggiorna di nuovo.",
         "capability_credential_still_missing": "La credenziale di cui ha bisogno questo passaggio non è ancora salvata per questo spazio di lavoro. Salvala nelle impostazioni delle credenziali delle capacità, poi riprendi l'esecuzione.",
-        "credential_wait_unrecorded": "Questa attesa è stata registrata prima che la piattaforma annotasse che cosa attende ogni attesa, quindi non si può riprendere. Riavvia invece l'esecuzione."
+        "credential_wait_unrecorded": "Questa attesa è stata registrata prima che la piattaforma annotasse che cosa attende ogni attesa, quindi non si può riprendere. Riavvia invece l'esecuzione.",
+        "project_definition_version_exists": "Questa versione della definizione è già pubblicata e non può cambiare. Pubblica invece una nuova versione.",
+        "project_definition_key_registered": "Questo spazio dei nomi appartiene alle definizioni fornite dall'installazione. Pubblica nello spazio dei nomi della tua organizzazione.",
+        "project_homed_elsewhere": "Le attività di un progetto vengono create ed eseguite sulla bacheca che lo ospita. Apri quella bacheca per lavorarci.",
+        "credential_wait_personal_in_app": "Una credenziale personale scaduta la rinnova chi ha avviato l'esecuzione, con la propria password, nell'app."
       },
       "action": {
         "connectGitHub": "Collega GitHub",

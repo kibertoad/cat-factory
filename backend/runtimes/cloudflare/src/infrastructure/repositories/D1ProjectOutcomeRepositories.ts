@@ -164,6 +164,16 @@ export function projectRecordDeletes(
   ]
 }
 
+function rowToPin(row: PinRow): ProjectPin {
+  return {
+    projectId: row.project_id,
+    definitionKey: row.definition_key,
+    definitionVersion: row.definition_version,
+    definitionHash: row.definition_hash,
+    inputs: JSON.parse(row.inputs) as Record<string, unknown>,
+  }
+}
+
 /** A project's pin, outcome sequence and outcome revisions (migrations 0115, 0116). */
 export class D1ProjectRecordRepository implements ProjectRecordRepository {
   constructor(private readonly deps: { db: D1Database }) {}
@@ -173,14 +183,20 @@ export class D1ProjectRecordRepository implements ProjectRecordRepository {
       .prepare(`SELECT * FROM project_pins WHERE project_id = ?`)
       .bind(projectId)
       .first<PinRow>()
-    if (!row) return null
-    return {
-      projectId: row.project_id,
-      definitionKey: row.definition_key,
-      definitionVersion: row.definition_version,
-      definitionHash: row.definition_hash,
-      inputs: JSON.parse(row.inputs) as Record<string, unknown>,
+    return row ? rowToPin(row) : null
+  }
+
+  async listPins(projectIds: string[]): Promise<ProjectPin[]> {
+    const pins: ProjectPin[] = []
+    for (const chunk of chunkForIn(projectIds)) {
+      const placeholders = chunk.map(() => '?').join(', ')
+      const { results } = await this.deps.db
+        .prepare(`SELECT * FROM project_pins WHERE project_id IN (${placeholders})`)
+        .bind(...chunk)
+        .all<PinRow>()
+      pins.push(...results.map(rowToPin))
     }
+    return pins
   }
 
   async insertPin(pin: ProjectPin): Promise<void> {
