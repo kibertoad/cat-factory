@@ -21,7 +21,7 @@ import {
   startExecutionContract,
   resolveStepExceededContract,
 } from '@cat-factory/contracts'
-import { NotFoundError } from '@cat-factory/kernel'
+import { NotFoundError, toolSecretSubjectOf } from '@cat-factory/kernel'
 import { buildHonoRoute } from '@toad-contracts/hono'
 import { Hono } from 'hono'
 import { runWithInitiator } from '../../github/runInitiatorContext.js'
@@ -219,12 +219,22 @@ export function executionController(): Hono<AppEnv> {
     const { executionId } = c.req.valid('param')
     const instance = await c
       .get('container')
-      .executionService.resumeCredentialWait(
-        workspaceId,
-        executionId,
-        c.get('user')?.id ?? null,
-        () => activateForInteraction(c, workspaceId, executionId),
-      )
+      .executionService.credentialWait.resume(workspaceId, executionId, c.get('user')?.id ?? null, {
+        renewPersonal: () => activateForInteraction(c, workspaceId, executionId),
+        // A capability wait resumes only once its key resolves for this workspace, asked of the
+        // subject that declared it, through the same resolver a dispatch reads.
+        capabilityResolves: async (wait) => {
+          const subject = toolSecretSubjectOf(wait.declaredBy)
+          const resolver = c.get('container').toolSecretResolver
+          if (!subject || !resolver) return false
+          const resolved = await resolver.resolve({
+            workspaceId,
+            subject,
+            keys: [{ key: wait.key }],
+          })
+          return Boolean(resolved[wait.key])
+        },
+      })
     return c.json(instance, 200)
   })
 

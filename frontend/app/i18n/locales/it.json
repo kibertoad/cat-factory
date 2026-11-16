@@ -6693,7 +6693,9 @@
         "session_stale": "La pull request è andata avanti",
         "cursor_expired": "Il feed delle modifiche ha superato questo cursore",
         "refined_requirements_unavailable": "Nessun requisito raffinato per ora",
-        "no_linked_issues": "Nessuna issue collegata"
+        "no_linked_issues": "Nessuna issue collegata",
+        "capability_credential_still_missing": "Credenziale ancora mancante",
+        "credential_wait_unrecorded": "Impossibile riprendere questa attesa"
       },
       "description": {
         "dependencies_unmet": "Questa attività dipende da altre non ancora completate. Completale o sbloccale, poi avviala di nuovo.",
@@ -6731,7 +6733,7 @@
         "binary_output_generator_invalid": "Un passaggio che genera output binari seleziona un’integrazione generativa che questa installazione non registra, nessuna delle integrazioni selezionate produce un tipo di contenuto che il passaggio deve consegnare, oppure una di esse è generata da una CLI dell’agente su cui il modello di questo passaggio non viene eseguito. Le integrazioni generative si registrano nel codice dell’installazione, non in questo workspace: registrala, correggi la selezione del passaggio, oppure fissa per il passaggio un modello che esegua la CLI richiesta, poi riavvia.",
         "foundational_service_not_inherited": "L'esclusione vale per un servizio ereditato dall'account. Questo id è registrato da questa bacheca, quindi non c'è nulla da escludere: elimina invece la voce propria della bacheca.",
         "input_gate_not_parked": "Questa esecuzione non attende più il controllo dell'input. Forse qualcuno ha già risposto, o l'esecuzione è andata avanti.",
-        "credential_wait_not_parked": "Questa esecuzione non è più in attesa delle credenziali del tuo abbonamento personale. Potrebbe essere già stata ripresa, oppure l'esecuzione è andata avanti.",
+        "credential_wait_not_parked": "Questa esecuzione non è più in attesa di una credenziale. Potrebbe essere già stata ripresa, oppure l'esecuzione è andata avanti.",
         "input_gate_parked": "Questa esecuzione è in attesa del suo controllo di input, a cui l'approvazione non può rispondere. Usa l'avviso sull'esecuzione: correggi l'attività e ricontrolla, oppure eseguila comunque.",
         "ticket_already_linked": "Un ticket può sostenere una sola attività, quindi ricollegarlo toglierebbe all'attività esistente il contesto con cui è stata creata. Apri invece quell'attività, oppure scollega prima il ticket.",
         "document_already_linked": "Quel documento è allegato a un'altra attività. Scollegalo prima da lì oppure allega una copia separata.",
@@ -6757,7 +6759,9 @@
         "session_stale": "Sono arrivati nuovi commit dopo la preparazione di questa revisione, quindi le bozze potrebbero puntare alle righe sbagliate. Aggiorna la revisione, controlla le bozze e poi pubblica.",
         "cursor_expired": "Le modifiche successive a questo cursore non sono più conservate. Acquisisci una nuova istantanea della directory, poi segui il feed dalla posizione che riporta.",
         "refined_requirements_unavailable": "La revisione non ha ancora prodotto un documento rivisto, oppure lo sta riscrivendo ora. Attendi la fine dell’incorporazione, poi aggiorna di nuovo.",
-        "no_linked_issues": "Questa attività non ha issue del tracker collegate. Collega la issue da cui proviene, poi aggiorna di nuovo."
+        "no_linked_issues": "Questa attività non ha issue del tracker collegate. Collega la issue da cui proviene, poi aggiorna di nuovo.",
+        "capability_credential_still_missing": "La credenziale di cui ha bisogno questo passaggio non è ancora salvata per questo spazio di lavoro. Salvala nelle impostazioni delle credenziali delle capacità, poi riprendi l'esecuzione.",
+        "credential_wait_unrecorded": "Questa attesa è stata registrata prima che la piattaforma annotasse che cosa attende ogni attesa, quindi non si può riprendere. Riavvia invece l'esecuzione."
       },
       "action": {
         "connectGitHub": "Collega GitHub",
@@ -7120,7 +7124,14 @@
     "body": "Le credenziali dell'abbonamento personale di questa esecuzione sono scadute prima che potesse iniziare il passaggio successivo, quindi l'esecuzione è in pausa. Inserisci la tua password personale per rinnovarle e riprendere da questo passaggio.",
     "resume": "Inserisci la password e continua",
     "othersTitle": "Le credenziali dell’abbonamento personale di questa esecuzione sono scadute",
-    "othersRun": "Solo la persona che ha avviato questa esecuzione può rinnovarle con la propria password personale. Chiedile di proseguirla."
+    "othersRun": "Solo la persona che ha avviato questa esecuzione può rinnovarle con la propria password personale. Chiedile di proseguirla.",
+    "capabilityTitle": "Questo passaggio ha bisogno della credenziale {name}",
+    "capabilityBody": "Non è salvata per questo spazio di lavoro. Una persona che può gestirne i segreti la salva, poi chiunque sulla bacheca riprende l'esecuzione.",
+    "observed": "Cosa ha visto l'agente: {observed}",
+    "store": "Salva la credenziale",
+    "resumeCapability": "Riprendi l'esecuzione",
+    "unrecordedTitle": "Impossibile riprendere questa attesa",
+    "unrecordedBody": "È stata registrata prima che la piattaforma annotasse che cosa attende ogni attesa. Riavvia invece l'esecuzione."
   },
   "consensus": {
     "titlePrefix": "Consenso",

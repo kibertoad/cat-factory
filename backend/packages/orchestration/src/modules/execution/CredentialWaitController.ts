@@ -5,8 +5,14 @@ import type {
   Logger,
   WorkRunner,
 } from '@cat-factory/kernel'
-import { isCredentialWaitParked, mayResumeCredentialWait } from '@cat-factory/contracts'
 import {
+  isCredentialWaitParked,
+  mayResumeCredentialWait,
+  type CapabilityCredentialWait,
+  type StepCredentialWait,
+} from '@cat-factory/contracts'
+import {
+  CapabilityCredentialMissingError,
   ConflictError,
   CredentialRequiredError,
   ForbiddenError,
@@ -55,10 +61,12 @@ function parkedApprovalId(instance: ExecutionInstance): string | null {
 }
 
 function notParked(): ConflictError {
-  return new ConflictError(
-    'This run is not waiting on a personal subscription credential.',
-    'credential_wait_not_parked',
-  )
+  return new ConflictError('This run is not waiting on a credential.', 'credential_wait_not_parked')
+}
+
+/** The parked step's wait, read off a run already known to be parked. */
+function parkedWait(instance: ExecutionInstance): StepCredentialWait {
+  return instance.steps[instance.currentStep]!.credentialWait!
 }
 
 export interface CredentialWaitControllerDeps {
@@ -71,16 +79,28 @@ export interface CredentialWaitControllerDeps {
 }
 
 /**
- * Parks a run whose personal-subscription credential lapsed, and resumes it.
+ * How a resume satisfies the wait it answers, supplied by the caller that holds the credential
+ * stores: re-mint a personal activation, or ask whether a capability credential now resolves for
+ * the run's workspace (of the same subject that declared it).
+ */
+export interface CredentialWaitResumeHooks {
+  renewPersonal: () => Promise<void>
+  capabilityResolves: (wait: CapabilityCredentialWait) => Promise<boolean>
+}
+
+/**
+ * Parks a run whose dispatch is missing a credential, and resumes it.
  *
- * A run on an individual-usage model leases its initiator's credential at every dispatch, from an
- * activation with a fixed lifetime. Whatever advanced the run to that dispatch (a human answering
- * a review, a background re-review converging, a timer) is irrelevant here: the lease is refused,
- * and the step parks on the generic approval with `credentialWait` set, instead of failing the run.
- * The person answers it with {@link resume}, which re-mints the activation from their personal
- * password before re-dispatching.
+ * Two refusals park. A run on an individual-usage model leases its initiator's credential at every
+ * dispatch, from an activation with a fixed lifetime, and that lease can be refused (`personal`).
+ * A step can declare a capability credential the workspace has not stored (`capability`). Whatever
+ * advanced the run to that dispatch (a human answering a review, a background re-review
+ * converging, a timer) is irrelevant here: the step parks on the generic approval with
+ * `credentialWait` set, instead of failing the run. {@link resume} answers it: a personal wait
+ * re-mints the activation from the initiator's personal password, a capability wait first checks
+ * the key now resolves, and both then re-dispatch.
  *
- * {@link guard} is the ONE place the refusal is recognised. The engine routes every call that can
+ * {@link guard} is the ONE place either refusal is recognised. The engine routes every call that can
  * dispatch (advance and the three poll entry points) through it, so no dispatch site and no
  * run-advancing route has to remember to check the credential itself.
  */
@@ -93,7 +113,8 @@ export class CredentialWaitController {
 
   /**
    * Run one engine call that may dispatch a step, parking the run when the dispatch's lease was
-   * refused. Anything else (a result or a throw) passes through untouched.
+   * refused or a capability credential it declared is missing. Anything else (a result or a
+   * throw) passes through untouched.
    */
   async guard(
     workspaceId: string,
@@ -104,13 +125,37 @@ export class CredentialWaitController {
     try {
       result = await work()
     } catch (error) {
-      if (!isLapseError(error)) throw error
-      const parked = await this.park(workspaceId, executionId)
+      const wait = this.waitFor(error)
+      if (!wait) throw error
+      const parked = await this.park(workspaceId, executionId, wait)
       if (!parked) throw error
       return parked
     }
     if (!isLapseResult(result)) return result
-    return (await this.park(workspaceId, executionId)) ?? result
+    return (await this.park(workspaceId, executionId, this.personalWait())) ?? result
+  }
+
+  /** The wait a thrown dispatch refusal parks on, or null for any other error. */
+  private waitFor(error: unknown): StepCredentialWait | null {
+    if (isLapseError(error)) return this.personalWait()
+    if (error instanceof CapabilityCredentialMissingError) {
+      const { missing } = error
+      return {
+        subject: 'capability',
+        raisedAt: this.deps.clock.now(),
+        key: missing.key,
+        declaredBy: missing.declaredBy,
+        ...(missing.label ? { label: missing.label } : {}),
+        ...(missing.onboarding ? { onboarding: missing.onboarding } : {}),
+        ...(missing.reason ? { reason: missing.reason } : {}),
+        ...(missing.observed ? { observed: missing.observed } : {}),
+      }
+    }
+    return null
+  }
+
+  private personalWait(): StepCredentialWait {
+    return { subject: 'personal', raisedAt: this.deps.clock.now() }
   }
 
   /**
@@ -118,7 +163,11 @@ export class CredentialWaitController {
    * live (stopped or settled while the dispatch was failing), so the caller keeps the original
    * outcome rather than parking a run nobody is driving.
    */
-  private async park(workspaceId: string, executionId: string): Promise<AdvanceResult | null> {
+  private async park(
+    workspaceId: string,
+    executionId: string,
+    wait: StepCredentialWait,
+  ): Promise<AdvanceResult | null> {
     let decisionId: string | null = null
     const instance = await this.deps.stateMachine.mutateInstance(
       workspaceId,
@@ -127,20 +176,19 @@ export class CredentialWaitController {
         decisionId = null
         const step = inst.steps[inst.currentStep]
         if (!step || (inst.status !== 'running' && inst.status !== 'paused')) return
-        step.credentialWait = { raisedAt: this.deps.clock.now() }
-        decisionId = this.deps.stateMachine.openDecisionPark(
-          step,
-          "The run's personal subscription credential lapsed.",
-        )
+        step.credentialWait = wait
+        decisionId = this.deps.stateMachine.openDecisionPark(step, parkMessage(wait))
         inst.status = 'blocked'
       },
     )
     if (!decisionId) return null
     await this.deps.stateMachine.updateBlockProgress(workspaceId, instance, 'blocked')
-    this.log.info('run parked: personal subscription credential lapsed', {
+    this.log.info('run parked: a credential is missing', {
       workspaceId,
       runId: executionId,
       stepIndex: instance.currentStep,
+      subject: wait.subject,
+      ...(wait.subject === 'capability' ? { key: wait.key } : {}),
     })
     await this.deps.stateMachine.emitInstance(workspaceId, instance)
     await this.deps.stateMachine.ensureWaitingNotification(workspaceId, instance)
@@ -158,7 +206,7 @@ export class CredentialWaitController {
     workspaceId: string,
     executionId: string,
     actorUserId: string | null,
-    renew: () => Promise<void>,
+    hooks: CredentialWaitResumeHooks,
   ): Promise<ExecutionInstance> {
     const current = assertFound(
       await this.deps.executionRepository.get(workspaceId, executionId),
@@ -166,20 +214,28 @@ export class CredentialWaitController {
       executionId,
     )
     if (!parkedApprovalId(current)) throw notParked()
-    if (!mayResumeCredentialWait(current.initiatedBy, actorUserId)) {
+    const wait = parkedWait(current)
+    if (wait.subject === 'unrecorded') {
+      throw new ConflictError(
+        'This wait was recorded before waits named what they wait on; restart the run.',
+        'credential_wait_unrecorded',
+      )
+    }
+    if (!mayResumeCredentialWait(wait, current.initiatedBy, actorUserId)) {
       throw new ForbiddenError(
         'Only the person who started this run can renew its personal subscription credential.',
         { reason: 'credential_wait_not_initiator' },
       )
     }
-    await renew()
+    if (wait.subject === 'personal') await hooks.renewPersonal()
+    else if (!(await hooks.capabilityResolves(wait))) throw stillMissing(wait)
     let approvalId = ''
     const instance = await this.deps.stateMachine.mutateInstance(
       workspaceId,
       executionId,
       (inst) => {
         const parked = parkedApprovalId(inst)
-        if (!parked) throw notParked()
+        if (!parked || parkedWait(inst).subject !== wait.subject) throw notParked()
         approvalId = parked
         const step = inst.steps[inst.currentStep]!
         step.credentialWait = null
@@ -193,4 +249,23 @@ export class CredentialWaitController {
     await this.deps.workRunner.signalDecision(workspaceId, instance.id, approvalId, 'approved')
     return instance
   }
+}
+
+/**
+ * A premature resume is refused, so a person who has not yet stored the key loses a toast rather
+ * than a dispatch that would park again at once.
+ */
+function stillMissing(wait: CapabilityCredentialWait): ConflictError {
+  return new ConflictError(
+    `The credential '${wait.key}' is still not stored for this workspace.`,
+    'capability_credential_still_missing',
+    { key: wait.key },
+  )
+}
+
+/** The decision park's message, saying what the step waits on. */
+function parkMessage(wait: StepCredentialWait): string {
+  if (wait.subject !== 'capability') return "The run's personal subscription credential lapsed."
+  const name = wait.label ? `${wait.label} (${wait.key})` : wait.key
+  return `The step needs the credential ${name}, which is not stored for this workspace.`
 }

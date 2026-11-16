@@ -218,7 +218,8 @@ export class ExecutionService {
   private readonly startStepDispatch: StartStepDispatch
   /** The pre-dispatch input gate; see {@link InputGateController}. */
   private readonly inputGate: InputGateController
-  private readonly credentialWait: CredentialWaitController
+  /** Parks a step on a missing credential and resumes it; see {@link CredentialWaitController}. */
+  readonly credentialWait: CredentialWaitController
   /** Bound collaborators for the shared pre-dispatch preamble ({@link runStepPreamble}). */
   private stepPreambleDepsCache?: StepPreambleDeps
   /** The three doors onto "what personal subscriptions would a run started here lease". */
@@ -899,11 +900,6 @@ export class ExecutionService {
     return this.credentialWait.guard(workspaceId, executionId, () =>
       this.advanceOnce(workspaceId, executionId, options),
     )
-  }
-
-  /** Resume a step parked on a lapsed personal credential; see {@link CredentialWaitController}. */
-  resumeCredentialWait(ws: string, id: string, actor: string | null, renew: () => Promise<void>) {
-    return this.credentialWait.resume(ws, id, actor, renew)
   }
 
   private async advanceOnce(

@@ -652,8 +652,11 @@ export function createEnvToolSecretResolver(
 ): ToolSecretResolver {
   const allowed = options.allowKeys ? new Set(options.allowKeys) : undefined
   return {
-    resolve: async ({ keys }) => {
+    resolve: async ({ keys, subject }) => {
       const out: Record<string, string> = {}
+      // A project definition's credentials resolve from the store only: a stored definition is
+      // account-authored, and an environment read would let it name the deployment's own config.
+      if (subject.kind === 'project-definition') return out
       for (const key of keys) {
         if (allowed && !allowed.has(key.key)) continue
         const value = env?.[key.key]

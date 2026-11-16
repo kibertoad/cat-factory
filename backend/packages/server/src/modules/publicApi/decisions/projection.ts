@@ -39,6 +39,7 @@ import type {
   PublicPrReviewPostReport,
   PublicPrReviewSlice,
   PublicUnanswerableWait,
+  StepCredentialWait,
   RequirementReview,
   RunInputGate,
   StepApproval,
@@ -767,16 +768,8 @@ export function unanswerableWaits(
   execution.steps.forEach((step, stepIndex) => {
     const curation = curationWait(step, stepIndex, agentKinds)
     if (curation) waits.push(curation)
-    if (step.credentialWait) {
-      waits.push({
-        reason: 'credential_lapsed',
-        stepKind: step.agentKind,
-        stepIndex,
-        detail:
-          "The run's personal subscription credential lapsed before this step could dispatch. " +
-          "The run's initiator resumes it by entering their personal password in the app.",
-      })
-    }
+    if (step.credentialWait)
+      waits.push(credentialWaitOf(step.credentialWait, step.agentKind, stepIndex))
     if (!step.gate || step.state === 'done' || answered.has(stepIndex)) return
     const pollExhaustion = gates.pollExhaustion(step.agentKind)
     if (pollExhaustion === 'rearm') {
@@ -1027,4 +1020,46 @@ function isGenericApprovalPark(
 ): boolean {
   const surface = dedicatedParkSurface(execution, step, registry)
   return surface === null || surface === 'companion-cap'
+}
+
+/** A step parked on a missing credential, as the public decisions surface reports it. */
+function credentialWaitOf(
+  wait: StepCredentialWait,
+  stepKind: string,
+  stepIndex: number,
+): PublicUnanswerableWait {
+  switch (wait.subject) {
+    case 'personal':
+      return {
+        reason: 'credential_lapsed',
+        stepKind,
+        stepIndex,
+        detail:
+          "The run's personal subscription credential lapsed before this step could dispatch. " +
+          "The run's initiator resumes it by entering their personal password in the app.",
+      }
+    case 'capability':
+      return {
+        reason: 'capability_credential_missing',
+        stepKind,
+        stepIndex,
+        detail:
+          `The step needs the credential '${wait.key}', which is not stored for this workspace. ` +
+          'A person who can manage its secrets stores it, then any member resumes the run in the app.',
+      }
+    case 'unrecorded':
+      return {
+        reason: 'credential_wait_unrecorded',
+        stepKind,
+        stepIndex,
+        detail:
+          'This credential wait was recorded before waits named their subject; restart the run.',
+      }
+    default:
+      return unknownWait(wait)
+  }
+}
+
+function unknownWait(wait: never): never {
+  throw new Error(`unknown credential wait: ${JSON.stringify(wait)}`)
 }

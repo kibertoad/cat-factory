@@ -99,6 +99,7 @@ export type CredentialRequiredReason =
   | 'password_required'
   | 'wrong_password'
   | 'subscription_expired'
+  | 'capability_credential_missing'
 
 /**
  * A user-scoped personal credential is needed before this action can proceed (→ 428
@@ -109,6 +110,35 @@ export type CredentialRequiredReason =
 export class CredentialRequiredError extends DomainError {
   constructor(message: string, details: { vendor: string; reason: CredentialRequiredReason }) {
     super('credential_required', message, details)
+  }
+}
+
+/** What a step needs a person to provide, carried by {@link CapabilityCredentialMissingError}. */
+export interface MissingCapabilityCredential {
+  key: string
+  /** What declared the credential, so a resume asks the resolver about the same subject. */
+  declaredBy: { kind: string; id: string }
+  label?: string
+  onboarding?: { url?: string; instructions: string }
+  /** Why the step needs it, and what the agent observed on the way (both already scrubbed). */
+  reason?: string
+  observed?: string
+}
+
+/**
+ * A capability credential a step declared does not resolve for the run's workspace (→ 428). The
+ * engine's credential-wait guard parks the step on it, so it reaches a caller only when the run
+ * cannot park (it was stopped while the dispatch failed).
+ */
+export class CapabilityCredentialMissingError extends DomainError {
+  constructor(
+    message: string,
+    readonly missing: MissingCapabilityCredential,
+  ) {
+    super('credential_required', message, {
+      reason: 'capability_credential_missing' satisfies CredentialRequiredReason,
+      key: missing.key,
+    })
   }
 }
 

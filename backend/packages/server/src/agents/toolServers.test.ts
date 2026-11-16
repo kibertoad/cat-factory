@@ -777,6 +777,19 @@ describe('createEnvToolSecretResolver', () => {
       }),
     ).toEqual({ MCP_ISSUE_TOKEN: 'tok' })
   })
+
+  it('answers nothing for a project definition, whose credentials come from the store only', async () => {
+    // A project definition is account-authored. Read off the environment, its declared key could
+    // name one of the deployment's own variables and have it sent to a target the account chose.
+    const resolve = createEnvToolSecretResolver({ ENCRYPTION_KEY: 'master-key', VENDOR: 'v' })
+    expect(
+      await resolve.resolve({
+        workspaceId: 'ws1',
+        subject: { kind: 'project-definition', id: 'research/acme:vendor' },
+        keys: [{ key: 'ENCRYPTION_KEY' }, { key: 'VENDOR' }],
+      }),
+    ).toEqual({})
+  })
 })
 
 describe('job-spec secret marking', () => {

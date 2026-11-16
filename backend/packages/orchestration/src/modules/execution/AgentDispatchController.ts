@@ -13,7 +13,12 @@ import type {
   ResolveRunRepoContext,
   RunInitiatorScope,
 } from '@cat-factory/kernel'
-import { getErrorMessage, isAsyncAgentExecutor, parseLocalModelId } from '@cat-factory/kernel'
+import {
+  CapabilityCredentialMissingError,
+  getErrorMessage,
+  isAsyncAgentExecutor,
+  parseLocalModelId,
+} from '@cat-factory/kernel'
 import { resolvePrNumber, type DispatchToolServers } from '@cat-factory/contracts'
 import { PR_REVIEWER_KIND } from '@cat-factory/agents'
 import { liveJobId, recordInlineToolServers } from './step-fold.logic.js'
@@ -205,6 +210,9 @@ export class AgentDispatchController {
             executor,
           })
         } catch (error) {
+          // A missing capability credential is not a failure: it propagates to the engine's
+          // credential-wait guard, which parks the step on it rather than failing the run.
+          if (error instanceof CapabilityCredentialMissingError) throw error
           // Classify the throw (see {@link classifyDispatchFailure}). A genuine container
           // accept failure (HTTP/network/capacity) is framed as `dispatch` ("container failed
           // to start") with the EXACT provider response as detail; a dispatch-time eviction

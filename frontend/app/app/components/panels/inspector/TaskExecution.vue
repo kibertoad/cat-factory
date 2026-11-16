@@ -92,9 +92,15 @@ const runLive = computed(() => !!instance.value && !execution.isTerminal(instanc
  */
 const inputGateNotice = computed(() => inputGateNoticeFor(instance.value))
 
+/** The current step's credential wait, when it has one. */
+const parkedCredentialWait = computed(() => {
+  const run = instance.value
+  return run?.steps[run.currentStep]?.credentialWait ?? null
+})
+
 /**
- * Whether the run's current step is parked because its personal credential lapsed. Only a
- * `blocked` run is still parked: one stopped while parked keeps the step as it stood.
+ * Whether the run's current step is parked on a missing credential. Only a `blocked` run is still
+ * parked: one stopped while parked keeps the step as it stood.
  */
 const credentialWaitParked = computed(() => {
   const run = instance.value
@@ -394,9 +400,10 @@ async function mergePr() {
         class="mb-2"
       />
       <CredentialWaitNotice
-        v-if="credentialWaitParked"
+        v-if="credentialWaitParked && parkedCredentialWait"
         :execution-id="instance.id"
         :initiated-by="instance.initiatedBy"
+        :wait="parkedCredentialWait"
         class="mb-2"
       />
       <ul class="space-y-1">

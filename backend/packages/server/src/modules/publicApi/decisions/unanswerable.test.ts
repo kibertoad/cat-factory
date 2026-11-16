@@ -265,7 +265,7 @@ describe('unanswerableWaits', () => {
         step('requirements-review', { state: 'done' }),
         step('architect', {
           ...parked('architect'),
-          credentialWait: { raisedAt: 1 },
+          credentialWait: { subject: 'personal', raisedAt: 1 },
         }),
       ]).map((w) => ({ reason: w.reason, stepKind: w.stepKind, stepIndex: w.stepIndex })),
     ).toEqual([{ reason: 'credential_lapsed', stepKind: 'architect', stepIndex: 1 }])

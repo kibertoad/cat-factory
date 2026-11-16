@@ -246,6 +246,12 @@ export const CONFLICT_REASONS = [
   // resume already went through (a double click, a second tab), or the run moved on. Like the
   // input gate's twin above, the remedy is to refresh the run rather than to retry.
   'credential_wait_not_parked',
+  // A capability credential the step waits on still does not resolve for the run's workspace,
+  // so the resume is refused before it re-dispatches into the same park. `details.key` names it.
+  'capability_credential_still_missing',
+  // A wait persisted before waits recorded what they wait on. It cannot be resumed against a
+  // guess; the run is restarted.
+  'credential_wait_unrecorded',
   // The OPPOSITE fact, and deliberately its own reason rather than a second use of the one above.
   // The run IS parked on the input gate and the caller tried to answer it through the GENERIC
   // approval rail. The gate parks whatever step 0 happens to be, so a generic approve would mark
