@@ -1,5 +1,89 @@
 # @cat-factory/gatekeeper-bindings
 
+## 0.47.0
+
+### Minor Changes
+
+- f1549d0: A step whose capability credential is missing now parks instead of failing.
+  
+  - A dispatch that throws the new `CapabilityCredentialMissingError` parks the step on a capability
+    credential wait recording the key, the subject that declared it, its label, the onboarding
+    instructions and what the agent observed. The run panel shows them, links to the
+    capability-credentials panel, and any member resumes once the key is stored; a premature resume
+    is refused with `capability_credential_still_missing`.
+  - `PipelineStep.credentialWait` is now a union on `subject` (`personal`, `capability`). A wait
+    persisted before this release decodes as `unrecorded` rather than being read as personal: it
+    cannot be resumed (`credential_wait_unrecorded`), and its run must be restarted. Internal break.
+  - A new `project-definition` capability-credential subject resolves from the credential store
+    only, never from the deployment's environment.
+  - Public API: `capability_credential_missing` and `credential_wait_unrecorded` join the
+    unanswerable-wait reasons (OpenAPI 1.95.0, SDKs regenerated).
+- 1d12bc8: Projects reach the public API (OpenAPI 1.97.0), for every project kind: list the project kinds and
+  read each one's JSON Schemas, publish and read a kind's definitions, create projects and link
+  services, create and run tasks under a project (`PublicProjectTask` under
+  `/api/v1/projects/{projectId}/tasks`), read a project's outcomes and the view its kind computes, and
+  resume a run parked on a missing capability credential
+  (`POST /api/v1/runs/{runId}/credential/resume`). A definition's spec, an outcome's body and a
+  project's view are opaque in the spec. The `/api/v1/tasks/{taskId}` operations that answer a
+  `PublicTask` refuse a project task with `task_owned_by_project`; the run projection and the event
+  stream serve both.
+  
+  A `ProjectKindModule` may now declare `view` (its reading of a project's outcomes) and `schemas`
+  (the valibot schemas of its spec, outcome body and view); the research kind declares both.
+  Publishing goes through `ProjectDefinitionPublisher`, which validates the spec with the kind's
+  module through the new `validateProjectDefinition`. `ProjectRecordRepository` gains a batched
+  `listPins` on both runtimes. The SDKs are regenerated.
+- 2665cce: A project task now runs, through one engine path for every project kind, and research is the
+  first kind that uses it.
+  
+  - A project kind ships a `ProjectKindModule`, its code half: how its definitions validate, how a
+    task is planned and its agent briefed, how a parked dispatch's checkpoint folds into the reply,
+    and which artifacts an outcome references. `ProjectKindModuleRegistry` is a new option on
+    `start()`, `startLocal()` and the Worker, defaulting to the built-in kinds' modules, and the
+    default definition registry validates exactly those kinds.
+  - The engine's `ProjectStepController` does the rest for every kind: it refuses a changed or
+    missing pinned definition, claims the task's outcome sequence when it first starts, fixes the
+    kind's plan on the step (`PipelineStep.project`), hands the agent the kind's brief
+    (`AgentRunContext.project`), parks on a credential the agent asks for with its partial output
+    kept on the step, and records one outcome per task, inline.
+  - The platform ships a built-in `research` kind (`defaultProjectKindRegistry()`, which now pins a
+    definition with `definition: 'required'`), the `research` task type (refused under a service with
+    `task_type_requires_project`), the `project-research` pipeline purpose and the `pl_research`
+    pipeline. Its `project-researcher` agent runs on the `ui` image as the new `container-project`
+    surface, dispatching the harness's `project` job.
+  - New refusals: `project_not_pinned`, `project_definition_changed`,
+    `project_task_already_recorded` and `outcome_too_large_for_inline`, plus the research kind's own
+    `research_nothing_to_ask`.
+  - The input gate does not judge a research task's description: its brief is the definition.
+  - The board's create-project form hides a kind that requires a definition until it can collect one.
+  
+  Public API 1.96.0: the task-type vocabulary gains `research`. SDKs regenerated.
+- 391c2ca: A task can link projects as read-only context. Every dispatch of the task reads each linked
+  project's current result, rendered by its kind's module (the new optional
+  `ProjectKindModule.renderContext`) or, for a kind that renders none, as the newest outcome of each
+  stream. It is summarised in the prompt's linked-context index and given in full as a
+  `project-<name>.md` file in `.cat-context/`. A research project contributes its folded findings
+  with coverage. The step records which outcome it read (`contextProjects`).
+  
+  A link is admitted only for a project of the task's organization (`project_link_invalid`) that has
+  a result to read, meaning at least one outcome (`project_has_no_result`). Links are made on the board's task inspector, over
+  `/workspaces/:workspaceId/blocks/:blockId/projects`, over the public
+  `/api/v1/tasks/{taskId}/projects` routes, with the create-time `projects` field, and through an
+  initiative item's `spawn.projects`. Public API 1.98.0; SDKs regenerated.
+  
+  Links live in a new `task_project_links` table on D1 (`0117_task_project_links.sql`) and Postgres,
+  and are dropped when either the task or the project is deleted. `ProjectRecordRepository` gains the
+  batched `listOutcomesOfProjects` and `projectsWithOutcomes` on both runtimes. The research-projects
+  initiative tracker is now ADR 0069.
+
+### Patch Changes
+
+- Updated dependencies [f1549d0]
+- Updated dependencies [1d12bc8]
+- Updated dependencies [2665cce]
+- Updated dependencies [391c2ca]
+  - @cat-factory/sdk@0.69.0
+
 ## 0.46.0
 
 ### Minor Changes
