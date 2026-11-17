@@ -82,6 +82,7 @@ describe('researchKindModule.view', () => {
     targets: [{ baseUrl: 'https://vendor.example', surface: 'ui' as const }],
     inputs: [],
     promptAdditions: {},
+    stages: [],
     spec,
   }
   const outcome = (id: string, seq: number, findings: FindingsRevisionBody) => ({
@@ -112,6 +113,18 @@ describe('researchKindModule.view', () => {
     expect(view.latestRevisionId).toBe('r2')
     expect(view.coverage.total).toEqual({ answered: 1, partial: 1, unanswered: 1, blocked: 0 })
     expect(view.findings.find((f) => f.finding.questionId === 'scopes')?.notes).toHaveLength(1)
+  })
+
+  it("leaves a research stage's own stream out of the definition's fold", () => {
+    const view = researchKindModule.view!({
+      definition,
+      inputs: {},
+      outcomes: [
+        outcome('r1', 1, body({ scheme: 'answered' })),
+        { ...outcome('s2', 2, body({ scopes: 'answered' })), stream: 'discovery' },
+      ],
+    }) as ResearchProjectView
+    expect(view.findings.map((f) => f.finding.questionId)).toEqual(['scheme'])
   })
 
   it("reads only the research handler's outcomes, whatever else the project recorded", () => {

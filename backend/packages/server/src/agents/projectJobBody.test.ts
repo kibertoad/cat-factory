@@ -14,6 +14,7 @@ function definition(credentials: ProjectDefinition['credentials']): ProjectDefin
     targets: [{ baseUrl: 'https://vendor.example', surface: 'api' }],
     inputs: [],
     promptAdditions: {},
+    stages: [],
   }
 }
 

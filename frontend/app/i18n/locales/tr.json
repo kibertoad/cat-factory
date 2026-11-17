@@ -733,7 +733,8 @@
         "task_owned_by_project": "Bu görev, hizmeti olmayan bir projeye ait. Bunun yerine projenin görev adresini kullanın.",
         "project_definition_invalid": "Tanım, yapısı ya da proje türü tarafından reddedildi. Yanıt her sorunu listeler; bunları düzeltip yeniden yayımlayın.",
         "project_link_invalid": "Bu proje yok veya başka bir kuruluşa ait. Bu kuruluşun bir projesini bağlayın.",
-        "project_has_no_result": "Bu projenin henüz okunacak bir sonucu yok. Önce içinde bir görev çalıştırın, sonra bağlayın."
+        "project_has_no_result": "Bu projenin henüz okunacak bir sonucu yok. Önce içinde bir görev çalıştırın, sonra bağlayın.",
+        "project_task_has_no_stage": "Bu görev aşamalı bir projeye ait, ancak aşamalarından birinden başlatılmadığı için çalışamaz. Bunun yerine işi projenin aşamasından başlatın."
       }
     },
     "action": {
@@ -828,7 +829,12 @@
         "project_definition_version_exists": "Sürüm zaten yayımlandı",
         "project_definition_key_registered": "Ad alanı kullanımda",
         "project_homed_elsewhere": "Proje başka bir panoda",
-        "credential_wait_personal_in_app": "Uygulamada yenileyin"
+        "credential_wait_personal_in_app": "Uygulamada yenileyin",
+        "project_stage_in_progress": "Aşama zaten çalışıyor",
+        "project_stage_blocked": "Önceki aşama bitmedi",
+        "project_stage_awaiting_checkpoint": "Sonuç incelemeyi bekliyor",
+        "project_stage_not_repeatable": "Aşama zaten tamamlandı",
+        "project_stage_checkpoint_not_pending": "Kabul edilecek bir şey yok"
       },
       "description": {
         "dependencies_unmet": "Bu görev henüz tamamlanmamış başka görevlere bağlı. Onları tamamla veya engelini kaldır, ardından yeniden başlat.",
@@ -898,7 +904,12 @@
         "project_definition_version_exists": "Tanımın bu sürümü zaten yayımlandı ve değiştirilemez. Bunun yerine yeni bir sürüm yayımlayın.",
         "project_definition_key_registered": "Bu ad alanı, dağıtımla gelen tanımlara ait. Kuruluşunuzun kendi ad alanında yayımlayın.",
         "project_homed_elsewhere": "Bir projenin görevleri, projenin bulunduğu panoda oluşturulur ve çalıştırılır. Üzerinde çalışmak için o panoyu açın.",
-        "credential_wait_personal_in_app": "Süresi dolan kişisel kimlik bilgisini, çalıştırmayı başlatan kişi kendi parolasıyla uygulamada yeniler."
+        "credential_wait_personal_in_app": "Süresi dolan kişisel kimlik bilgisini, çalıştırmayı başlatan kişi kendi parolasıyla uygulamada yeniler.",
+        "project_stage_in_progress": "Bu aşama üzerinde zaten bir görev çalışıyor. Başka birini başlatmadan önce o görevin sonucunu kaydetmesini bekleyin ya da onu silin.",
+        "project_stage_blocked": "Bu aşama, henüz kabul edilmiş bir sonucu olmayan aşamalardan sonra çalışır. Önce onları tamamlayın.",
+        "project_stage_awaiting_checkpoint": "Bu aşamanın en son sonucu, kontrol noktasında birinin onu kabul etmesini bekliyor. Aşamayı yeniden çalıştırmadan önce inceleyip kabul edin.",
+        "project_stage_not_repeatable": "Bu aşamanın kabul edilmiş bir sonucu var ve tanımı yeniden çalıştırılmasına izin vermiyor.",
+        "project_stage_checkpoint_not_pending": "Bu aşamanın kontrol noktasında bekleyen bir sonucu yok. Zaten kabul edilmiş olabilir ya da görevi henüz bir sonuç kaydetmemiş olabilir."
       },
       "action": {
         "connectGitHub": "GitHub'ı bağla",

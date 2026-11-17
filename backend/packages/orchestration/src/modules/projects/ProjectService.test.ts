@@ -34,7 +34,12 @@ function kinds(): ProjectKindRegistry {
 
 function definitions(): ProjectDefinitionRegistry {
   const registry = new ProjectDefinitionRegistry([
-    { kind: 'vendor-study', parseSpec: (d) => ({ ok: true, value: d.spec }) },
+    {
+      kind: 'vendor-study',
+      handlers: [],
+      parseSpec: (d) => ({ ok: true, value: d.spec }),
+      definitionSummary: (d) => d.title,
+    },
   ])
   registry.register({
     kind: 'vendor-study',

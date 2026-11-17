@@ -1,7 +1,13 @@
-import { defineApiContract, noBodyResponse, withObjectKeys } from '@toad-contracts/valibot'
+import {
+  ContractNoBody,
+  defineApiContract,
+  noBodyResponse,
+  withObjectKeys,
+} from '@toad-contracts/valibot'
 import * as v from 'valibot'
 import { blockSchema } from '../entities.js'
 import { pinnableProjectDefinitionSchema } from '../project-definitions.js'
+import { projectStageStateSchema } from '../project-stages.js'
 import { projectBoardViewSchema, projectOutcomeDetailSchema } from '../project-view.js'
 import {
   createProjectInputSchema,
@@ -60,6 +66,29 @@ export const getProjectOutcomeContract = defineApiContract({
   ),
   pathResolver: ({ projectId, outcomeId }) => `/projects/${projectId}/outcomes/${outcomeId}`,
   responsesByStatusCode: { 200: projectOutcomeDetailSchema, ...errorResponses },
+})
+
+const projectStageParams = withObjectKeys(v.object({ projectId: v.string(), stageId: v.string() }))
+
+/**
+ * Start a stage of a staged project: create its task under the project root, bound to the stage.
+ * Refused with a 409 naming why when the stage cannot start now.
+ */
+export const createProjectStageTaskContract = defineApiContract({
+  method: 'post',
+  requestPathParamsSchema: projectStageParams,
+  pathResolver: ({ projectId, stageId }) => `/projects/${projectId}/stages/${stageId}/tasks`,
+  requestBodySchema: ContractNoBody,
+  responsesByStatusCode: { 201: blockSchema, ...errorResponses },
+})
+
+/** Accept a stage's newest result at its checkpoint, so the stages after it count it. */
+export const clearProjectStageCheckpointContract = defineApiContract({
+  method: 'post',
+  requestPathParamsSchema: projectStageParams,
+  pathResolver: ({ projectId, stageId }) => `/projects/${projectId}/stages/${stageId}/checkpoint`,
+  requestBodySchema: ContractNoBody,
+  responsesByStatusCode: { 200: projectStageStateSchema, ...errorResponses },
 })
 
 export const createProjectContract = defineApiContract({

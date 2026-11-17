@@ -733,7 +733,8 @@
         "task_owned_by_project": "Cette tâche appartient à un projet, qui n'a pas de service. Utilisez plutôt l'adresse des tâches du projet.",
         "project_definition_invalid": "La définition est refusée par son enveloppe ou par son type de projet. La réponse liste chaque problème ; corrigez-les et publiez à nouveau.",
         "project_link_invalid": "Ce projet n'existe pas ou appartient à une autre organisation. Liez un projet de cette organisation.",
-        "project_has_no_result": "Ce projet n'a pas encore de résultat à lire. Exécutez d'abord une tâche dedans, puis liez-le."
+        "project_has_no_result": "Ce projet n'a pas encore de résultat à lire. Exécutez d'abord une tâche dedans, puis liez-le.",
+        "project_task_has_no_stage": "Cette tâche appartient à un projet par étapes mais n'a pas été lancée depuis l'une de ses étapes, elle ne peut donc pas s'exécuter. Lancez plutôt le travail depuis l'étape du projet."
       }
     },
     "action": {
@@ -828,7 +829,12 @@
         "project_definition_version_exists": "Version déjà publiée",
         "project_definition_key_registered": "Espace de noms déjà pris",
         "project_homed_elsewhere": "Projet hébergé sur un autre tableau",
-        "credential_wait_personal_in_app": "À renouveler dans l'application"
+        "credential_wait_personal_in_app": "À renouveler dans l'application",
+        "project_stage_in_progress": "Étape déjà en cours",
+        "project_stage_blocked": "Étape précédente inachevée",
+        "project_stage_awaiting_checkpoint": "Résultat en attente de revue",
+        "project_stage_not_repeatable": "Étape déjà terminée",
+        "project_stage_checkpoint_not_pending": "Rien à accepter"
       },
       "description": {
         "dependencies_unmet": "Cette tâche dépend d'autres qui ne sont pas encore terminées. Terminez-les ou débloquez-les, puis relancez-la.",
@@ -898,7 +904,12 @@
         "project_definition_version_exists": "Cette version de la définition est déjà publiée et ne peut plus changer. Publiez plutôt une nouvelle version.",
         "project_definition_key_registered": "Cet espace de noms appartient à des définitions fournies par le déploiement. Publiez dans l'espace de noms propre à votre organisation.",
         "project_homed_elsewhere": "Les tâches d'un projet sont créées et exécutées sur le tableau qui l'héberge. Ouvrez ce tableau pour y travailler.",
-        "credential_wait_personal_in_app": "Un identifiant personnel expiré est renouvelé par la personne qui a lancé l'exécution, avec son mot de passe, dans l'application."
+        "credential_wait_personal_in_app": "Un identifiant personnel expiré est renouvelé par la personne qui a lancé l'exécution, avec son mot de passe, dans l'application.",
+        "project_stage_in_progress": "Une tâche travaille déjà sur cette étape. Attendez qu'elle enregistre son résultat, ou supprimez-la, avant d'en lancer une autre.",
+        "project_stage_blocked": "Cette étape s'exécute après des étapes qui n'ont pas encore de résultat accepté. Terminez-les d'abord.",
+        "project_stage_awaiting_checkpoint": "Le dernier résultat de cette étape attend d'être accepté à son point de contrôle. Examinez-le et acceptez-le avant de relancer l'étape.",
+        "project_stage_not_repeatable": "Cette étape a un résultat accepté et sa définition ne permet pas de la relancer.",
+        "project_stage_checkpoint_not_pending": "Cette étape n'a aucun résultat en attente à son point de contrôle. Il a peut-être déjà été accepté, ou sa tâche n'en a pas encore enregistré."
       },
       "action": {
         "connectGitHub": "Connecter GitHub",

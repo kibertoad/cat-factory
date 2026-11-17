@@ -6623,7 +6623,8 @@
         "task_owned_by_project": "Diese Aufgabe gehört zu einem Projekt, das keinen Service hat. Verwenden Sie stattdessen die Aufgabenadresse des Projekts.",
         "project_definition_invalid": "Die Definition wird von ihrem Rahmen oder von ihrer Projektart abgelehnt. Die Antwort nennt jedes Problem; beheben Sie sie und veröffentlichen Sie erneut.",
         "project_link_invalid": "Dieses Projekt existiert nicht oder gehört zu einer anderen Organisation. Verknüpfen Sie ein Projekt dieser Organisation.",
-        "project_has_no_result": "Dieses Projekt hat noch kein Ergebnis zum Lesen. Führen Sie zuerst eine Aufgabe darin aus und verknüpfen Sie es dann."
+        "project_has_no_result": "Dieses Projekt hat noch kein Ergebnis zum Lesen. Führen Sie zuerst eine Aufgabe darin aus und verknüpfen Sie es dann.",
+        "project_task_has_no_stage": "Diese Aufgabe gehört zu einem Projekt mit Phasen, wurde aber nicht aus einer seiner Phasen gestartet und kann daher nicht laufen. Starte die Arbeit stattdessen über die Phase des Projekts."
       }
     },
     "action": {
@@ -6718,7 +6719,12 @@
         "project_definition_version_exists": "Version bereits veröffentlicht",
         "project_definition_key_registered": "Namensraum belegt",
         "project_homed_elsewhere": "Projekt liegt auf einem anderen Board",
-        "credential_wait_personal_in_app": "In der App erneuern"
+        "credential_wait_personal_in_app": "In der App erneuern",
+        "project_stage_in_progress": "Phase läuft bereits",
+        "project_stage_blocked": "Frühere Phase nicht abgeschlossen",
+        "project_stage_awaiting_checkpoint": "Ergebnis wartet auf Prüfung",
+        "project_stage_not_repeatable": "Phase bereits abgeschlossen",
+        "project_stage_checkpoint_not_pending": "Nichts anzunehmen"
       },
       "description": {
         "dependencies_unmet": "Diese Aufgabe hängt von anderen ab, die noch nicht abgeschlossen sind. Schließe sie ab oder gib sie frei und starte dann erneut.",
@@ -6788,7 +6794,12 @@
         "project_definition_version_exists": "Diese Version der Definition ist bereits veröffentlicht und kann sich nicht mehr ändern. Veröffentlichen Sie stattdessen eine neue Version.",
         "project_definition_key_registered": "Dieser Namensraum gehört zu Definitionen, die die Installation mitbringt. Veröffentlichen Sie im eigenen Namensraum Ihrer Organisation.",
         "project_homed_elsewhere": "Die Aufgaben eines Projekts werden auf dem Board angelegt und ausgeführt, auf dem es liegt. Öffnen Sie dieses Board, um daran zu arbeiten.",
-        "credential_wait_personal_in_app": "Abgelaufene persönliche Zugangsdaten erneuert die Person, die den Lauf gestartet hat, mit ihrem Passwort in der App."
+        "credential_wait_personal_in_app": "Abgelaufene persönliche Zugangsdaten erneuert die Person, die den Lauf gestartet hat, mit ihrem Passwort in der App.",
+        "project_stage_in_progress": "An dieser Phase arbeitet bereits eine Aufgabe. Warte, bis sie ihr Ergebnis festhält, oder lösche sie, bevor du eine weitere startest.",
+        "project_stage_blocked": "Diese Phase läuft nach Phasen, die noch kein angenommenes Ergebnis haben. Schließe diese zuerst ab.",
+        "project_stage_awaiting_checkpoint": "Das neueste Ergebnis dieser Phase wartet darauf, dass jemand es am Kontrollpunkt annimmt. Prüfe und nimm es an, bevor du die Phase erneut ausführst.",
+        "project_stage_not_repeatable": "Diese Phase hat ein angenommenes Ergebnis, und ihre Definition lässt keinen weiteren Durchlauf zu.",
+        "project_stage_checkpoint_not_pending": "Diese Phase hat kein Ergebnis, das am Kontrollpunkt wartet. Es wurde vielleicht bereits angenommen, oder ihre Aufgabe hat noch keines festgehalten."
       },
       "action": {
         "connectGitHub": "GitHub verbinden",

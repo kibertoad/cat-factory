@@ -2,14 +2,16 @@ import {
   type DefinitionParseResult,
   parseProjectDefinition,
   type ProjectDefinition,
-  type ProjectDefinitionSpecValidator,
+  type ProjectStage,
 } from '@cat-factory/contracts'
 import { sha256HexOfString } from '../shared/sha256.logic.js'
+import type { ProjectKindModule } from './project-kind-module.js'
 
 // App-owned registry of project definitions a DEPLOYMENT ships in code, beside the stored
-// definitions an account publishes through the API. The registry validates the envelope and
-// hands `spec` to the validator its kind supplies, so a malformed definition fails the
-// deployment's boot rather than a run, and the platform never learns what a spec holds.
+// definitions an account publishes through the API. The registry validates the envelope, hands
+// `spec` to its kind's module and each stage's `config` to the handler of the stage's task type,
+// so a malformed definition fails the deployment's boot rather than a run, and the platform never
+// learns what a spec or a config holds.
 
 /**
  * A registered definition is held immutable by nothing but the deployment's code, so a project
@@ -17,7 +19,10 @@ import { sha256HexOfString } from '../shared/sha256.logic.js'
  * refuses rather than running a definition the project never agreed to.
  */
 export function projectDefinitionContentHash(definition: ProjectDefinition): Promise<string> {
-  return sha256HexOfString(canonicalJson(definition))
+  // A definition that declares no stages hashes without the key, so declaring none is the same
+  // content as a definition whose envelope has no `stages` at all.
+  const { stages, ...rest } = definition
+  return sha256HexOfString(canonicalJson(stages.length ? definition : rest))
 }
 
 /** JSON with object keys sorted at every depth, so equal content always hashes equal. */
@@ -34,19 +39,21 @@ function canonicalJson(value: unknown): string {
 }
 
 /**
- * Validate a definition: its envelope, then its `spec` by its kind's validator. Answers the
- * definition with the spec as the kind normalized it, which is what is stored and hashed. A kind
- * with no validator is refused, because its definitions cannot be checked.
+ * Validate a definition: its envelope, then its `spec` by its kind's module and each stage by the
+ * kind's handlers (a stage runs a task type its kind offers, with a `config` that task type's
+ * handler accepts). Answers the definition with the spec and every config as they were
+ * normalized, which is what is stored and hashed. A kind with no module is refused, because its
+ * definitions cannot be checked.
  */
 export function validateProjectDefinition(
   input: unknown,
-  validatorFor: (kind: string) => ProjectDefinitionSpecValidator | undefined,
+  moduleFor: (kind: string) => ProjectKindModule | undefined,
 ): DefinitionParseResult<ProjectDefinition> {
   const envelope = parseProjectDefinition(input)
   if (!envelope.ok) return envelope
   const { kind, key } = envelope.value
-  const validator = validatorFor(kind)
-  if (!validator) {
+  const module = moduleFor(kind)
+  if (!module) {
     return {
       ok: false,
       issues: [
@@ -54,22 +61,50 @@ export function validateProjectDefinition(
       ],
     }
   }
-  const spec = validator.parseSpec(envelope.value)
-  if (!spec.ok) {
-    return { ok: false, issues: spec.issues.map((issue) => `${kind} definition ${key}: ${issue}`) }
+  const spec = module.parseSpec(envelope.value)
+  const issues = spec.ok ? [] : spec.issues
+  const stages: ProjectStage[] = []
+  for (const stage of envelope.value.stages) {
+    const parsed = parseStageConfig(module, stage)
+    if (parsed.ok) stages.push(parsed.value)
+    else issues.push(...parsed.issues.map((issue) => `stages.${stage.id}: ${issue}`))
   }
-  return { ok: true, value: { ...envelope.value, spec: spec.value } }
+  if (!spec.ok || issues.length) {
+    return { ok: false, issues: issues.map((issue) => `${kind} definition ${key}: ${issue}`) }
+  }
+  return { ok: true, value: { ...envelope.value, stages, spec: spec.value } }
+}
+
+/** A stage with its `config` as the handler of its task type normalized it. */
+function parseStageConfig(
+  module: ProjectKindModule,
+  stage: ProjectStage,
+): DefinitionParseResult<ProjectStage> {
+  const handler = module.handlers.find((h) => h.taskType === stage.taskType)
+  if (!handler) {
+    return {
+      ok: false,
+      issues: [`project kind '${module.kind}' offers no task type '${stage.taskType}'`],
+    }
+  }
+  if (!handler.parseConfig) {
+    return stage.config === undefined
+      ? { ok: true, value: stage }
+      : { ok: false, issues: [`task type '${stage.taskType}' takes no config`] }
+  }
+  const config = handler.parseConfig(stage.config)
+  return config.ok ? { ok: true, value: { ...stage, config: config.value } } : config
 }
 
 const versionKey = (kind: string, key: string) => `${kind}\u0000${key}`
 
 export class ProjectDefinitionRegistry {
-  private readonly validators = new Map<string, ProjectDefinitionSpecValidator>()
+  private readonly modules = new Map<string, ProjectKindModule>()
   private readonly byKey = new Map<string, Map<number, ProjectDefinition>>()
 
-  /** @param validators one per project kind whose definitions this registry may hold. */
-  constructor(validators: Iterable<ProjectDefinitionSpecValidator> = []) {
-    for (const validator of validators) this.validators.set(validator.kind, validator)
+  /** @param modules one per project kind whose definitions this registry may hold. */
+  constructor(modules: Iterable<ProjectKindModule> = []) {
+    for (const module of modules) this.modules.set(module.kind, module)
   }
 
   /**
@@ -123,7 +158,7 @@ export class ProjectDefinitionRegistry {
   }
 
   private parse(input: unknown): ProjectDefinition {
-    const parsed = validateProjectDefinition(input, (kind) => this.validators.get(kind))
+    const parsed = validateProjectDefinition(input, (kind) => this.modules.get(kind))
     if (!parsed.ok) throw new Error(`invalid project definition: ${parsed.issues.join('; ')}`)
     return parsed.value
   }

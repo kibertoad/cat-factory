@@ -1,6 +1,7 @@
-import { type ProjectDefinitionSpecValidator, researchSpecValidator } from '@cat-factory/contracts'
 import { describe, expect, it } from 'vitest'
 import { ProjectDefinitionRegistry } from '../domain/project-definition-registry.js'
+import { type ProjectKindModule, eraseTaskHandler } from '../domain/project-kind-module.js'
+import { researchKindModule } from '../domain/research-kind.js'
 import type {
   ProjectDefinitionRepository,
   StoredProjectDefinition,
@@ -20,6 +21,7 @@ function research(key: string, version: number) {
     targets: [{ baseUrl: 'https://vendor.example', surface: 'api' as const }],
     inputs: [],
     promptAdditions: {},
+    stages: [],
     spec: {
       brief: 'Learn the vendor.',
       topics: [{ id: 'auth', title: 'Auth', questions: [{ id: 'scheme', question: 'Which?' }] }],
@@ -37,13 +39,36 @@ function notes(key: string, version: number) {
     targets: [],
     inputs: [],
     promptAdditions: {},
+    stages: [],
     spec: { heading: 'Decisions' },
   }
 }
 
-const notesValidator: ProjectDefinitionSpecValidator = {
+const notesModule: ProjectKindModule = {
   kind: 'notes',
-  parseSpec: (definition) => ({ ok: true, value: definition.spec }),
+  handlers: [
+    eraseTaskHandler<unknown>({
+      taskType: 'acme:note',
+      agentKind: 'note-taker',
+      outcomeSchemaVersion: 1,
+      parseOutcome: (_version, value) => value,
+      planTask: () => ({ intent: 'write', stream: 'main', plan: {} }),
+      brief: () => ({}),
+      mergeCheckpoint: (_earlier, later) => later,
+      finish: ({ reply }) => ({ body: reply, output: '' }),
+      describe: () => '',
+      artifactRefs: () => [],
+      parseConfig: (config) =>
+        typeof (config as { topic?: unknown })?.topic === 'string'
+          ? { ok: true, value: config }
+          : { ok: false, issues: ['topic: required'] },
+    }),
+  ],
+  parseSpec: (definition) =>
+    typeof (definition.spec as { heading?: unknown })?.heading === 'string'
+      ? { ok: true, value: definition.spec }
+      : { ok: false, issues: ['spec.heading: required'] },
+  definitionSummary: (definition) => definition.title,
 }
 
 function storedRepo(rows: StoredProjectDefinition[]): ProjectDefinitionRepository {
@@ -66,7 +91,7 @@ const row = (accountId: string, definition: StoredProjectDefinition['definition'
   ({ accountId, definition, contentHash: hash, createdAt: 1 }) satisfies StoredProjectDefinition
 
 function source() {
-  const registry = new ProjectDefinitionRegistry([researchSpecValidator, notesValidator])
+  const registry = new ProjectDefinitionRegistry([researchKindModule, notesModule])
   registry.registerAll([
     research('platform:vendor', 1),
     research('platform:vendor', 3),

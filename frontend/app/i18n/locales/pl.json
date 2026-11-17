@@ -733,7 +733,8 @@
         "task_owned_by_project": "To zadanie należy do projektu, który nie ma usługi. Zamiast tego użyj adresu zadań projektu.",
         "project_definition_invalid": "Definicję odrzuca jej struktura lub jej rodzaj projektu. Odpowiedź wymienia każdy problem; popraw je i opublikuj ponownie.",
         "project_link_invalid": "Ten projekt nie istnieje albo należy do innej organizacji. Powiąż projekt tej organizacji.",
-        "project_has_no_result": "Ten projekt nie ma jeszcze wyniku do odczytania. Najpierw uruchom w nim zadanie, a potem go połącz."
+        "project_has_no_result": "Ten projekt nie ma jeszcze wyniku do odczytania. Najpierw uruchom w nim zadanie, a potem go połącz.",
+        "project_task_has_no_stage": "To zadanie należy do projektu z etapami, ale nie zostało uruchomione z żadnego z jego etapów, więc nie może się wykonać. Zamiast tego rozpocznij pracę z etapu projektu."
       }
     },
     "action": {
@@ -828,7 +829,12 @@
         "project_definition_version_exists": "Wersja już opublikowana",
         "project_definition_key_registered": "Przestrzeń nazw zajęta",
         "project_homed_elsewhere": "Projekt jest na innej tablicy",
-        "credential_wait_personal_in_app": "Odnów w aplikacji"
+        "credential_wait_personal_in_app": "Odnów w aplikacji",
+        "project_stage_in_progress": "Etap już trwa",
+        "project_stage_blocked": "Wcześniejszy etap niezakończony",
+        "project_stage_awaiting_checkpoint": "Wynik czeka na przegląd",
+        "project_stage_not_repeatable": "Etap już zakończony",
+        "project_stage_checkpoint_not_pending": "Nie ma czego zaakceptować"
       },
       "description": {
         "dependencies_unmet": "To zadanie zależy od innych, które nie zostały jeszcze ukończone. Ukończ je lub odblokuj, a następnie uruchom je ponownie.",
@@ -898,7 +904,12 @@
         "project_definition_version_exists": "Ta wersja definicji jest już opublikowana i nie może się zmienić. Zamiast tego opublikuj nową wersję.",
         "project_definition_key_registered": "Ta przestrzeń nazw należy do definicji dostarczanych z wdrożeniem. Publikuj we własnej przestrzeni nazw swojej organizacji.",
         "project_homed_elsewhere": "Zadania projektu tworzy się i uruchamia na tablicy, na której projekt się znajduje. Otwórz tę tablicę, aby nad nimi pracować.",
-        "credential_wait_personal_in_app": "Wygasłe osobiste poświadczenie odnawia w aplikacji osoba, która uruchomiła przebieg, podając swoje hasło."
+        "credential_wait_personal_in_app": "Wygasłe osobiste poświadczenie odnawia w aplikacji osoba, która uruchomiła przebieg, podając swoje hasło.",
+        "project_stage_in_progress": "Nad tym etapem pracuje już zadanie. Poczekaj, aż zapisze swój wynik, albo je usuń, zanim uruchomisz kolejne.",
+        "project_stage_blocked": "Ten etap uruchamia się po etapach, które nie mają jeszcze zaakceptowanego wyniku. Najpierw je zakończ.",
+        "project_stage_awaiting_checkpoint": "Najnowszy wynik tego etapu czeka, aż ktoś zaakceptuje go w punkcie kontrolnym. Przejrzyj go i zaakceptuj, zanim ponownie uruchomisz etap.",
+        "project_stage_not_repeatable": "Ten etap ma zaakceptowany wynik, a jego definicja nie pozwala uruchomić go ponownie.",
+        "project_stage_checkpoint_not_pending": "Ten etap nie ma wyniku czekającego w punkcie kontrolnym. Mógł już zostać zaakceptowany albo jego zadanie jeszcze go nie zapisało."
       },
       "action": {
         "connectGitHub": "Połącz GitHub",

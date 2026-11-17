@@ -16,9 +16,12 @@ import {
 } from '@cat-factory/kernel'
 import type { ProjectOutcomeStore, ReadOutcome } from './ProjectOutcomeStore.js'
 import type { MountedProject } from './ProjectService.js'
+import type { ProjectStageService } from './ProjectStageService.js'
 import { outcomeMetaOf, tryDecodeOutcome } from './outcomeDecoding.js'
 
 export interface ProjectBoardViewsDeps {
+  /** Each stage of the pinned definition with where it stands. */
+  stages: Pick<ProjectStageService, 'views'>
   getMounted: (workspaceId: string, projectId: string) => Promise<MountedProject>
   records: Pick<ProjectRecordRepository, 'getPin'>
   definitions: ProjectDefinitionSource
@@ -69,6 +72,14 @@ export class ProjectBoardViews {
       decoded ? [decoded] : [],
     )
     const definition = resolved?.definition ?? null
+    const [credentials, stages] = await Promise.all([
+      definition ? checkCredentials(project, definition) : [],
+      this.deps.stages.views(
+        project,
+        definition,
+        read.map(({ row }) => row),
+      ),
+    ])
     return {
       projectId: project.id,
       kind: project.kind,
@@ -83,10 +94,11 @@ export class ProjectBoardViews {
       definition,
       definitionChanged: !!pin && !!resolved && resolved.contentHash !== pin.definitionHash,
       outcomes: decoded.map(({ outcome, decoded }) => entryOf(outcome, decoded !== undefined)),
-      credentials: definition ? await checkCredentials(project, definition) : [],
+      credentials,
       view: module?.view
         ? module.view({ definition, inputs: pin?.inputs ?? {}, outcomes: readable })
         : null,
+      stages,
     }
   }
 

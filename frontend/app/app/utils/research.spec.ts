@@ -76,11 +76,13 @@ describe('researchReadingOf', () => {
       targets: [{ baseUrl: 'https://vendor.example', surface: 'api' as const }],
       inputs: [],
       promptAdditions: {},
+      stages: [],
     },
     definitionChanged: false,
     outcomes: [],
     credentials: [],
     view: view().view,
+    stages: [],
   }
 
   it('reads the topics off the pinned definition and the kind view as served', () => {

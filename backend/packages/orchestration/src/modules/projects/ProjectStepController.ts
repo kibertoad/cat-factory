@@ -2,6 +2,7 @@ import {
   projectDefinitionSubjectId,
   type Project,
   type ProjectDefinition,
+  type ProjectStage,
   type ProjectStepState,
 } from '@cat-factory/contracts'
 import {
@@ -26,6 +27,7 @@ import {
 } from '@cat-factory/kernel'
 import type { ProjectOutcomeStore } from './ProjectOutcomeStore.js'
 import { decodeOutcome, outcomeTaskType } from './outcomeDecoding.js'
+import { resolvePinnedDefinition } from './pinnedDefinition.js'
 
 // ---------------------------------------------------------------------------
 // The engine half of a project task's run, for every project kind: what its step is asked when it
@@ -56,6 +58,8 @@ interface ResolvedTask {
   definition: ProjectDefinition | null
   inputs: Record<string, unknown>
   outcomes: DecodedProjectOutcome[]
+  /** The stage the task runs, for a project whose definition declares stages. */
+  stage: ProjectStage | null
 }
 
 /** The outcome id a task writes: one per task, so a replayed write is a no-op. */
@@ -91,6 +95,15 @@ export class ProjectStepController {
       })
     }
     if (task.outcomes.some((o) => o.taskId === block.id)) {
+      // The outcome landed but the stage was never told (the process died between the two
+      // writes): free the stage now, or its slot stays held by a task that already finished.
+      if (task.stage) {
+        await this.deps.records.markStageTaskRecorded(
+          task.project.id,
+          block.id,
+          this.deps.clock.now(),
+        )
+      }
       throw new ValidationError('This task already recorded its outcome on the project', {
         reason: 'project_task_already_recorded',
       })
@@ -103,8 +116,10 @@ export class ProjectStepController {
         projectId: task.project.id,
         kind: task.project.kind,
         taskType: task.handler.taskType,
+        ...(task.stage ? { stageId: task.stage.id } : {}),
         seq,
-        stream: planned.stream,
+        // A stage names the stream its tasks write, whatever the handler would pick on its own.
+        stream: task.stage?.produces ?? planned.stream,
         intent: planned.intent,
         definitionKey: task.definition?.key ?? null,
         definitionVersion: task.definition?.version ?? null,
@@ -212,6 +227,9 @@ export class ProjectStepController {
       json: JSON.stringify(finished.body),
     })
     step.project = { ...state, outcomeId: id }
+    if (state.stageId) {
+      await this.deps.records.markStageTaskRecorded(state.projectId, taskId, this.deps.clock.now())
+    }
     if (recorded.written) return { output: finished.output, outputIsRendered: true }
     // A replayed completion lost to the write that landed first: describe the outcome on record,
     // not the replay's reply, which may differ from it.
@@ -228,8 +246,41 @@ export class ProjectStepController {
       task: block,
       definition: task.definition,
       inputs: task.inputs,
-      outcomes: outcomesOf(task.handler, task.outcomes),
+      stage: task.stage ? { id: task.stage.id, config: task.stage.config } : null,
+      outcomes: outcomesOf(task.handler, task.outcomes).filter(
+        (o) => !task.stage || o.stream === task.stage.produces,
+      ),
     }
+  }
+
+  /**
+   * The stage a task of a staged project runs, from the record its stage start wrote. A task
+   * created under a staged project any other way belongs to no stage and is refused.
+   */
+  private async stageOf(
+    project: Project,
+    definition: ProjectDefinition | null,
+    block: Block,
+    handler: ErasedProjectTaskHandler,
+  ): Promise<ProjectStage | null> {
+    if (!definition?.stages.length) return null
+    const records = await this.deps.records.listStageTasks(project.id)
+    const stageId = records.find((r) => r.taskId === block.id)?.stageId
+    const stage = definition.stages.find((s) => s.id === stageId)
+    if (!stage) {
+      throw new ValidationError('This task was not started from a stage of its project', {
+        reason: 'project_task_has_no_stage',
+        projectId: project.id,
+      })
+    }
+    if (stage.taskType !== handler.taskType) {
+      throw new ValidationError("The task's type is not the one its stage runs", {
+        reason: 'project_task_type_changed',
+        plannedTaskType: stage.taskType,
+        taskType: handler.taskType,
+      })
+    }
+    return stage
   }
 
   private async resolveTask(block: Block, agentKind: string): Promise<ResolvedTask> {
@@ -249,7 +300,9 @@ export class ProjectStepController {
       )
     }
     const pin = await this.deps.records.getPin(project.id)
-    const definition = pin ? await this.pinnedDefinition(project, pin) : null
+    const definition = pin
+      ? await resolvePinnedDefinition(this.deps.definitions, project, pin)
+      : null
     // Only this handler's outcomes are read and decoded: another task type's body is never read,
     // so one that is unreadable just now cannot stop this task.
     const stored = await this.deps.outcomes.list(
@@ -259,38 +312,11 @@ export class ProjectStepController {
     return {
       project,
       handler,
+      stage: await this.stageOf(project, definition, block, handler),
       definition,
       inputs: pin?.inputs ?? {},
       outcomes: stored.map((outcome) => decodeOutcome(this.deps.modules, project.kind, outcome)),
     }
-  }
-
-  /** The definition a pin names, refused when it is gone or a registered one changed. */
-  private async pinnedDefinition(
-    project: Project,
-    pin: NonNullable<Awaited<ReturnType<ProjectRecordRepository['getPin']>>>,
-  ): Promise<ProjectDefinition> {
-    const resolved = await this.deps.definitions.get(
-      project.accountId ?? '',
-      project.kind,
-      pin.definitionKey,
-      pin.definitionVersion,
-    )
-    if (!resolved) {
-      throw new ValidationError('The pinned definition no longer exists', {
-        reason: 'project_definition_not_found',
-        kind: project.kind,
-        definitionKey: pin.definitionKey,
-        definitionVersion: pin.definitionVersion,
-      })
-    }
-    if (resolved.contentHash !== pin.definitionHash) {
-      throw new ValidationError('The registered definition changed since the project pinned it', {
-        reason: 'project_definition_changed',
-        definitionKey: pin.definitionKey,
-      })
-    }
-    return resolved.definition
   }
 
   private async definitionOf(state: ProjectStepState): Promise<ProjectDefinition | undefined> {

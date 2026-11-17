@@ -27,6 +27,7 @@ const definition: ProjectDefinition = {
   key: 'acme:vendor',
   version: 1,
   title: 'Vendor',
+  stages: [],
   credentials: [],
   targets: [{ baseUrl: 'https://vendor.example', surface: 'api' }],
   inputs: [],

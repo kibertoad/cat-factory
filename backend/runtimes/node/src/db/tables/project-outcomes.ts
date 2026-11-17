@@ -1,6 +1,7 @@
-import { bigint, integer, pgTable, primaryKey, text, uniqueIndex } from 'drizzle-orm/pg-core'
+import { sql } from 'drizzle-orm'
+import { bigint, index, integer, pgTable, primaryKey, text, uniqueIndex } from 'drizzle-orm/pg-core'
 
-// What projects of any kind keep. Mirrors D1 migrations 0115, 0116 and 0118. Definition specs and outcome bodies
+// What projects of any kind keep. Mirrors D1 migrations 0115, 0116, 0118 and 0119. Definition specs and outcome bodies
 // are opaque JSON; the project kind owns their shape.
 
 /** Account-published project definitions, immutable per version. */
@@ -66,6 +67,31 @@ export const projectOutcomes = pgTable(
     body_bytes: integer('body_bytes').notNull(),
   },
   (t) => [uniqueIndex('idx_project_outcomes_seq').on(t.project_id, t.seq)],
+)
+
+/**
+ * Which stage each project task runs, when it recorded its outcome and when a person accepted that
+ * outcome at the stage's checkpoint. A stage has at most one task with no recorded outcome.
+ */
+export const projectStageTasks = pgTable(
+  'project_stage_tasks',
+  {
+    task_id: text('task_id').primaryKey(),
+    project_id: text('project_id').notNull(),
+    stage_id: text('stage_id').notNull(),
+    created_at: bigint('created_at', { mode: 'number' }).notNull(),
+    /** JSON: the accepted result of each upstream stage when the task was created. */
+    basis: text('basis').notNull(),
+    recorded_at: bigint('recorded_at', { mode: 'number' }),
+    cleared_at: bigint('cleared_at', { mode: 'number' }),
+    cleared_by: text('cleared_by'),
+  },
+  (t) => [
+    index('idx_project_stage_tasks_project').on(t.project_id),
+    uniqueIndex('idx_project_stage_tasks_open')
+      .on(t.project_id, t.stage_id)
+      .where(sql`${t.recorded_at} IS NULL`),
+  ],
 )
 
 /** The outcome-storage policy tiers: account, workspace and project. */

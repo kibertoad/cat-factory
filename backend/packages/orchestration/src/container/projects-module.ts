@@ -11,6 +11,10 @@ import { ProjectBoardViews } from '../modules/projects/ProjectBoardViews.js'
 import { ProjectDefinitionPublisher } from '../modules/projects/ProjectDefinitionPublisher.js'
 import { ProjectOutcomeReader } from '../modules/projects/ProjectOutcomeReader.js'
 import { ProjectService } from '../modules/projects/ProjectService.js'
+import {
+  ProjectStageService,
+  type StageTaskBoard,
+} from '../modules/projects/ProjectStageService.js'
 import { TaskProjectLinkService } from '../modules/projects/TaskProjectLinkService.js'
 import { projectContextContributor } from '../modules/projects/projectContext.js'
 import { createBlockHomes } from '../modules/board/blockHomes.js'
@@ -27,6 +31,8 @@ export function createProjectsModule(
     projectKindModules: ProjectKindModuleRegistry
   },
   events: ExecutionEventPublisher,
+  /** Late-bound: the board is built after this module, and a stage creates its tasks on it. */
+  board: () => StageTaskBoard | undefined,
 ): ProjectsModule | undefined {
   const {
     projectRepository,
@@ -61,7 +67,17 @@ export function createProjectsModule(
   const outcomes = createProjectOutcomeStore(deps, projectRecordRepository)
   const getMounted = (workspaceId: string, projectId: string) =>
     service.getMounted(workspaceId, projectId)
+  const stages = new ProjectStageService({
+    getMounted,
+    listTasks: (project) => service.listTasks(project),
+    records: projectRecordRepository,
+    definitions: sources.projectDefinitions,
+    board,
+    clock: deps.clock,
+    logger: deps.logger,
+  })
   return {
+    stages,
     service,
     records: projectRecordRepository,
     definitions: sources.projectDefinitions,
@@ -74,6 +90,7 @@ export function createProjectsModule(
     }),
     views: new ProjectBoardViews({
       getMounted,
+      stages,
       records: projectRecordRepository,
       definitions: sources.projectDefinitions,
       outcomes,

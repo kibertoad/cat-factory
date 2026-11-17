@@ -6623,7 +6623,8 @@
         "task_owned_by_project": "Questa attività appartiene a un progetto, che non ha un servizio. Usa invece l'indirizzo delle attività del progetto.",
         "project_definition_invalid": "La definizione è rifiutata dalla sua struttura o dal suo tipo di progetto. La risposta elenca ogni problema; correggili e pubblica di nuovo.",
         "project_link_invalid": "Quel progetto non esiste o appartiene a un'altra organizzazione. Collega un progetto di questa organizzazione.",
-        "project_has_no_result": "Quel progetto non ha ancora un risultato da leggere. Esegui prima un'attività al suo interno, poi collegalo."
+        "project_has_no_result": "Quel progetto non ha ancora un risultato da leggere. Esegui prima un'attività al suo interno, poi collegalo.",
+        "project_task_has_no_stage": "Questa attività appartiene a un progetto a fasi ma non è stata avviata da una delle sue fasi, quindi non può essere eseguita. Avvia invece il lavoro dalla fase del progetto."
       }
     },
     "action": {
@@ -6718,7 +6719,12 @@
         "project_definition_version_exists": "Versione già pubblicata",
         "project_definition_key_registered": "Spazio dei nomi occupato",
         "project_homed_elsewhere": "Progetto ospitato su un'altra bacheca",
-        "credential_wait_personal_in_app": "Rinnova nell'app"
+        "credential_wait_personal_in_app": "Rinnova nell'app",
+        "project_stage_in_progress": "Fase già in corso",
+        "project_stage_blocked": "Fase precedente non conclusa",
+        "project_stage_awaiting_checkpoint": "Risultato in attesa di revisione",
+        "project_stage_not_repeatable": "Fase già completata",
+        "project_stage_checkpoint_not_pending": "Niente da accettare"
       },
       "description": {
         "dependencies_unmet": "Questa attività dipende da altre non ancora completate. Completale o sbloccale, poi avviala di nuovo.",
@@ -6788,7 +6794,12 @@
         "project_definition_version_exists": "Questa versione della definizione è già pubblicata e non può cambiare. Pubblica invece una nuova versione.",
         "project_definition_key_registered": "Questo spazio dei nomi appartiene alle definizioni fornite dall'installazione. Pubblica nello spazio dei nomi della tua organizzazione.",
         "project_homed_elsewhere": "Le attività di un progetto vengono create ed eseguite sulla bacheca che lo ospita. Apri quella bacheca per lavorarci.",
-        "credential_wait_personal_in_app": "Una credenziale personale scaduta la rinnova chi ha avviato l'esecuzione, con la propria password, nell'app."
+        "credential_wait_personal_in_app": "Una credenziale personale scaduta la rinnova chi ha avviato l'esecuzione, con la propria password, nell'app.",
+        "project_stage_in_progress": "Un'attività sta già lavorando su questa fase. Attendi che registri il suo risultato, oppure eliminala, prima di avviarne un'altra.",
+        "project_stage_blocked": "Questa fase viene eseguita dopo fasi che non hanno ancora un risultato accettato. Completale prima.",
+        "project_stage_awaiting_checkpoint": "L'ultimo risultato di questa fase attende che qualcuno lo accetti al suo checkpoint. Rivedilo e accettalo prima di eseguire di nuovo la fase.",
+        "project_stage_not_repeatable": "Questa fase ha un risultato accettato e la sua definizione non consente di eseguirla di nuovo.",
+        "project_stage_checkpoint_not_pending": "Questa fase non ha alcun risultato in attesa al suo checkpoint. Potrebbe essere già stato accettato, oppure la sua attività non ne ha ancora registrato uno."
       },
       "action": {
         "connectGitHub": "Collega GitHub",

@@ -808,7 +808,8 @@
         "task_owned_by_project": "This task belongs to a project, which has no service. Use the project's task address instead.",
         "project_definition_invalid": "The definition is refused by its envelope or by its kind. The response lists each problem; fix them and publish again.",
         "project_link_invalid": "That project does not exist or belongs to another organization. Link a project of this organization.",
-        "project_has_no_result": "That project has no result to read yet. Run a task in it first, then link it."
+        "project_has_no_result": "That project has no result to read yet. Run a task in it first, then link it.",
+        "project_task_has_no_stage": "This task belongs to a staged project but was not started from one of its stages, so it cannot run. Start the work from the project's stage instead."
       }
     },
     "action": {
@@ -909,7 +910,12 @@
         "project_definition_version_exists": "Version already published",
         "project_definition_key_registered": "Namespace taken",
         "project_homed_elsewhere": "Project homed on another board",
-        "credential_wait_personal_in_app": "Renew in the app"
+        "credential_wait_personal_in_app": "Renew in the app",
+        "project_stage_in_progress": "Stage already running",
+        "project_stage_blocked": "Earlier stage not finished",
+        "project_stage_awaiting_checkpoint": "Result awaits review",
+        "project_stage_not_repeatable": "Stage already done",
+        "project_stage_checkpoint_not_pending": "Nothing to accept"
       },
       "description": {
         "dependencies_unmet": "This task depends on others that aren't finished yet. Complete or unblock them, then start it again.",
@@ -982,7 +988,12 @@
         "project_definition_version_exists": "This definition version is already published and cannot change. Publish a new version instead.",
         "project_definition_key_registered": "This namespace belongs to definitions the deployment ships. Publish under your organization's own namespace.",
         "project_homed_elsewhere": "A project's tasks are created and run on the board that homes it. Open that board to work on them.",
-        "credential_wait_personal_in_app": "A lapsed personal credential is renewed by the run's initiator, with their password, in the app."
+        "credential_wait_personal_in_app": "A lapsed personal credential is renewed by the run's initiator, with their password, in the app.",
+        "project_stage_in_progress": "This stage already has a task working on it. Wait for that task to record its result, or delete it, before starting another.",
+        "project_stage_blocked": "This stage runs after stages that have no accepted result yet. Finish those first.",
+        "project_stage_awaiting_checkpoint": "This stage's latest result is waiting for someone to accept it at its checkpoint. Review and accept it before running the stage again.",
+        "project_stage_not_repeatable": "This stage has an accepted result and its definition does not let it run again.",
+        "project_stage_checkpoint_not_pending": "This stage has no result waiting at its checkpoint. It may have been accepted already, or its task has not recorded one yet."
       },
       "action": {
         "connectGitHub": "Connect GitHub",

@@ -111,6 +111,14 @@ export function parseResearchDefinition(input: unknown): DefinitionParseResult<R
     : { ok: false, issues: describeValibotIssues(result.issues) }
 }
 
+/** Validate a research spec on its own: a research stage's `config` in a staged definition. */
+export function parseResearchSpec(input: unknown): DefinitionParseResult<ResearchSpec> {
+  const result = v.safeParse(researchSpecSchema, input)
+  return result.success
+    ? { ok: true, value: result.output }
+    : { ok: false, issues: describeValibotIssues(result.issues) }
+}
+
 /** The research kind's validator for the platform's definition registry and publisher. */
 export const researchSpecValidator: ProjectDefinitionSpecValidator = {
   kind: RESEARCH_KIND,

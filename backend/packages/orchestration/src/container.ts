@@ -41,6 +41,7 @@ import { ProjectService } from './modules/projects/ProjectService.js'
 import type { ProjectDefinitionPublisher } from './modules/projects/ProjectDefinitionPublisher.js'
 import type { ProjectOutcomeReader } from './modules/projects/ProjectOutcomeReader.js'
 import type { ProjectBoardViews } from './modules/projects/ProjectBoardViews.js'
+import type { ProjectStageService } from './modules/projects/ProjectStageService.js'
 import type { OutcomeStoragePolicyService } from './modules/projects/OutcomeStoragePolicyService.js'
 import type { TaskProjectLinkService } from './modules/projects/TaskProjectLinkService.js'
 import { createInlineUseCaseService } from './container/use-case-service.js'
@@ -769,6 +770,8 @@ export interface ProjectsModule {
   outcomes: ProjectOutcomeReader
   /** A project as a board reads it: outcomes with where each body lives, readiness, the view. */
   views: ProjectBoardViews
+  /** The stages of a staged project: where each stands, starting one, clearing its checkpoint. */
+  stages: ProjectStageService
   /** The outcome-storage policy tiers. Absent when the facade wires no policy store. */
   storagePolicy?: OutcomeStoragePolicyService
   /** Absent when the facade wires no definition store. */

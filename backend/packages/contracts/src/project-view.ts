@@ -6,6 +6,7 @@ import {
   projectDefinitionVersionSchema,
 } from './project-definitions.js'
 import { outcomeStoragePolicySchema, projectOutcomeMetaSchema } from './project-outcomes.js'
+import { projectStageViewSchema } from './project-stages.js'
 import { projectKindIdSchema } from './projects.js'
 
 // ---------------------------------------------------------------------------
@@ -67,6 +68,8 @@ export const projectBoardViewSchema = v.object({
   credentials: v.array(projectCredentialReadinessSchema),
   /** The kind's reading of every readable outcome; null for a kind that computes none. */
   view: v.unknown(),
+  /** The pinned definition's stages and where each stands; empty when it declares none. */
+  stages: v.array(projectStageViewSchema),
 })
 export type ProjectBoardView = v.InferOutput<typeof projectBoardViewSchema>
 

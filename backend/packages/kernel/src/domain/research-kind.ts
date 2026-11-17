@@ -16,6 +16,7 @@ import {
   foldFindings,
   parseFindingsRevisionBody,
   parseResearchDefinition,
+  parseResearchSpec,
   parseResearchTaskPlan,
   researchProjectView,
   researchProjectViewSchema,
@@ -62,7 +63,20 @@ export const RESEARCH_PROJECT_KIND: ProjectKindDescriptor = {
   ],
 }
 
+/**
+ * The questions a research task answers: its stage's config in a staged project, or the pinned
+ * research definition's spec in a research project.
+ */
 function specOf(input: ProjectTaskInput<FindingsRevisionBody>): ResearchSpec {
+  if (input.stage) {
+    const config = parseResearchSpec(input.stage.config)
+    if (config.ok) return config.value
+    throw new ValidationError(`Research stage '${input.stage.id}' carries no readable config`, {
+      reason: 'project_definition_invalid',
+      stageId: input.stage.id,
+      problems: config.issues,
+    })
+  }
   const parsed = input.definition ? parseResearchDefinition(input.definition) : undefined
   if (!parsed?.ok) {
     throw new ValidationError('A research task needs its project to pin a research definition', {
@@ -267,12 +281,20 @@ export const researchTaskHandler: ProjectTaskHandler<FindingsRevisionBody> = {
 
   artifactRefs: findingsArtifactRefs,
 
+  parseConfig: parseResearchSpec,
+
   schemas: { outcome: findingsRevisionBodySchema },
 }
 
-/** The research findings a view or a linked-context rendering reads. */
+/**
+ * The research findings a research project's view or linked-context rendering reads: the ones its
+ * unstaged research tasks wrote. A research stage writes its own stream over its own questions, so
+ * folding it against the definition's topics would mix two question sets.
+ */
 export function researchOutcomesOf(input: ProjectViewInput) {
-  return outcomesOf(researchTaskHandler, input.outcomes)
+  return outcomesOf(researchTaskHandler, input.outcomes).filter(
+    (o) => o.stream === DEFAULT_OUTCOME_STREAM,
+  )
 }
 
 export const researchKindModule: ProjectKindModule = {
