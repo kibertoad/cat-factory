@@ -65,9 +65,16 @@ export class ProjectOutcomeStore {
     this.log = deps.logger ?? noopLogger
   }
 
-  /** Every outcome of the project with its body's JSON, `seq` ascending. */
-  async list(project: OutcomeProject): Promise<StoredOutcome[]> {
-    const rows = await this.deps.records.listOutcomes(project.id)
+  /**
+   * Every outcome of the project with its body's JSON, `seq` ascending; only the rows `keep`
+   * accepts when given, so a body nobody asked for is never read.
+   */
+  async list(
+    project: OutcomeProject,
+    keep?: (row: ProjectOutcomeRow) => boolean,
+  ): Promise<StoredOutcome[]> {
+    const all = await this.deps.records.listOutcomes(project.id)
+    const rows = keep ? all.filter(keep) : all
     if (!rows.some((row) => row.body.kind === 'offloaded')) {
       return rows.map((row) => ({ row, json: inlineJson(row) }))
     }

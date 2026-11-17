@@ -1,6 +1,6 @@
 # Initiative: Staged project definitions
 
-**Status:** not started · **Owner:** orchestration · **Started:** 2026-11-17
+**Status:** in progress · **Owner:** orchestration · **Started:** 2026-11-17
 
 Builds on [ADR 0069](../../backend/docs/adr/0069-projects-and-research-projects.md) (projects,
 and research as their first kind). Read that first: this tracker only describes what changes.
@@ -13,11 +13,11 @@ of different stages where each stage consumes what the earlier ones settled. The
 (kept org-side, never shipped) is building a vendor integration:
 
 1. discovery research against the vendor;
-2. a dialogue with a human that turns findings into a decision register;
-3. a test rig written into the vendor's test space, only after a human approves the writes;
-4. implementation spread over several service repositories;
-5. hands-on verification against stated "done" criteria;
-6. a knowledge document and handoff built from everything above.
+1. a dialogue with a human that turns findings into a decision register;
+1. a test rig written into the vendor's test space, only after a human approves the writes;
+1. implementation spread over several service repositories;
+1. hands-on verification against stated "done" criteria;
+1. a knowledge document and handoff built from everything above.
 
 The platform must be able to express that sequence, and any other one, as data in a project
 definition. cat-factory ships **mechanisms only**: no vendor, no integration methodology, no
@@ -63,32 +63,29 @@ built-in definition of this shape. A definition without stages behaves exactly a
 
 ## Verified facts the slices start from
 
-1. One kind has exactly one module, one `agentKind` and one `outcomeSchemaVersion`
-   (`kernel/src/domain/project-kind-module.ts`). `ProjectKindModuleRegistry.register` refuses two
-   kinds sharing an agent kind, and dispatch finds the module through `forAgentKind`
-   (`ExecutionService`). A handler reused across kinds needs dispatch to resolve from the step's
-   recorded `project` state instead.
-2. `brief()` receives the project's outcomes decoded by the module's own `parseOutcome`, so today a
-   task can only read outcomes of the body type its own kind writes.
-3. `resolveRepoTarget` stops at a project root with `project_has_no_writable_repo`. ADR 0069 lists
+1. A handler's `brief()` receives only the outcomes its own task type wrote, so a task cannot yet
+   read what another task type of the same project recorded.
+2. `resolveRepoTarget` stops at a project root with `project_has_no_writable_repo`. ADR 0069 lists
    "which linked service an item writes to" as the open question that blocks repo work under a
    project.
-4. The harness `http_request` tool (`executor-harness/src/project/access-tools-server.ts`) accepts
+3. The harness `http_request` tool (`executor-harness/src/project/access-tools-server.ts`) accepts
    any HTTP method. Only the origin is bounded by `targets`; "change nothing in the vendor account"
    is prompt text in `project-researcher`, not enforcement.
-5. Initiatives already have phase checkpoints, just-in-time spawning and item reconciliation
+4. Initiatives already have phase checkpoints, just-in-time spawning and item reconciliation
    (`modules/initiative/InitiativeLoopService.ts`, `initiative.logic.ts`), and an interview on the
    park/signal spine (`InterviewGateController`), all tied to the initiative entity.
-6. Human approvals go through `buildStepApproval`; rubric verdicts go through `JudgeRegistry`.
+5. Human approvals go through `buildStepApproval`; rubric verdicts go through `JudgeRegistry`.
 
 ## Slices
 
 Each slice lands on all three facades with its conformance assertion, and picks a mothership
 bucket for every new repository method in the same PR.
 
-- [ ] **1. Task handlers.** Split `ProjectKindModule` into a kind module plus per-task-type
-      handlers; resolve dispatch from `step.project` (kind plus task type); per-handler body schema
-      version. Research moves onto one handler with no behaviour change. Pure refactor.
+- [x] **1. Task handlers.** A kind module names the `ProjectTaskHandler`s its projects run; a
+      handler owns its task type's agent kind, body schema and version, and may serve several
+      kinds. Dispatch resolves the handler from the task's type under its project's kind, and each
+      outcome row records `taskType` so readers decode it with that handler. Research moves onto
+      one handler with no behaviour change. PR: [#2522](https://github.com/kibertoad/cat-factory/pull/2522)
 - [ ] **2. Stages and derived state.** `stages` in the envelope with validation (acyclic `after`,
       `consumes` naming a produced stream, task types the kind offers); the checkpoint-clearance
       table (D1 migration and Drizzle schema); a pure `deriveStageState` over outcomes and
@@ -121,6 +118,20 @@ bucket for every new repository method in the same PR.
   stays wherever pipeline steps already take it.
 - Live vendor demonstrations inside the decision dialogue. The decision stage works from findings.
 - Publishing the document stage's output to an external wiki. That is a later delivery sink.
+
+## Gotchas
+
+- A task type and an agent kind each name exactly one handler. Dispatch resolves the handler from
+  the task's type under its project's kind and records the task type on the step; checkpointing
+  and recording read it back from there, so all three agree on the handler.
+- An outcome with no recorded task type (a deleted task the backfill could not attribute, or a
+  node one build behind) is decoded by the kind's handler when the kind has exactly one. A kind
+  with several handlers serves such a body as stored.
+- A kind's descriptor and its module list task types separately. A task type the descriptor offers
+  with no handler in the module is refused at dispatch with `task_type_not_offered_by_project`.
+- `GET /api/v1/project-kinds/{kind}` serves one outcome schema, its single handler's. A kind
+  offering several handlers serves null there until slice 9 adds per-task-type schemas.
+- The outcome row's `taskType` is internal: the public outcome envelope does not carry it yet.
 
 ## Open questions
 

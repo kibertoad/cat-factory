@@ -6614,6 +6614,7 @@
         "project_definition_not_found": "Keine Definition dieser Projektart in dieser Organisation passt zu diesem Schlüssel und dieser Version. Prüfe den Schlüssel oder lass die Version leer, um die neueste festzulegen.",
         "project_definition_inputs_invalid": "Die Werte für die Eingaben der Definition erfüllen sie nicht. Fülle jede Pflichteingabe mit einem zulässigen Wert aus und versuche es erneut.",
         "task_type_requires_project": "Eine Aufgabe dieses Typs gehört in ein Projekt, nicht zu einem Service. Füge sie einem Projekt einer Art hinzu, die sie anbietet.",
+        "project_task_type_changed": "Der Typ der Aufgabe hat sich geändert, nachdem ihr Lauf geplant wurde. Der Lauf wurde deshalb angehalten, statt mit einem anderen Handler fertig zu werden. Starte die Aufgabe erneut.",
         "project_not_pinned": "Eine Aufgabe dieses Typs braucht ein Projekt, das eine Definition festlegt, und dieses legt keine fest. Füge die Aufgabe einem Projekt hinzu, das eine festlegt.",
         "project_definition_changed": "Die Definition, die dieses Projekt festgelegt hat, hat sich seitdem geändert. Der Lauf wurde deshalb angehalten, statt mit einer Definition zu arbeiten, der das Projekt nie zugestimmt hat. Bitte deinen Betreiber, die Änderung als neue Version zu veröffentlichen.",
         "project_task_already_recorded": "Diese Aufgabe hat ihr Ergebnis bereits im Projekt festgehalten. Lege für eine Nachfolge eine neue Aufgabe an.",

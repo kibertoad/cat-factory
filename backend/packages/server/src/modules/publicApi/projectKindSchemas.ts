@@ -1,4 +1,4 @@
-import type { ProjectKindSchemas } from '@cat-factory/contracts'
+import type { ProjectKindModule } from '@cat-factory/kernel'
 import { toJsonSchema } from '@valibot/to-json-schema'
 import type * as v from 'valibot'
 
@@ -19,15 +19,20 @@ function convert(schema: v.GenericSchema | undefined): JsonSchema | null {
   return json
 }
 
-/** What `GET /api/v1/project-kinds/{kind}` serves for a kind's schemas: null where it has none. */
-export function kindSchemas(schemas: ProjectKindSchemas | undefined): {
+/**
+ * What `GET /api/v1/project-kinds/{kind}` serves for a kind's schemas: null where it has none.
+ * The outcome schema is its task handler's; a kind offering several handlers writes bodies of
+ * several shapes, which one schema cannot state, so it is null there.
+ */
+export function kindSchemas(module: ProjectKindModule | undefined): {
   spec: JsonSchema | null
   outcome: JsonSchema | null
   view: JsonSchema | null
 } {
+  const only = module?.handlers.length === 1 ? module.handlers[0] : undefined
   return {
-    spec: convert(schemas?.spec),
-    outcome: convert(schemas?.outcome),
-    view: convert(schemas?.view),
+    spec: convert(module?.schemas?.spec),
+    outcome: convert(only?.schemas?.outcome),
+    view: convert(module?.schemas?.view),
   }
 }

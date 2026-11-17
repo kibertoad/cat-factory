@@ -1215,9 +1215,14 @@ export {
 } from './domain/project-kind-registry.js'
 // The code half of a project kind, and the research kind the platform ships.
 export {
+  type DecodedProjectOutcome,
+  type ErasedProjectTaskHandler,
   type ProjectKindModule,
   ProjectKindModuleRegistry,
+  type ProjectTaskHandler,
   type ProjectTaskInput,
+  eraseTaskHandler,
+  outcomesOf,
   type ProjectTaskPlan,
   type ProjectViewInput,
   type ProjectContextRendering,
@@ -1225,8 +1230,10 @@ export {
 export {
   PROJECT_RESEARCHER_AGENT_KIND,
   RESEARCH_PROJECT_KIND,
+  RESEARCH_TASK_TYPE,
   mergeFindingsBodies,
   researchKindModule,
+  researchTaskHandler,
   selectQuestionIds,
 } from './domain/research-kind.js'
 export {

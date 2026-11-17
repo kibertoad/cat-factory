@@ -23,19 +23,29 @@ import {
   researchSpecValidator,
 } from '@cat-factory/contracts'
 import { ValidationError } from './errors.js'
-import type { ProjectKindModule, ProjectTaskInput } from './project-kind-module.js'
+import {
+  type ProjectKindModule,
+  type ProjectTaskHandler,
+  type ProjectTaskInput,
+  type ProjectViewInput,
+  eraseTaskHandler,
+  outcomesOf,
+} from './project-kind-module.js'
 import { renderResearchContext } from './research-context.js'
 
 // ---------------------------------------------------------------------------
-// The RESEARCH project kind the platform ships: its descriptor and its module. A research
-// project pins a research definition (topics of questions about a vendor), and each `research`
-// task answers some of those questions and records one findings revision on the project's
-// `main` stream. Everything here is the kind's own; the engine reaches it only through the
-// `ProjectKindModule` interface. Design: `backend/docs/adr/0069-projects-and-research-projects.md`.
+// The RESEARCH project kind the platform ships: its descriptor, the handler of its `research`
+// task type, and its module. A research project pins a research definition (topics of questions
+// about a vendor), and each `research` task answers some of those questions and records one
+// findings revision on the project's `main` stream. Everything here is the kind's own; the engine
+// reaches it only through the `ProjectTaskHandler` and `ProjectKindModule` interfaces. Design: `backend/docs/adr/0069-projects-and-research-projects.md`.
 // ---------------------------------------------------------------------------
 
 /** The agent kind a research task dispatches. */
 export const PROJECT_RESEARCHER_AGENT_KIND = 'project-researcher'
+
+/** The task type of a research task, run by {@link researchTaskHandler}. */
+export const RESEARCH_TASK_TYPE = 'research'
 
 /** The descriptor the board offers: research tasks that read linked repos and write none. */
 export const RESEARCH_PROJECT_KIND: ProjectKindDescriptor = {
@@ -44,7 +54,11 @@ export const RESEARCH_PROJECT_KIND: ProjectKindDescriptor = {
   description: 'Research a vendor or system against a research definition and keep the findings.',
   definition: 'required',
   taskTypes: [
-    { taskType: 'research', repoAccess: 'linked-read-only', defaultPipelineId: 'pl_research' },
+    {
+      taskType: RESEARCH_TASK_TYPE,
+      repoAccess: 'linked-read-only',
+      defaultPipelineId: 'pl_research',
+    },
   ],
 }
 
@@ -155,11 +169,10 @@ function renderRevision(
   return lines.join('\n')
 }
 
-export const researchKindModule: ProjectKindModule<FindingsRevisionBody> = {
-  kind: RESEARCH_KIND,
+export const researchTaskHandler: ProjectTaskHandler<FindingsRevisionBody> = {
+  taskType: RESEARCH_TASK_TYPE,
   agentKind: PROJECT_RESEARCHER_AGENT_KIND,
   outcomeSchemaVersion: RESEARCH_OUTCOME_SCHEMA_VERSION,
-  parseSpec: researchSpecValidator.parseSpec,
 
   parseOutcome: (schemaVersion, value) =>
     schemaVersion === RESEARCH_OUTCOME_SCHEMA_VERSION
@@ -254,21 +267,33 @@ export const researchKindModule: ProjectKindModule<FindingsRevisionBody> = {
 
   artifactRefs: findingsArtifactRefs,
 
+  schemas: { outcome: findingsRevisionBodySchema },
+}
+
+/** The research findings a view or a linked-context rendering reads. */
+export function researchOutcomesOf(input: ProjectViewInput) {
+  return outcomesOf(researchTaskHandler, input.outcomes)
+}
+
+export const researchKindModule: ProjectKindModule = {
+  kind: RESEARCH_KIND,
+  handlers: [eraseTaskHandler(researchTaskHandler)],
+  parseSpec: researchSpecValidator.parseSpec,
+
   definitionSummary: (definition) => {
     const parsed = parseResearchDefinition(definition)
     return parsed.ok ? parsed.value.spec.brief : definition.title
   },
 
-  view: ({ definition, outcomes }) => {
-    const parsed = definition ? parseResearchDefinition(definition) : undefined
-    return researchProjectView(parsed?.ok ? parsed.value.spec.topics : [], outcomes)
+  view: (input) => {
+    const parsed = input.definition ? parseResearchDefinition(input.definition) : undefined
+    return researchProjectView(
+      parsed?.ok ? parsed.value.spec.topics : [],
+      researchOutcomesOf(input),
+    )
   },
 
-  renderContext: renderResearchContext,
+  renderContext: (input) => renderResearchContext(input.definition, researchOutcomesOf(input)),
 
-  schemas: {
-    spec: researchSpecSchema,
-    outcome: findingsRevisionBodySchema,
-    view: researchProjectViewSchema,
-  },
+  schemas: { spec: researchSpecSchema, view: researchProjectViewSchema },
 }

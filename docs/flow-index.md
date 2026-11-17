@@ -18,8 +18,9 @@ an AUTHORING rule (`validatePipelineAuthoring`) binds create/update, the run doo
 subset that dead-ends ANY run, or every stored pipeline predating it stops running. Doc: [`pipeline-catalog-lifecycle.md`](../backend/docs/pipeline-catalog-lifecycle.md).
 
 **Project task run**: a task under a project (a `research` task under a research project, say)
-dispatches its kind's step as a repo-less harness job, claims its outcome sequence number once per
-TASK, and writes one immutable outcome whose body the kind's module decodes and folds into its view;
+dispatches its task type's step as a repo-less harness job, claims its outcome sequence number once
+per TASK, and writes one immutable outcome recording that task type, whose handler decodes the body
+before the kind's module folds it into its view;
 a credential it lacks parks the step with its partial result, and a task linking the project reads
 the kind's rendering of it at every dispatch. Traps: the claim is per task, so a replayed start must
 read it back rather than take another; and a linked project that cannot be read must break the run,

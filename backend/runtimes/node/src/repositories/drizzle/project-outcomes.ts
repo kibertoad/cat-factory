@@ -110,6 +110,7 @@ function rowToOutcome(row: typeof projectOutcomes.$inferSelect): ProjectOutcomeR
     intent: row.intent,
     schemaVersion: row.schema_version,
     taskId: row.task_id,
+    taskType: row.task_type,
     definitionKey: row.definition_key,
     definitionVersion: row.definition_version,
     artifactRefs: JSON.parse(row.artifact_refs) as string[],
@@ -230,6 +231,8 @@ export class DrizzleProjectRecordRepository implements ProjectRecordRepository {
         intent: row.intent,
         schema_version: row.schemaVersion,
         task_id: row.taskId,
+        // A node one build behind sends no task type; the decoder attributes such a row.
+        task_type: row.taskType ?? null,
         definition_key: row.definitionKey,
         definition_version: row.definitionVersion,
         artifact_refs: JSON.stringify(row.artifactRefs),

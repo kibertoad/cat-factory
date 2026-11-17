@@ -160,6 +160,7 @@ const REASON_DESCRIPTION_KEYS: Record<
   project_definition_not_found: 'errors.reason.description.project_definition_not_found',
   project_definition_inputs_invalid: 'errors.reason.description.project_definition_inputs_invalid',
   task_type_requires_project: 'errors.reason.description.task_type_requires_project',
+  project_task_type_changed: 'errors.reason.description.project_task_type_changed',
   project_not_pinned: 'errors.reason.description.project_not_pinned',
   project_definition_changed: 'errors.reason.description.project_definition_changed',
   project_task_already_recorded: 'errors.reason.description.project_task_already_recorded',

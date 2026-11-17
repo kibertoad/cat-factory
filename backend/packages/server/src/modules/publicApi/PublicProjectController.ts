@@ -174,7 +174,7 @@ function registerKindRoutes(app: Hono<AppEnv>): void {
     const container = c.get('container')
     const descriptor = await container.projectKinds.get(kind)
     if (!descriptor) throw new NotFoundError('ProjectKind', kind)
-    const schemas = kindSchemas(container.projectKindModuleRegistry.get(kind)?.schemas)
+    const schemas = kindSchemas(container.projectKindModuleRegistry.get(kind))
     return c.json({ ...descriptor, schemas }, 200)
   })
 }

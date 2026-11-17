@@ -1,12 +1,11 @@
 import type { Project, ProjectOutcome, ProjectOutcomeMeta } from '@cat-factory/contracts'
 import type {
   ProjectDefinitionSource,
-  ProjectKindModule,
   ProjectKindModuleRegistry,
-  ProjectOutcomeRow,
   ProjectRecordRepository,
 } from '@cat-factory/kernel'
-import type { ProjectOutcomeStore, StoredOutcome } from './ProjectOutcomeStore.js'
+import type { ProjectOutcomeStore } from './ProjectOutcomeStore.js'
+import { decodeOutcome, outcomeMetaOf } from './outcomeDecoding.js'
 
 export interface ProjectOutcomeReaderDeps {
   records: ProjectRecordRepository
@@ -25,7 +24,7 @@ type ReadableProject = Pick<Project, 'id' | 'rootBlockId' | 'kind' | 'accountId'
 
 /**
  * Reads a project's outcomes for a client, whatever the project's kind. Bodies are decoded by the
- * kind's module when this process has one, so a reader sees what the kind normalized; without
+ * handler of the task type that wrote them when this process has one, so a reader sees what the kind normalized; without
  * one a body is served as it was stored, since reading it needs no understanding of it.
  */
 export class ProjectOutcomeReader {
@@ -33,12 +32,18 @@ export class ProjectOutcomeReader {
 
   /** The project's outcomes without their bodies, `seq` ascending; one stream's when given. */
   async list(projectId: string, stream?: string): Promise<ProjectOutcomeMeta[]> {
-    return (await this.deps.records.listOutcomes(projectId, stream)).map(metaOf)
+    return (await this.deps.records.listOutcomes(projectId, stream)).map(outcomeMetaOf)
   }
 
   async get(project: ReadableProject, id: string): Promise<ProjectOutcome | null> {
     const stored = await this.deps.outcomes.get(project, id)
-    return stored ? decode(this.deps.modules.get(project.kind), stored) : null
+    if (!stored) return null
+    const { taskType: _taskType, ...outcome } = decodeOutcome(
+      this.deps.modules,
+      project.kind,
+      stored,
+    )
+    return outcome
   }
 
   /**
@@ -63,23 +68,8 @@ export class ProjectOutcomeReader {
       view: module.view({
         definition: resolved?.definition ?? null,
         inputs: pin?.inputs ?? {},
-        outcomes: stored.map((outcome) => decode(module, outcome)),
+        outcomes: stored.map((outcome) => decodeOutcome(this.deps.modules, project.kind, outcome)),
       }),
     }
   }
-}
-
-function metaOf(row: ProjectOutcomeRow): ProjectOutcomeMeta {
-  const { body: _body, bodyBytes: _bytes, ...meta } = row
-  return meta
-}
-
-function decode(
-  module: ProjectKindModule<unknown> | undefined,
-  { row, json }: StoredOutcome,
-): ProjectOutcome {
-  const raw = JSON.parse(json) as unknown
-  const body = module ? module.parseOutcome(row.schemaVersion, raw) : raw
-  if (body === undefined) throw new Error(`Outcome '${row.id}' holds an unreadable body`)
-  return { ...metaOf(row), body }
 }
