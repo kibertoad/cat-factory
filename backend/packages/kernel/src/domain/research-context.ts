@@ -1,37 +1,42 @@
 import {
   type FindingsRevisionBody,
-  type ProjectDefinition,
   type ProjectOutcome,
   type QuestionFinding,
   type ResearchProjectView,
-  parseResearchDefinition,
+  type ResearchSpec,
   researchProjectView,
 } from '@cat-factory/contracts'
 import type { ProjectContextRendering } from './project-kind-module.js'
 
-// The research kind's linked context: what a task that links a research project reads of it. The
-// folded findings, one summary line and one coverage line for the prompt's index, and the full
-// findings as Markdown for the file the agent opens.
+// Research findings as context for another agent: what a task that links a research project, or a
+// later stage that reads a research stage, sees of them. The folded findings, one summary line and
+// one coverage line for the prompt's index, and the full findings as Markdown for the file the
+// agent opens.
 
-/** A research project's findings rendered for an agent that reads them as linked context. */
+/** Where the questions came from: their spec, and a line naming it (null to name nothing). */
+export interface ResearchContextSource {
+  spec: ResearchSpec | null
+  label: string | null
+}
+
+/** Research findings folded against the questions they answer, rendered for another agent. */
 export function renderResearchContext(
-  pinned: ProjectDefinition | null,
+  source: ResearchContextSource,
   outcomes: ReadonlyArray<ProjectOutcome<FindingsRevisionBody>>,
 ): ProjectContextRendering {
-  const parsed = pinned ? parseResearchDefinition(pinned) : undefined
-  const definition = parsed?.ok ? parsed.value : null
-  const view = researchProjectView(definition?.spec.topics ?? [], outcomes)
+  const topics = source.spec?.topics ?? []
+  const view = researchProjectView(topics, outcomes)
   const { total } = view.coverage
   const count = total.answered + total.partial + total.blocked + total.unanswered
   const coverage =
     `${total.answered} of ${count} questions answered, ${total.partial} partial, ` +
     `${total.blocked} blocked, ${total.unanswered} unanswered`
   const lines: string[] = []
-  if (definition) lines.push(`Research definition: ${definition.key} v${definition.version}`)
+  if (source.label) lines.push(source.label)
   lines.push(`Coverage: ${coverage}`, '')
   if (view.summary) lines.push('## Summary', '', view.summary, '')
   const answerOf = (id: string) => view.findings.find((f) => f.finding.questionId === id)?.finding
-  for (const topic of definition?.spec.topics ?? []) {
+  for (const topic of topics) {
     lines.push(`## ${topic.title}`, '')
     for (const question of topic.questions) {
       lines.push(...renderQuestion(question.question, answerOf(question.id)))

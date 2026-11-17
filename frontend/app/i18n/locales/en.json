@@ -809,7 +809,8 @@
         "project_definition_invalid": "The definition is refused by its envelope or by its kind. The response lists each problem; fix them and publish again.",
         "project_link_invalid": "That project does not exist or belongs to another organization. Link a project of this organization.",
         "project_has_no_result": "That project has no result to read yet. Run a task in it first, then link it.",
-        "project_task_has_no_stage": "This task belongs to a staged project but was not started from one of its stages, so it cannot run. Start the work from the project's stage instead."
+        "project_task_has_no_stage": "This task belongs to a staged project but was not started from one of its stages, so it cannot run. Start the work from the project's stage instead.",
+        "project_stage_upstream_unreadable": "A result an earlier stage recorded, which this task started from, cannot be read now, so the run stopped rather than continue without it. Try again later; if it persists, the stored result needs restoring."
       }
     },
     "action": {

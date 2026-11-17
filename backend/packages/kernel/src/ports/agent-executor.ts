@@ -455,19 +455,7 @@ export interface AgentRunContext {
      * summary and coverage for the in-prompt index, and the full result materialised as a file.
      * Present only when the block links a project.
      */
-    contextProjects?: {
-      projectId: string
-      title: string
-      kind: string
-      /** One-line summary rendered into the in-prompt summary index. */
-      summary: string
-      /** A short statement of how complete the result is (coverage, for research). */
-      coverage: string
-      /** The full result as Markdown, materialised as a file for the agent to read. */
-      body: string
-      /** The latest result the body includes, recorded on the step. */
-      revision: { id: string; seq: number } | null
-    }[]
+    contextProjects?: ContextProjectEntry[]
     contextTasks?: {
       key: string
       url: string
@@ -1030,6 +1018,33 @@ export interface ProjectRunContext {
   linkedFrameBlockIds: string[]
   /** What the kind asks of this task, in the kind's own shape, for the kind's agent prompt. */
   brief: unknown
+  /**
+   * The results of the stages a staged task reads (its stage's `consumes`), each the upstream
+   * result the task started from, rendered by the handler that wrote it. Empty for an unstaged
+   * task. Delivered beside linked projects, as `.cat-context/` files and an index line each.
+   */
+  upstream: ProjectUpstreamContext[]
+}
+
+/** One upstream stage's result as a staged task reads it. */
+export interface ProjectUpstreamContext extends ContextProjectEntry {
+  /** The consumed stage this result is from. */
+  stageId: string
+}
+
+/** A project result an agent reads as context: a linked project, or an upstream stage's result. */
+export interface ContextProjectEntry {
+  projectId: string
+  title: string
+  kind: string
+  /** One-line summary rendered into the in-prompt summary index. */
+  summary: string
+  /** A short statement of how complete the result is (coverage, for research). */
+  coverage: string
+  /** The full result as Markdown, materialised as a file for the agent to read. */
+  body: string
+  /** The latest result the body includes; null when there was no result to read. */
+  revision: { id: string; seq: number } | null
 }
 
 /** A credential the agent stopped to ask a person for. */

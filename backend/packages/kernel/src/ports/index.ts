@@ -278,6 +278,8 @@ export type {
   AgentRunResult,
   CredentialRequest,
   ProjectRunContext,
+  ProjectUpstreamContext,
+  ContextProjectEntry,
   AgentTokenUsage,
   AsyncAgentExecutor,
   ReviewedPoint,

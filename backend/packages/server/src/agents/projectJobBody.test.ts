@@ -1,7 +1,9 @@
 import type { ProjectDefinition } from '@cat-factory/contracts'
 import { CapabilityCredentialMissingError, type ToolSecretResolver } from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
-import { resolveProjectCredentials } from './projectJobBody.js'
+import { defaultAgentKindRegistry } from '@cat-factory/agents'
+import type { AgentRunContext } from '@cat-factory/kernel'
+import { buildProjectJobBody, resolveProjectCredentials } from './projectJobBody.js'
 
 function definition(credentials: ProjectDefinition['credentials']): ProjectDefinition {
   return {
@@ -79,5 +81,62 @@ describe('resolveProjectCredentials', () => {
     )
     expect(resolved).toEqual([])
     expect(seen).toEqual([])
+  })
+})
+
+describe('buildProjectJobBody', () => {
+  it('materialises what the task reads and points the prompt at it, for any project kind', async () => {
+    const context = {
+      agentKind: 'project-researcher',
+      block: {
+        id: 'task_1',
+        title: 'Deepen',
+        description: 'Deepen the research.',
+        contextProjects: [
+          {
+            projectId: 'prj_1',
+            title: 'Stage Discover',
+            kind: 'research',
+            summary: 'Uses OAuth.',
+            coverage: '1 of 1 questions answered',
+            body: 'The scheme is OAuth client credentials.',
+            revision: { id: 'pout_1', seq: 1 },
+          },
+        ],
+      },
+      project: {
+        projectId: 'prj_1',
+        kind: 'research',
+        definition: definition([]),
+        inputs: {},
+        linkedFrameBlockIds: [],
+        upstream: [],
+        brief: { mode: 'initial', brief: 'Learn.', questions: [], priorFindings: [] },
+      },
+    } as unknown as AgentRunContext
+    const { body } = await buildProjectJobBody(
+      context,
+      { workspaceId: 'ws_1', executionId: 'exec_1', jobId: 'job_1' },
+      {
+        agentKindRegistry: defaultAgentKindRegistry(),
+        mintInstallationToken: async () => 'token',
+        resolveRepoOrigin: () => {
+          throw new Error('no repo is linked')
+        },
+        resolveModel: async () => ({ model: 'm', provider: 'p' }),
+        resolveAuth: async () => ({ auth: {} }),
+        resolveToolServers: async () => ({
+          toolServers: [],
+          unavailableToolServers: [],
+          mcpServers: [],
+        }),
+      },
+    )
+    const files = body.contextFiles as { path: string; content: string }[]
+    expect(files.map((f) => f.path)).toEqual(['project-stage-discover.md'])
+    expect(files[0]!.content).toContain('The scheme is OAuth client credentials.')
+    expect(body.userPrompt).toContain(
+      '- Stage Discover (research project, revision 1): Uses OAuth.',
+    )
   })
 })

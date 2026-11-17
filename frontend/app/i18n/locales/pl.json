@@ -734,7 +734,8 @@
         "project_definition_invalid": "Definicję odrzuca jej struktura lub jej rodzaj projektu. Odpowiedź wymienia każdy problem; popraw je i opublikuj ponownie.",
         "project_link_invalid": "Ten projekt nie istnieje albo należy do innej organizacji. Powiąż projekt tej organizacji.",
         "project_has_no_result": "Ten projekt nie ma jeszcze wyniku do odczytania. Najpierw uruchom w nim zadanie, a potem go połącz.",
-        "project_task_has_no_stage": "To zadanie należy do projektu z etapami, ale nie zostało uruchomione z żadnego z jego etapów, więc nie może się wykonać. Zamiast tego rozpocznij pracę z etapu projektu."
+        "project_task_has_no_stage": "To zadanie należy do projektu z etapami, ale nie zostało uruchomione z żadnego z jego etapów, więc nie może się wykonać. Zamiast tego rozpocznij pracę z etapu projektu.",
+        "project_stage_upstream_unreadable": "Wynik wcześniejszego etapu, od którego to zadanie wyszło, nie może być teraz odczytany, więc uruchomienie zatrzymało się, zamiast kontynuować bez niego. Spróbuj ponownie później; jeśli to się powtarza, zapisany wynik trzeba przywrócić."
       }
     },
     "action": {

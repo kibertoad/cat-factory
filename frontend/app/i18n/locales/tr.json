@@ -734,7 +734,8 @@
         "project_definition_invalid": "Tanım, yapısı ya da proje türü tarafından reddedildi. Yanıt her sorunu listeler; bunları düzeltip yeniden yayımlayın.",
         "project_link_invalid": "Bu proje yok veya başka bir kuruluşa ait. Bu kuruluşun bir projesini bağlayın.",
         "project_has_no_result": "Bu projenin henüz okunacak bir sonucu yok. Önce içinde bir görev çalıştırın, sonra bağlayın.",
-        "project_task_has_no_stage": "Bu görev aşamalı bir projeye ait, ancak aşamalarından birinden başlatılmadığı için çalışamaz. Bunun yerine işi projenin aşamasından başlatın."
+        "project_task_has_no_stage": "Bu görev aşamalı bir projeye ait, ancak aşamalarından birinden başlatılmadığı için çalışamaz. Bunun yerine işi projenin aşamasından başlatın.",
+        "project_stage_upstream_unreadable": "Bu görevin başladığı önceki bir aşamanın sonucu şu anda okunamıyor; bu yüzden çalıştırma onsuz devam etmek yerine durdu. Daha sonra yeniden deneyin; sorun sürerse kayıtlı sonucun geri yüklenmesi gerekir."
       }
     },
     "action": {

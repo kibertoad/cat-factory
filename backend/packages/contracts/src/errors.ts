@@ -643,6 +643,9 @@ export type CredentialWaitReason = (typeof CREDENTIAL_WAIT_REASONS)[number]
  *                                       task type's handler.
  *  - `project_task_has_no_stage`        the task is under a staged project but was not started from
  *                                       one of its stages, so no stage says what it runs.
+ *  - `project_stage_upstream_unreadable` a result of a stage the task consumes, which the task
+ *                                       started from, cannot be read now. `details` names the
+ *                                       stage and the outcome.
  *  - `research_nothing_to_ask`          the research kind's own: the task's mode selects no
  *                                       question (an `extend` with no new question, or a `clarify`
  *                                       with nothing partial or blocked).
@@ -679,6 +682,7 @@ export const PROJECT_REASONS = [
   'project_task_already_recorded',
   'project_task_type_changed',
   'project_task_has_no_stage',
+  'project_stage_upstream_unreadable',
   'research_nothing_to_ask',
   'outcome_too_large_for_inline',
   'task_owned_by_project',

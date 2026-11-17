@@ -63,8 +63,8 @@ built-in definition of this shape. A definition without stages behaves exactly a
 
 ## Verified facts the slices start from
 
-1. A handler's `brief()` receives only the outcomes its own task type wrote, so a task cannot yet
-   read what another task type of the same project recorded.
+1. A handler's `brief()` receives only the outcomes its own stage (or, unstaged, its own task
+   type) wrote; anything else a task reads arrives as context through `consumes` or a link.
 2. `resolveRepoTarget` stops at a project root with `project_has_no_writable_repo`. ADR 0069 lists
    "which linked service an item writes to" as the open question that blocks repo work under a
    project.
@@ -96,9 +96,13 @@ bucket for every new repository method in the same PR.
 - [x] **2b. Auto-start.** A stage with `start: 'auto'` creates and starts its task once it is
       ready: at project creation, after an outcome records, and after a checkpoint clears
       (`ProjectStageService.advance`, through a late-bound run starter). PR: [#2524](https://github.com/kibertoad/cat-factory/pull/2524)
-- [ ] **3. Upstream context.** A stage's consumed streams rendered by their handlers into
-      `.cat-context/`; the read `seq` recorded on the step; a consumed stream that cannot be read
-      breaks the run naming it.
+- [x] **3. Upstream context.** A staged task reads each stage its stage `consumes`, up to exactly
+      the result its stage task started from (`basis`), rendered by the writing handler's
+      `renderContext` (research folds a stage's findings against that stage's questions) and
+      scrubbed of secrets. The renderings ride the linked-project path (`.cat-context/` files and
+      the prompt index, both now in every project job's body); the step records what it read in
+      `step.project.upstream`; a consumed stage with no accepted result is stated, and one whose
+      result cannot be read refuses the dispatch with `project_stage_upstream_unreadable`. PR: [#2525](https://github.com/kibertoad/cat-factory/pull/2525)
 - [ ] **4. Controlled vendor writes.** `targets[].access: 'read' | 'write'` and optional path
       scoping; the harness refuses non-GET/HEAD on a read target and anything outside the scope; a
       write stage parks for approval of its write plan through `buildStepApproval`. Bumps the
@@ -151,10 +155,11 @@ bucket for every new repository method in the same PR.
   result accepted at a checkpoint after the downstream task recorded still makes it stale.
 - A definition that declares no stages hashes without the `stages` key, so pins taken before
   definitions carried stages stay valid.
-- The research kind's view and linked context fold only its unstaged `main` stream against the
-  definition's topics. A research stage's findings are listed as outcomes but get no folded view
-  until handlers render per-stream context (slice 3). A staged definition of the research kind
-  still carries the kind's top-level spec; a kind built for stages declares its own spec.
+- The research kind's project view and its linked-project rendering fold only its unstaged
+  `main` stream against the definition's topics. A research stage's findings reach a later stage
+  through `consumes`, rendered against that stage's own questions; a per-stage view on the board
+  comes with the stage rail (slice 9). A staged definition of the research kind still carries the
+  kind's top-level spec; a kind built for stages declares its own.
 
 - An automatic stage is started by the engine with no person behind it, like an initiative's
   spawned task: its task is created under the unattributed editor and its run is started with no

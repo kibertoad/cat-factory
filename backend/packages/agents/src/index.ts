@@ -243,6 +243,7 @@ export {
   standardSystemPrompt,
   renderStandardUserPrompt,
   renderLinkedContext,
+  linkedContextSection,
   initiativePresetSection,
   CONTEXT_DIR,
   REFERENCE_SCREENSHOT_DIR,
