@@ -92,7 +92,7 @@ bucket for every new repository method in the same PR.
       (D1 0119 and its Drizzle twin) binding a task to its stage, with a partial unique index as the
       one-open-task-per-stage claim; `deriveProjectStageStates` in contracts; the board view's
       `stages`; `POST .../stages/:stageId/tasks` and `POST .../stages/:stageId/checkpoint`. A staged
-      task plans from its stage's config and history and writes its stage's stream. PR: (this slice)
+      task plans from its stage's config and history and writes its stage's stream. PR: [#2523](https://github.com/kibertoad/cat-factory/pull/2523)
 - [ ] **2b. Auto-start.** A stage with `start: 'auto'` creates and starts its task once it is
       ready: at project creation, after an outcome records, and after a checkpoint clears.
 - [ ] **3. Upstream context.** A stage's consumed streams rendered by their handlers into
