@@ -629,3 +629,9 @@ Additive. A consumer built against 1.96.0 keeps parsing.
 A task can link projects as read-only context: `GET`/`POST /api/v1/tasks/{taskId}/projects` lists and links one, `POST .../projects/detach` unlinks it, and `POST /api/v1/services/{serviceId}/tasks` takes an optional `projects` list. A linked project's current result reaches the task's agents at every dispatch. A link is refused with `422`, reason `project_link_invalid` (another organization's project, or none) or `project_has_no_result` (a project no task has recorded an outcome in yet). The three routes answer a task under a service and a task under a project alike.
 
 Additive. A consumer built against 1.97.0 keeps parsing.
+
+## 1.99.0
+
+A project definition may declare `stages`: each runs one task type and writes one outcome stream, runs after the stages it names in `after`, reads the stages in its ancestry it names in `consumes`, and may hold each result at a `checkpoint` until a person accepts it. `start`, `checkpoint` and `repeatable` say how it starts and reruns, and `config` is validated by the stage's task type. A definition published through `PUT /api/v1/project-kinds/{kind}/definitions/{key}/versions/{version}` is validated against them, and one read back carries them (empty when it declares none).
+
+Additive. A consumer built against 1.98.0 keeps parsing, and a definition that declares no stages hashes as before.
