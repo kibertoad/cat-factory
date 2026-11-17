@@ -119,8 +119,8 @@ bucket for every new repository method in the same PR.
       kind does not. The stage rail renders the register (slice 9). PR: [#2528](https://github.com/kibertoad/cat-factory/pull/2528)
 - [x] **6a. Staged linked context.** A task that links a staged project reads each stage's
       accepted result, rendered by its handler, in the definition's order; a stage with none yet
-      is stated. The kind's own project-level rendering stays for an unstaged project. PR: (this
-      slice)
+      is stated. The kind's own project-level rendering stays for an unstaged project. PR:
+      [#2529](https://github.com/kibertoad/cat-factory/pull/2529)
 - [ ] **6b. Spawn stage.** A stage that creates a task in each linked service (configurable title,
       task type and brief), links the project so each reads the stages' results, starts their
       runs, and records what it spawned; its checkpoint refuses acceptance until every spawned
