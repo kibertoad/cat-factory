@@ -104,7 +104,7 @@ bucket for every new repository method in the same PR.
       a stage may declare `writes`, and must then run after a checkpointed stage in a definition
       with a writable target. The job body opens a writable target only to a writing stage's run,
       and the harness refuses any non-read method on a read target and any path outside a prefix
-      (runner image 1.168.0). The browser is not bound: see `security-model.md`. PR: (this slice)
+      (runner image 1.168.0). The browser is not bound: see `security-model.md`. PR: [#2526](https://github.com/kibertoad/cat-factory/pull/2526)
 - [ ] **5. Decision stage.** A handler whose agent proposes items (question, recommended default,
       trade-off, evidence) and parks for the human to answer, accept, or dismiss each one; writes a
       `decisions` stream. Reuses the clarification-item vocabulary and component.
