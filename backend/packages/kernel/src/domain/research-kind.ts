@@ -283,19 +283,15 @@ export const researchTaskHandler: ProjectTaskHandler<FindingsRevisionBody> = {
 
   parseConfig: parseResearchSpec,
 
-  renderContext: ({ definition, stage, outcomes }) => {
-    if (stage) {
-      const config = parseResearchSpec(stage.config)
-      return renderResearchContext(
-        { spec: config.ok ? config.value : null, label: `Research stage: ${stage.title}` },
-        outcomes,
-      )
-    }
-    const parsed = definition ? parseResearchDefinition(definition) : undefined
-    return renderResearchContext(
-      { spec: parsed?.ok ? parsed.value.spec : null, label: null },
-      outcomes,
-    )
+  renderContext: ({ stage, outcomes }) => {
+    const config = parseResearchSpec(stage.config)
+    // A config this build cannot read leaves the findings without their questions: say so, so
+    // the reader never takes the missing questions for a thin result.
+    const label = config.ok
+      ? `Research stage: ${stage.title}`
+      : `Research stage: ${stage.title}. Its questions could not be read (${config.issues.join('; ')}), ` +
+        'so the findings below are listed without them.'
+    return renderResearchContext({ spec: config.ok ? config.value : null, label }, outcomes)
   },
 
   schemas: { outcome: findingsRevisionBodySchema },

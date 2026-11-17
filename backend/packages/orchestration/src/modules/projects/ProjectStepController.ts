@@ -19,6 +19,7 @@ import {
   type PipelineStep,
   type ProjectDefinitionSource,
   type ProjectKindModuleRegistry,
+  type ProjectOutcomeRow,
   type ProjectRecordRepository,
   type ProjectRepository,
   type ProjectRunContext,
@@ -67,6 +68,8 @@ interface ResolvedTask {
   definition: ProjectDefinition | null
   inputs: Record<string, unknown>
   outcomes: DecodedProjectOutcome[]
+  /** Every outcome envelope of the project, listed once per dispatch. */
+  envelopes: ProjectOutcomeRow[]
   /** The stage the task runs, with its record and the project's, for a staged project. */
   staged: { stage: ProjectStage; record: ProjectStageTask; records: ProjectStageTask[] } | null
 }
@@ -98,7 +101,15 @@ export class ProjectStepController {
    * fixes the kind's plan on the step; a replayed or resumed dispatch reads both back, so the
    * agent is asked the same and the outcome keeps its place in the fold.
    */
-  async prepare(step: PipelineStep, block: Block): Promise<ProjectRunContext> {
+  /**
+   * `reattach` is a durable replay attaching to the step's live job rather than dispatching one:
+   * nothing it builds reaches an agent, so the upstream results are neither read nor re-recorded.
+   */
+  async prepare(
+    step: PipelineStep,
+    block: Block,
+    opts: { reattach?: boolean } = {},
+  ): Promise<ProjectRunContext> {
     const task = await this.resolveTask(block, step.agentKind)
     if (step.project?.taskType && step.project.taskType !== task.handler.taskType) {
       throw new ValidationError("The task's type changed after its run was planned", {
@@ -141,22 +152,20 @@ export class ProjectStepController {
     }
     if (!step.project.taskType) step.project = { ...step.project, taskType: task.handler.taskType }
     const upstream =
-      task.staged && task.definition
+      task.staged && task.definition && !opts.reattach
         ? await renderStageUpstream(
-            {
-              records: this.deps.records,
-              outcomes: this.deps.outcomes,
-              modules: this.deps.modules,
-            },
+            { outcomes: this.deps.outcomes, modules: this.deps.modules },
             {
               project: task.project,
               definition: task.definition,
               inputs: task.inputs,
               ...task.staged,
+              envelopes: task.envelopes,
+              decoded: task.outcomes,
             },
           )
         : []
-    if (task.staged) {
+    if (task.staged && !opts.reattach) {
       step.project = {
         ...step.project,
         upstream: upstream.map((u) => ({
@@ -356,13 +365,17 @@ export class ProjectStepController {
       : null
     // Only this handler's outcomes are read and decoded: another task type's body is never read,
     // so one that is unreadable just now cannot stop this task.
-    const stored = await this.deps.outcomes.list(
+    const envelopes = await this.deps.records.listOutcomes(project.id)
+    const stored = await this.deps.outcomes.bodiesOf(
       project,
-      (row) => outcomeTaskType(this.deps.modules, project.kind, row) === handler.taskType,
+      envelopes.filter(
+        (row) => outcomeTaskType(this.deps.modules, project.kind, row) === handler.taskType,
+      ),
     )
     return {
       project,
       handler,
+      envelopes,
       staged: await this.stageOf(project, definition, block, handler),
       definition,
       inputs: pin?.inputs ?? {},

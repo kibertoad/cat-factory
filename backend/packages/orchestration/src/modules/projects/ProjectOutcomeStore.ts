@@ -74,7 +74,14 @@ export class ProjectOutcomeStore {
     keep?: (row: ProjectOutcomeRow) => boolean,
   ): Promise<StoredOutcome[]> {
     const all = await this.deps.records.listOutcomes(project.id)
-    const rows = keep ? all.filter(keep) : all
+    return this.bodiesOf(project, keep ? all.filter(keep) : all)
+  }
+
+  /** The bodies of rows a caller already listed, in their order, so no envelope is listed twice. */
+  async bodiesOf(
+    project: OutcomeProject,
+    rows: readonly ProjectOutcomeRow[],
+  ): Promise<StoredOutcome[]> {
     if (!rows.some((row) => row.body.kind === 'offloaded')) {
       return rows.map((row) => ({ row, json: inlineJson(row) }))
     }

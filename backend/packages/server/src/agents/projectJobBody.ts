@@ -18,7 +18,8 @@ import { buildDispatchPromptContext } from './dispatchPromptContext.js'
 import type { ResolvedToolServers } from './toolServers.js'
 import type { MintInstallationToken, RepoTarget, ResolveRepoOrigin } from './repoTargeting.js'
 import type { ResolveRepoTargets } from './resolveRepoTarget.js'
-import { toolServersSection } from '@cat-factory/agents'
+import { linkedContextSection, toolServersSection } from '@cat-factory/agents'
+import { buildDispatchContextFiles } from './contextFiles.js'
 
 // ---------------------------------------------------------------------------
 // The harness body of a PROJECT job (`kind: 'project'`), the repo-less sibling of `buildJobBody`,
@@ -88,6 +89,10 @@ export async function buildProjectJobBody(
   const role = composeRoleSystemPrompt(promptContext, deps.agentKindRegistry)
   const toolSection = toolServersSection(promptContext)
   const userPrompt = deps.agentKindRegistry.userPrompt(promptContext) ?? context.block.description
+  // What the task links and what earlier stages of its project settled, for every project kind:
+  // the files in `.cat-context/` and one index the prompt points at them with.
+  const contextFiles = buildDispatchContextFiles(context)
+  const known = linkedContextSection(context, { materialized: true })
   const output = deps.agentKindRegistry.agentStep(context.agentKind)?.output
   const body: Record<string, unknown> = {
     jobId: ids.jobId,
@@ -96,7 +101,8 @@ export async function buildProjectJobBody(
     model: model.model,
     ...authResult.auth,
     systemPrompt: toolSection ? `${role}\n\n${toolSection}` : role,
-    userPrompt: `${userPrompt}${linked.section ? `\n\n${linked.section}` : ''}`,
+    userPrompt: `${userPrompt}${known}${linked.section ? `\n\n${linked.section}` : ''}`,
+    ...(contextFiles.length ? { contextFiles } : {}),
     ...(output ? { output } : {}),
     ...(ghToken ? { ghToken } : {}),
     ...(linked.referenceRepos.length ? { referenceRepos: linked.referenceRepos } : {}),

@@ -4,6 +4,7 @@ import type {
   StepCompletionResolver,
 } from '@cat-factory/kernel'
 import type { AdvanceResult } from '../execution/advance.js'
+import { liveJobId } from '../execution/step-fold.logic.js'
 import type {
   StepCompletionInterceptor,
   StepHandler,
@@ -38,7 +39,9 @@ export function projectStepHandler(d: ProjectRegistrationDeps): StepHandler {
     order: 179,
     canHandle: ({ step }) => !!d.projectStep?.handles(step.agentKind),
     handle: async (ctx) => {
-      const project = await d.projectStep!.prepare(ctx.step, ctx.block)
+      const project = await d.projectStep!.prepare(ctx.step, ctx.block, {
+        reattach: liveJobId(ctx.step) !== undefined,
+      })
       return d.handleAgentStep(ctx, undefined, (context) => {
         context.project = project
         // An upstream stage's result reaches the agent the way a linked project's does: a
@@ -46,15 +49,7 @@ export function projectStepHandler(d: ProjectRegistrationDeps): StepHandler {
         if (project.upstream.length) {
           context.block.contextProjects = [
             ...(context.block.contextProjects ?? []),
-            ...project.upstream.map((u) => ({
-              projectId: project.projectId,
-              title: u.title,
-              kind: project.kind,
-              summary: u.summary,
-              coverage: u.coverage,
-              body: u.body,
-              revision: u.revision,
-            })),
+            ...project.upstream,
           ]
         }
       })

@@ -75,6 +75,10 @@ export function projectStageIssues(stages: readonly ProjectStage[]): string[] {
   else {
     for (const stage of stages) {
       const ancestry = ancestorsOf(stages, stage.id)
+      const read = stage.consumes.map((c) => c.stage)
+      for (const repeated of new Set(read.filter((id, i) => read.indexOf(id) !== i))) {
+        issues.push(`stage '${stage.id}' reads stage '${repeated}' more than once`)
+      }
       for (const input of stage.consumes) {
         if (!ancestry.has(input.stage)) {
           issues.push(

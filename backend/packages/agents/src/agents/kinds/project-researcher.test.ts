@@ -2,9 +2,9 @@ import type { AgentRunContext } from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
 import { projectResearcherUserPrompt } from './project-researcher.js'
 
-function context(contextProjects?: AgentRunContext['block']['contextProjects']): AgentRunContext {
+function context(): AgentRunContext {
   return {
-    block: { description: 'Research the vendor.', ...(contextProjects ? { contextProjects } : {}) },
+    block: { description: 'Research the vendor.' },
     project: {
       projectId: 'prj_1',
       kind: 'research',
@@ -34,26 +34,11 @@ function context(contextProjects?: AgentRunContext['block']['contextProjects']):
 }
 
 describe('projectResearcherUserPrompt', () => {
-  it('points at what earlier stages and linked projects found, materialised as context files', () => {
-    const prompt = projectResearcherUserPrompt(
-      context([
-        {
-          projectId: 'prj_1',
-          title: 'Stage Discover',
-          kind: 'research',
-          summary: 'Uses OAuth.',
-          coverage: '1 of 1 questions answered',
-          body: '...',
-          revision: { id: 'pout_1', seq: 1 },
-        },
-      ]),
-    )
-    expect(prompt).toContain('How does paging work?')
-    expect(prompt).toContain('`project-<name>.md`')
-    expect(prompt).toContain('- Stage Discover (research project, revision 1): Uses OAuth.')
-  })
-
-  it('adds no context index when there is nothing to read', () => {
-    expect(projectResearcherUserPrompt(context())).not.toContain('Linked projects')
+  it('asks the planned questions against the targets, and leaves linked context to the job body', () => {
+    const prompt = projectResearcherUserPrompt(context())
+    expect(prompt).toContain('`paging` (API): How does paging work?')
+    expect(prompt).toContain('https://vendor.example (API)')
+    // The index of linked and upstream results is appended once for every project kind.
+    expect(prompt).not.toContain('Linked projects')
   })
 })

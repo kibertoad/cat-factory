@@ -45,6 +45,15 @@ describe('projectStageIssues', () => {
     ])
   })
 
+  it('refuses a stage reading one upstream stage twice', () => {
+    expect(
+      projectStageIssues([
+        stage('a'),
+        stage('b', { after: ['a'], consumes: [{ stage: 'a' }, { stage: 'a' }] }),
+      ]),
+    ).toEqual(["stage 'b' reads stage 'a' more than once"])
+  })
+
   it('names a cycle instead of reading through it', () => {
     const issues = projectStageIssues([
       stage('a', { after: ['c'] }),

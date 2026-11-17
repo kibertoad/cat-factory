@@ -734,7 +734,8 @@
         "project_definition_invalid": "La definición la rechaza su estructura o su tipo de proyecto. La respuesta enumera cada problema; corrígelos y vuelve a publicar.",
         "project_link_invalid": "Ese proyecto no existe o pertenece a otra organización. Vincula un proyecto de esta organización.",
         "project_has_no_result": "Ese proyecto aún no tiene ningún resultado que leer. Ejecuta primero una tarea en él y luego vincúlalo.",
-        "project_task_has_no_stage": "Esta tarea pertenece a un proyecto por etapas, pero no se inició desde una de sus etapas, así que no puede ejecutarse. Inicia el trabajo desde la etapa del proyecto."
+        "project_task_has_no_stage": "Esta tarea pertenece a un proyecto por etapas, pero no se inició desde una de sus etapas, así que no puede ejecutarse. Inicia el trabajo desde la etapa del proyecto.",
+        "project_stage_upstream_unreadable": "Un resultado de una etapa anterior, del que partió esta tarea, no se puede leer ahora, así que la ejecución se detuvo en lugar de continuar sin él. Inténtalo más tarde; si persiste, hay que restaurar el resultado guardado."
       }
     },
     "action": {

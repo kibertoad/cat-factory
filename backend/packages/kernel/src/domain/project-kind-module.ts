@@ -43,8 +43,8 @@ export interface ProjectTaskInput<Body> {
 export interface ProjectStreamContextInput<Body> {
   definition: ProjectDefinition | null
   inputs: Record<string, unknown>
-  /** The stage that wrote the stream, with its config as normalized; null for an unstaged one. */
-  stage: { id: string; title: string; config: unknown } | null
+  /** The stage that wrote the stream, with its config as normalized. */
+  stage: { id: string; title: string; config: unknown }
   /** The stream's outcomes to render, `seq` ascending, decoded by this handler. */
   outcomes: ReadonlyArray<ProjectOutcome<Body>>
 }
@@ -91,7 +91,7 @@ export interface ProjectTaskHandler<Body = unknown> {
   /** The binary artifacts a body references, for the outcome's `artifactRefs`. */
   artifactRefs(body: Body): string[]
   /**
-   * One stream's outcomes, written by tasks of this type, rendered as read-only context for
+   * One stage's outcomes, written by tasks of this type, rendered as read-only context for
    * another agent: a later stage that reads this one. Absent: the platform shows the newest
    * outcome as recorded.
    */

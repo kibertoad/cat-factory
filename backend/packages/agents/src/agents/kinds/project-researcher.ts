@@ -1,6 +1,5 @@
 import { RESEARCH_KIND, type ResearchBrief, type ResearchMode } from '@cat-factory/contracts'
 import type { AgentRunContext } from '@cat-factory/kernel'
-import { renderLinkedProjects } from '../prompts/standard.js'
 import type { AgentKindDefinition, AgentKindRegistry } from './registry.js'
 
 // ---------------------------------------------------------------------------
@@ -110,10 +109,7 @@ export function projectResearcherUserPrompt(context: AgentRunContext): string {
   }
   const steering = definition.promptAdditions[PROJECT_RESEARCHER_KIND]
   if (steering) lines.push('', '## Guidance from the definition', steering)
-  // What earlier stages of this project, and the projects this task links, already found: the
-  // agent reads it before asking the vendor again.
-  const known = renderLinkedProjects(context.block.contextProjects, { materialized: true })
-  return lines.join('\n') + known
+  return lines.join('\n')
 }
 
 export const PROJECT_RESEARCHER_AGENT_KINDS: AgentKindDefinition[] = [

@@ -162,6 +162,7 @@ const REASON_DESCRIPTION_KEYS: Record<
   task_type_requires_project: 'errors.reason.description.task_type_requires_project',
   project_task_type_changed: 'errors.reason.description.project_task_type_changed',
   project_task_has_no_stage: 'errors.reason.description.project_task_has_no_stage',
+  project_stage_upstream_unreadable: 'errors.reason.description.project_stage_upstream_unreadable',
   project_not_pinned: 'errors.reason.description.project_not_pinned',
   project_definition_changed: 'errors.reason.description.project_definition_changed',
   project_task_already_recorded: 'errors.reason.description.project_task_already_recorded',
