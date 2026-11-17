@@ -6,7 +6,8 @@ CREATE TABLE "project_stage_tasks" (
 	"basis" text NOT NULL,
 	"recorded_at" bigint,
 	"cleared_at" bigint,
-	"cleared_by" text
+	"cleared_by" text,
+	"accepted_outcome_id" text
 );
 --> statement-breakpoint
 CREATE INDEX "idx_project_stage_tasks_project" ON "project_stage_tasks" ("project_id");--> statement-breakpoint

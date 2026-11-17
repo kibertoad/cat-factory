@@ -163,6 +163,11 @@ const REASON_DESCRIPTION_KEYS: Record<
   project_task_type_changed: 'errors.reason.description.project_task_type_changed',
   project_task_has_no_stage: 'errors.reason.description.project_task_has_no_stage',
   project_stage_upstream_unreadable: 'errors.reason.description.project_stage_upstream_unreadable',
+  project_stage_revision_required: 'errors.reason.description.project_stage_revision_required',
+  project_stage_revision_unsupported:
+    'errors.reason.description.project_stage_revision_unsupported',
+  project_stage_revision_invalid: 'errors.reason.description.project_stage_revision_invalid',
+  project_stage_result_unreadable: 'errors.reason.description.project_stage_result_unreadable',
   project_not_pinned: 'errors.reason.description.project_not_pinned',
   project_definition_changed: 'errors.reason.description.project_definition_changed',
   project_task_already_recorded: 'errors.reason.description.project_task_already_recorded',

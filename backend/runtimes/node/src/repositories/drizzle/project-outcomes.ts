@@ -307,6 +307,7 @@ export class DrizzleProjectRecordRepository implements ProjectRecordRepository {
         recorded_at: row.recordedAt,
         cleared_at: row.clearedAt,
         cleared_by: row.clearedBy,
+        accepted_outcome_id: row.acceptedOutcomeId,
       })
       .onConflictDoNothing()
       .returning({ id: projectStageTasks.task_id })
@@ -340,10 +341,11 @@ export class DrizzleProjectRecordRepository implements ProjectRecordRepository {
     taskId: string,
     clearedAt: number,
     clearedBy: string | null,
+    acceptedOutcomeId: string | null,
   ): Promise<boolean> {
     const cleared = await this.db
       .update(projectStageTasks)
-      .set({ cleared_at: clearedAt, cleared_by: clearedBy })
+      .set({ cleared_at: clearedAt, cleared_by: clearedBy, accepted_outcome_id: acceptedOutcomeId })
       .where(
         and(
           eq(projectStageTasks.project_id, projectId),
@@ -387,6 +389,7 @@ function rowToStageTask(row: typeof projectStageTasks.$inferSelect): ProjectStag
     recordedAt: row.recorded_at,
     clearedAt: row.cleared_at,
     clearedBy: row.cleared_by,
+    acceptedOutcomeId: row.accepted_outcome_id,
   }
 }
 

@@ -97,6 +97,22 @@ export interface ProjectTaskHandler<Body = unknown> {
    */
   renderContext?(input: ProjectStreamContextInput<Body>): ProjectContextRendering
   /**
+   * How a person revises this task type's result as they accept it at a stage checkpoint: the
+   * model proposed, the person settles. Absent: the result is accepted as recorded, and a revision
+   * is refused. `required` refuses an acceptance that sends none.
+   */
+  checkpointRevision?: {
+    required: boolean
+    /** The body the person accepts, from the recorded one and what they sent, or why it misfits. */
+    revise(input: {
+      stage: { id: string; title: string; config: unknown }
+      body: Body
+      revision: unknown
+      decidedBy: string | null
+      decidedAt: number
+    }): DefinitionParseResult<Body>
+  }
+  /**
    * Validate and normalize the `config` a definition's stage gives this task type. Absent: the
    * task type takes no config, and a stage that gives one is refused.
    */

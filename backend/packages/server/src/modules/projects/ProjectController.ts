@@ -106,6 +106,7 @@ export function projectController(): Hono<AppEnv> {
       projectId,
       stageId,
       c.get('user')?.id ?? null,
+      c.req.valid('json')?.revision,
     )
     return c.json(state, 200)
   })

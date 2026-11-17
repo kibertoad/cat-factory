@@ -84,6 +84,8 @@ export function createProjectsModule(
     getMounted,
     listTasks: (project) => service.listTasks(project),
     records: projectRecordRepository,
+    outcomes,
+    modules: sources.projectKindModules,
     definitions: sources.projectDefinitions,
     board: late.board,
     runStarter: late.runStarter,

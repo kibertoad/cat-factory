@@ -4,7 +4,7 @@ import type {
   ProjectStage,
   ProjectStageTask,
 } from '@cat-factory/contracts'
-import { type Block, createRecordingLogger } from '@cat-factory/kernel'
+import { type Block, ProjectKindModuleRegistry, createRecordingLogger } from '@cat-factory/kernel'
 import { describe, expect, it, vi } from 'vitest'
 import { ProjectStageService } from './ProjectStageService.js'
 
@@ -66,6 +66,7 @@ function harness(opts: { stages: ProjectStage[]; vendor?: string; startFails?: b
     markStageTaskRecorded: vi.fn(async () => {}),
     clearStageCheckpoint: vi.fn(async () => false),
     deleteStageTasks: vi.fn(async () => {}),
+    reserveSeq: vi.fn(async () => 1),
   }
   const started: string[] = []
   const runs = {
@@ -86,6 +87,12 @@ function harness(opts: { stages: ProjectStage[]; vendor?: string; startFails?: b
     }),
     listTasks: vi.fn(async () => tasks),
     records,
+    outcomes: {
+      get: async () => null,
+      bodiesOf: async () => [],
+      write: async () => ({ written: true, json: '{}' }),
+    },
+    modules: new ProjectKindModuleRegistry(),
     definitions: {
       get: async () => ({ definition, contentHash: 'h1', origin: 'registered' as const }),
       latest: async () => null,

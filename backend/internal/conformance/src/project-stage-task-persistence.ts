@@ -17,6 +17,7 @@ export function stageTaskRecord(projectId: string, taskId: string, stageId: stri
     recordedAt: null,
     clearedAt: null,
     clearedBy: null,
+    acceptedOutcomeId: null,
   }
 }
 
@@ -69,16 +70,21 @@ export function defineStageTaskPersistence(
     })
     await repos.records.markStageTaskRecorded(projectId, recorded, 5)
     await repos.records.insertStageTask(stageTaskRecord(projectId, open, 'discover', 2))
-    expect(await repos.records.clearStageCheckpoint(projectId, open, 7, 'usr_1')).toBe(false)
-    expect(await repos.records.clearStageCheckpoint('prj_other', recorded, 7, 'usr_1')).toBe(false)
-    expect(await repos.records.clearStageCheckpoint(projectId, recorded, 7, 'usr_1')).toBe(true)
-    expect(await repos.records.clearStageCheckpoint(projectId, recorded, 8, null)).toBe(false)
+    expect(await repos.records.clearStageCheckpoint(projectId, open, 7, 'usr_1', null)).toBe(false)
+    expect(await repos.records.clearStageCheckpoint('prj_other', recorded, 7, 'usr_1', null)).toBe(
+      false,
+    )
+    expect(
+      await repos.records.clearStageCheckpoint(projectId, recorded, 7, 'usr_1', 'pout_rev'),
+    ).toBe(true)
+    expect(await repos.records.clearStageCheckpoint(projectId, recorded, 8, null, null)).toBe(false)
     expect((await repos.records.listStageTasks(projectId))[0]).toEqual({
       ...stageTaskRecord(projectId, recorded, 'discover'),
       basis,
       recordedAt: 5,
       clearedAt: 7,
       clearedBy: 'usr_1',
+      acceptedOutcomeId: 'pout_rev',
     })
     await repos.records.deleteStageTasks(projectId, [open])
     await repos.records.deleteStageTasks(projectId, [])

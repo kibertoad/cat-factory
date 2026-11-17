@@ -472,6 +472,7 @@ describe('ProjectStepController with a staged project', () => {
     recordedAt: null,
     clearedAt: null,
     clearedBy: null,
+    acceptedOutcomeId: null,
   })
 
   it("plans from its stage's config and history and writes the stage's stream", async () => {

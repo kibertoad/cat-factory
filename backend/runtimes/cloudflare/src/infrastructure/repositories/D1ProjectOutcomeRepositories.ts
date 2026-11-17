@@ -151,6 +151,7 @@ interface StageTaskRow {
   recorded_at: number | null
   cleared_at: number | null
   cleared_by: string | null
+  accepted_outcome_id: string | null
 }
 
 function rowToStageTask(row: StageTaskRow): ProjectStageTask {
@@ -163,6 +164,7 @@ function rowToStageTask(row: StageTaskRow): ProjectStageTask {
     recordedAt: row.recorded_at,
     clearedAt: row.cleared_at,
     clearedBy: row.cleared_by,
+    acceptedOutcomeId: row.accepted_outcome_id,
   }
 }
 
@@ -373,8 +375,8 @@ export class D1ProjectRecordRepository implements ProjectRecordRepository {
       .prepare(
         `INSERT INTO project_stage_tasks
            (task_id, project_id, stage_id, created_at, basis, recorded_at, cleared_at,
-            cleared_by)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            cleared_by, accepted_outcome_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT DO NOTHING`,
       )
       .bind(
@@ -386,6 +388,7 @@ export class D1ProjectRecordRepository implements ProjectRecordRepository {
         row.recordedAt,
         row.clearedAt,
         row.clearedBy,
+        row.acceptedOutcomeId,
       )
       .run()
     return (result.meta.changes ?? 0) > 0
@@ -416,13 +419,14 @@ export class D1ProjectRecordRepository implements ProjectRecordRepository {
     taskId: string,
     clearedAt: number,
     clearedBy: string | null,
+    acceptedOutcomeId: string | null,
   ): Promise<boolean> {
     const result = await this.deps.db
       .prepare(
-        `UPDATE project_stage_tasks SET cleared_at = ?, cleared_by = ?
+        `UPDATE project_stage_tasks SET cleared_at = ?, cleared_by = ?, accepted_outcome_id = ?
          WHERE project_id = ? AND task_id = ? AND recorded_at IS NOT NULL AND cleared_at IS NULL`,
       )
-      .bind(clearedAt, clearedBy, projectId, taskId)
+      .bind(clearedAt, clearedBy, acceptedOutcomeId, projectId, taskId)
       .run()
     return (result.meta.changes ?? 0) > 0
   }

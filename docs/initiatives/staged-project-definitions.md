@@ -106,9 +106,16 @@ bucket for every new repository method in the same PR.
       differ in prefix. The job body opens a writable target only to a writing stage's run,
       and the harness refuses any non-read method on a read target and any path outside a prefix
       (runner image 1.168.0). The browser is not bound: see `security-model.md`. PR: [#2526](https://github.com/kibertoad/cat-factory/pull/2526)
-- [ ] **5. Decision stage.** A handler whose agent proposes items (question, recommended default,
-      trade-off, evidence) and parks for the human to answer, accept, or dismiss each one; writes a
-      `decisions` stream. Reuses the clarification-item vocabulary and component.
+- [x] **5a. Checkpoint revision.** A handler may declare `checkpointRevision`: a person settles
+      its result while accepting it at a stage checkpoint (`POST .../checkpoint` with a
+      `revision`), optionally required. The platform writes the settled body as a new outcome on
+      the stage's stream (intent `revise`, beside the model's proposal), and the checkpoint's
+      atomic claim names it (`acceptedOutcomeId`): a revision no acceptance names counts for
+      nothing, so a losing concurrent acceptance changes no result. PR: [#2527](https://github.com/kibertoad/cat-factory/pull/2527)
+- [ ] **5b. Decision stage.** The built-in `decisions` task type: its agent proposes items
+      (question, options, recommended default, trade-off, evidence) from the stages it reads, and
+      its handler requires every item settled at the checkpoint. Reuses the clarification-item
+      vocabulary for the stage rail (slice 9).
 - [ ] **6. Spawn stage.** Extract the initiative spawn and reconcile logic into a shared service;
       a spawn stage creates tasks in the linked services it names, links the project, runs their
       normal pipelines, and completes when they settle.

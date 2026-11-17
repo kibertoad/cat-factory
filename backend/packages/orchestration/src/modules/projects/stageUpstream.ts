@@ -1,8 +1,9 @@
-import type {
-  Project,
-  ProjectDefinition,
-  ProjectStage,
-  ProjectStageTask,
+import {
+  type Project,
+  type ProjectDefinition,
+  type ProjectStage,
+  type ProjectStageTask,
+  REVISION_INTENT,
 } from '@cat-factory/contracts'
 import {
   type DecodedProjectOutcome,
@@ -126,12 +127,16 @@ function readableRows(
   const writers = new Set(
     task.records.filter((r) => r.stageId === upstream.id).map((r) => r.taskId),
   )
+  // A revision counts only once an acceptance named it; one written by a losing acceptance is not
+  // the stage's result and never reaches a later stage.
+  const accepted = new Set(task.records.flatMap((r) => r.acceptedOutcomeId ?? []))
   const rows = [...envelopes.values()].filter(
     (row) =>
       row.stream === upstream.produces &&
       row.taskId !== null &&
       writers.has(row.taskId) &&
-      row.seq <= basis.seq,
+      row.seq <= basis.seq &&
+      (row.intent !== REVISION_INTENT || accepted.has(row.id)),
   )
   return { basisId, basis, rows }
 }

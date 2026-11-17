@@ -151,10 +151,10 @@ export function defineCoreProjectStagesConformance(harness: ConformanceHarness):
       ])
 
       const checkpoint = `/workspaces/${wsId}/projects/${project.id}/stages/discover/checkpoint`
-      const cleared = await app.call<ProjectStageState>('POST', checkpoint)
+      const cleared = await app.call<ProjectStageState>('POST', checkpoint, {})
       expect(cleared.status).toBe(200)
       expect(cleared.body).toMatchObject({ stageId: 'discover', status: 'done' })
-      const twice = await app.call('POST', checkpoint)
+      const twice = await app.call('POST', checkpoint, {})
       expect(twice.status).toBe(409)
       expect(reasonOf(twice.body)).toBe('project_stage_checkpoint_not_pending')
       expect(await stages()).toEqual([

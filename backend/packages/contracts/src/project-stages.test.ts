@@ -158,6 +158,7 @@ describe('deriveProjectStageStates', () => {
     recordedAt: null,
     clearedAt: null,
     clearedBy: null,
+    acceptedOutcomeId: null,
     ...over,
   })
   const outcome = (taskId: string, seq: number, stream: string) => ({
@@ -165,6 +166,7 @@ describe('deriveProjectStageStates', () => {
     seq,
     stream,
     taskId,
+    intent: 'propose',
   })
   const statuses = (input: Parameters<typeof deriveProjectStageStates>[0]) =>
     deriveProjectStageStates(input).map((s) => [s.stageId, s.status, s.stale])
@@ -247,6 +249,31 @@ describe('deriveProjectStageStates', () => {
       })[1]!
     expect(decide(false)).toMatchObject({ status: 'done', stale: false })
     expect(decide(true)).toMatchObject({ status: 'done', stale: true })
+  })
+
+  it('accepts the revision an acceptance names, and ignores one no acceptance names', () => {
+    const revision = (taskId: string, seq: number) => ({
+      id: `pout_${taskId}_rev${seq}`,
+      seq,
+      stream: 'discover',
+      taskId,
+      intent: 'revise',
+    })
+    const derive = (over: Partial<ProjectStageTask>) =>
+      deriveProjectStageStates({
+        stages,
+        stageTasks: [task('t1', 'discover', over)],
+        liveTaskIds: new Set(['t1']),
+        outcomes: [outcome('t1', 1, 'discover'), revision('t1', 2)],
+      })[0]!
+    // A revision written by an acceptance that then lost its claim changes nothing.
+    expect(derive({})).toMatchObject({ status: 'awaiting-checkpoint', latest: { id: 'pout_t1' } })
+    expect(derive({ clearedAt: 3 })).toMatchObject({ status: 'done', accepted: { id: 'pout_t1' } })
+    expect(derive({ clearedAt: 3, acceptedOutcomeId: 'pout_t1_rev2' })).toMatchObject({
+      status: 'done',
+      latest: { id: 'pout_t1_rev2', seq: 2, taskId: 't1' },
+      accepted: { id: 'pout_t1_rev2', seq: 2, taskId: 't1' },
+    })
   })
 
   it("still counts a deleted task's recorded result, and only stops counting it as running", () => {

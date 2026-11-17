@@ -6625,7 +6625,11 @@
         "project_link_invalid": "Quel progetto non esiste o appartiene a un'altra organizzazione. Collega un progetto di questa organizzazione.",
         "project_has_no_result": "Quel progetto non ha ancora un risultato da leggere. Esegui prima un'attività al suo interno, poi collegalo.",
         "project_task_has_no_stage": "Questa attività appartiene a un progetto a fasi ma non è stata avviata da una delle sue fasi, quindi non può essere eseguita. Avvia invece il lavoro dalla fase del progetto.",
-        "project_stage_upstream_unreadable": "Un risultato di una fase precedente, da cui questa attività è partita, al momento non è leggibile, quindi l'esecuzione si è fermata invece di proseguire senza. Riprova più tardi; se persiste, il risultato salvato va ripristinato."
+        "project_stage_upstream_unreadable": "Un risultato di una fase precedente, da cui questa attività è partita, al momento non è leggibile, quindi l'esecuzione si è fermata invece di proseguire senza. Riprova più tardi; se persiste, il risultato salvato va ripristinato.",
+        "project_stage_revision_required": "Il risultato di questa fase va definito al momento di accettarlo: decidi ogni punto proposto, poi accettalo.",
+        "project_stage_revision_unsupported": "Il risultato di questa fase viene accettato così come è stato registrato; al suo checkpoint non accetta modifiche.",
+        "project_stage_revision_invalid": "Le modifiche non corrispondono al risultato di questa fase. I dettagli indicano quale parte non corrisponde; correggila e accetta di nuovo.",
+        "project_stage_result_unreadable": "Il risultato di questa fase al momento non è leggibile, quindi non può essere definito. Riprova più tardi; se persiste, il risultato salvato va ripristinato."
       }
     },
     "action": {
