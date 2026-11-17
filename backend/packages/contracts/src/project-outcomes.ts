@@ -108,8 +108,13 @@ export function encodeOutcomeStoragePolicy(policy: OutcomeStoragePolicy): string
  */
 export const projectStepStateSchema = v.object({
   projectId: v.string(),
-  /** The project kind whose module planned the task. */
+  /** The project kind of the task's project. */
   kind: v.string(),
+  /**
+   * The task type whose handler planned the task and records its outcome. Every dispatch sets it,
+   * so a step planned by a build that did not record it gains it on its next dispatch.
+   */
+  taskType: v.optional(v.string()),
   seq: v.pipe(v.number(), v.integer(), v.minValue(1)),
   stream: outcomeStreamSchema,
   intent: outcomeIntentSchema,

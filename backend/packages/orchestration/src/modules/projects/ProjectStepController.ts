@@ -25,7 +25,7 @@ import {
   outcomesOf,
 } from '@cat-factory/kernel'
 import type { ProjectOutcomeStore } from './ProjectOutcomeStore.js'
-import { decodeOutcome } from './outcomeDecoding.js'
+import { decodeOutcome, outcomeTaskType } from './outcomeDecoding.js'
 
 // ---------------------------------------------------------------------------
 // The engine half of a project task's run, for every project kind: what its step is asked when it
@@ -68,8 +68,7 @@ export class ProjectStepController {
 
   /** The agent kinds whose steps are project tasks' runs, one per registered task handler. */
   agentKinds(): string[] {
-    const kinds = this.deps.modules.all().flatMap((m) => m.handlers.map((h) => h.agentKind))
-    return [...new Set(kinds)]
+    return this.deps.modules.handlers().map((h) => h.agentKind)
   }
 
   /** Whether a step of `agentKind` is a project task's run that a task handler plans. */
@@ -84,6 +83,13 @@ export class ProjectStepController {
    */
   async prepare(step: PipelineStep, block: Block): Promise<ProjectRunContext> {
     const task = await this.resolveTask(block, step.agentKind)
+    if (step.project?.taskType && step.project.taskType !== task.handler.taskType) {
+      throw new ValidationError("The task's type changed after its run was planned", {
+        reason: 'project_task_type_changed',
+        plannedTaskType: step.project.taskType,
+        taskType: task.handler.taskType,
+      })
+    }
     if (task.outcomes.some((o) => o.taskId === block.id)) {
       throw new ValidationError('This task already recorded its outcome on the project', {
         reason: 'project_task_already_recorded',
@@ -96,6 +102,7 @@ export class ProjectStepController {
       step.project = {
         projectId: task.project.id,
         kind: task.project.kind,
+        taskType: task.handler.taskType,
         seq,
         stream: planned.stream,
         intent: planned.intent,
@@ -104,6 +111,7 @@ export class ProjectStepController {
         plan: planned.plan,
       }
     }
+    if (!step.project.taskType) step.project = { ...step.project, taskType: task.handler.taskType }
     const state = step.project
     const checkpoint = this.parse(task.handler, state.checkpoint)
     const services = task.project.serviceIds.length
@@ -133,7 +141,7 @@ export class ProjectStepController {
     result: AgentRunResult,
   ): Promise<CapabilityCredentialMissingError> {
     const state = requireState(step)
-    const handler = this.handlerOf(step)
+    const handler = this.handlerOf(state)
     const request = result.credentialRequest!
     const partial = this.parse(handler, result.custom)
     if (partial !== undefined) {
@@ -169,7 +177,7 @@ export class ProjectStepController {
     result: AgentRunResult,
   ): Promise<{ output: string; outputIsRendered: true }> {
     const state = requireState(step)
-    const handler = this.handlerOf(step)
+    const handler = this.handlerOf(state)
     const reply = this.parse(handler, result.custom)
     if (reply === undefined) {
       throw new Error('The run returned no readable outcome (malformed or empty JSON)')
@@ -227,23 +235,33 @@ export class ProjectStepController {
   private async resolveTask(block: Block, agentKind: string): Promise<ResolvedTask> {
     const found = await this.deps.blockRepository.findById(block.id)
     const project = found?.ownerId ? await this.deps.projectRepository.get(found.ownerId) : null
-    const taskType = found?.block.taskType
-    const handler =
-      project && taskType ? this.deps.modules.handlerOf(project.kind, taskType) : undefined
-    if (!project || !handler || handler.agentKind !== agentKind) {
+    if (!project) {
       throw new ValidationError(`A '${agentKind}' step must run under a project of its kind`, {
         reason: 'task_type_requires_project',
       })
     }
+    const taskType = found?.block.taskType ?? ''
+    const handler = this.deps.modules.handlerOf(project.kind, taskType)
+    if (!handler || handler.agentKind !== agentKind) {
+      throw new ValidationError(
+        `Project kind '${project.kind}' has no handler running a '${taskType}' task as '${agentKind}'`,
+        { reason: 'task_type_not_offered_by_project', kind: project.kind, taskType, agentKind },
+      )
+    }
     const pin = await this.deps.records.getPin(project.id)
     const definition = pin ? await this.pinnedDefinition(project, pin) : null
-    const stored = await this.deps.outcomes.list(project)
+    // Only this handler's outcomes are read and decoded: another task type's body is never read,
+    // so one that is unreadable just now cannot stop this task.
+    const stored = await this.deps.outcomes.list(
+      project,
+      (row) => outcomeTaskType(this.deps.modules, project.kind, row) === handler.taskType,
+    )
     return {
       project,
       handler,
       definition,
       inputs: pin?.inputs ?? {},
-      outcomes: stored.map((outcome) => decodeOutcome(this.deps.modules, outcome)),
+      outcomes: stored.map((outcome) => decodeOutcome(this.deps.modules, project.kind, outcome)),
     }
   }
 
@@ -287,11 +305,18 @@ export class ProjectStepController {
     return resolved?.definition
   }
 
-  /** The handler whose agent kind the step dispatches: a task type names exactly one. */
-  private handlerOf(step: PipelineStep): ErasedProjectTaskHandler {
-    const handler = this.deps.modules.forAgentKind(step.agentKind)
+  /** The handler that planned the step, as its dispatch recorded it. */
+  private handlerOf(state: ProjectStepState): ErasedProjectTaskHandler {
+    if (!state.taskType) {
+      throw new Error(
+        'This project step was planned by a build that did not record its task type; retry the task',
+      )
+    }
+    const handler = this.deps.modules.handlerOf(state.kind, state.taskType)
     if (!handler) {
-      throw new Error(`No project task handler is registered for agent kind '${step.agentKind}'`)
+      throw new Error(
+        `Project kind '${state.kind}' has no handler for task type '${state.taskType}' in this process`,
+      )
     }
     return handler
   }

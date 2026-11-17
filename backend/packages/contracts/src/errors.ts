@@ -629,6 +629,9 @@ export type CredentialWaitReason = (typeof CREDENTIAL_WAIT_REASONS)[number]
  *                                       definition the project never agreed to.
  *  - `project_task_already_recorded`    the task already wrote its outcome; a follow-up is a new
  *                                       task.
+ *  - `project_task_type_changed`        the task's type changed after its run was planned, so a
+ *                                       replayed dispatch refuses rather than finish under another
+ *                                       task type's handler.
  *  - `research_nothing_to_ask`          the research kind's own: the task's mode selects no
  *                                       question (an `extend` with no new question, or a `clarify`
  *                                       with nothing partial or blocked).
@@ -663,6 +666,7 @@ export const PROJECT_REASONS = [
   'project_not_pinned',
   'project_definition_changed',
   'project_task_already_recorded',
+  'project_task_type_changed',
   'research_nothing_to_ask',
   'outcome_too_large_for_inline',
   'task_owned_by_project',

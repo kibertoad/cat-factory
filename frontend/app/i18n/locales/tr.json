@@ -724,6 +724,7 @@
         "project_definition_not_found": "Bu kuruluşta o anahtar ve sürümle eşleşen bu türde bir proje tanımı yok. Anahtarı kontrol edin ya da en yenisini sabitlemek için sürümü boş bırakın.",
         "project_definition_inputs_invalid": "Tanımın girdileri için verilen değerler tanımı karşılamıyor. Her zorunlu girdiyi kabul edilen bir değerle doldurup yeniden deneyin.",
         "task_type_requires_project": "Bu türden bir görev bir servise değil, bir projeye aittir. Onu sunan türde bir projeye ekleyin.",
+        "project_task_type_changed": "Görevin türü, çalıştırması planlandıktan sonra değişti; bu yüzden çalıştırma başka bir işleyiciyle tamamlanmak yerine durdu. Görevi yeniden başlatın.",
         "project_not_pinned": "Bu türden bir görev, projesinin bir tanım sabitlemesini gerektirir ve bu proje hiçbir tanım sabitlemiyor. Görevi tanım sabitleyen bir projeye ekleyin.",
         "project_definition_changed": "Bu projenin sabitlediği tanım o zamandan beri değişti, bu yüzden çalışma, projenin hiç kabul etmediği bir tanımla çalışmak yerine durdu. Dağıtım operatörünüzden değişikliği yeni bir sürüm olarak yayımlamasını isteyin.",
         "project_task_already_recorded": "Bu görev sonucunu projeye zaten kaydetti. Devam etmek için yeni bir görev oluşturun.",

@@ -61,6 +61,31 @@ describe('ProjectKindModuleRegistry', () => {
     )
   })
 
+  it('checks the handlers one module lists against each other, registering nothing on a clash', () => {
+    const registry = new ProjectKindModuleRegistry()
+    expect(() =>
+      registry.register(module('alpha', [handler('notes', 'a'), handler('notes', 'b')])),
+    ).toThrow(/two different handlers are registered for task type 'notes'/)
+    expect(() =>
+      registry.register(module('alpha', [handler('x', 'writer'), handler('y', 'writer')])),
+    ).toThrow(/cannot share the agent kind 'writer'/)
+    expect(registry.get('alpha')).toBeUndefined()
+    expect(registry.forAgentKind('a')).toBeUndefined()
+    expect(registry.handlers()).toEqual([])
+  })
+
+  it("attributes an outcome to its recorded task type, or to a one-handler kind's handler", () => {
+    const notes = handler('notes', 'note-taker')
+    const registry = new ProjectKindModuleRegistry()
+    registry.register(module('alpha', [notes]))
+    registry.register(module('beta', [notes, handler('memo', 'memo-writer')]))
+    expect(registry.handlerOfOutcome('beta', 'memo')?.taskType).toBe('memo')
+    expect(registry.handlerOfOutcome('alpha', null)).toBe(notes)
+    expect(registry.handlerOfOutcome('alpha', undefined)).toBe(notes)
+    expect(registry.handlerOfOutcome('beta', null)).toBeUndefined()
+    expect(registry.handlerOfOutcome('gamma', null)).toBeUndefined()
+  })
+
   it('refuses a module that names no handler, and a second module for one kind', () => {
     const registry = new ProjectKindModuleRegistry()
     expect(() => registry.register(module('alpha', []))).toThrow(/names no task handler/)

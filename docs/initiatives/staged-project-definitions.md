@@ -121,9 +121,14 @@ bucket for every new repository method in the same PR.
 
 ## Gotchas
 
-- A task type and an agent kind each name exactly one handler. The step controller finds the
-  handler by task type under the project's kind at dispatch, and by the step's agent kind when the
-  run checkpoints or completes, so two handlers can never share an agent kind.
+- A task type and an agent kind each name exactly one handler. Dispatch resolves the handler from
+  the task's type under its project's kind and records the task type on the step; checkpointing
+  and recording read it back from there, so all three agree on the handler.
+- An outcome with no recorded task type (a deleted task the backfill could not attribute, or a
+  node one build behind) is decoded by the kind's handler when the kind has exactly one. A kind
+  with several handlers serves such a body as stored.
+- A kind's descriptor and its module list task types separately. A task type the descriptor offers
+  with no handler in the module is refused at dispatch with `task_type_not_offered_by_project`.
 - `GET /api/v1/project-kinds/{kind}` serves one outcome schema, its single handler's. A kind
   offering several handlers serves null there until slice 9 adds per-task-type schemas.
 - The outcome row's `taskType` is internal: the public outcome envelope does not carry it yet.

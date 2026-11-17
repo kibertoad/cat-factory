@@ -12,25 +12,47 @@ export function outcomeMetaOf(row: ProjectOutcomeRow): ProjectOutcomeMeta {
 }
 
 /**
- * A body as the handler of the task type that wrote it decodes it, or undefined when it does not
- * parse. A row with no handler in this process is served as stored, since showing it needs no
- * understanding of it.
+ * The task type whose handler decodes `row` of a `kind` project, or null when no handler in this
+ * process does (see `ProjectKindModuleRegistry.handlerOfOutcome`).
  */
-export function decodeOutcomeBody(
+export function outcomeTaskType(
   modules: ProjectKindModuleRegistry,
-  row: ProjectOutcomeRow,
-  raw: unknown,
-): unknown {
-  const handler = row.taskType === null ? undefined : modules.handler(row.taskType)
-  return handler ? handler.parseOutcome(row.schemaVersion, raw) : raw
+  kind: string,
+  row: Pick<ProjectOutcomeRow, 'taskType'>,
+): string | null {
+  return modules.handlerOfOutcome(kind, row.taskType)?.taskType ?? null
+}
+
+/**
+ * A stored outcome decoded by its handler, or undefined when its body is unreadable just now
+ * (`json: null`), is not JSON, or does not parse. A row no handler in this process decodes is
+ * served as stored, since showing it needs no understanding of it.
+ */
+export function tryDecodeOutcome(
+  modules: ProjectKindModuleRegistry,
+  kind: string,
+  { row, json }: { row: ProjectOutcomeRow; json: string | null },
+): DecodedProjectOutcome | undefined {
+  if (json === null) return undefined
+  let raw: unknown
+  try {
+    raw = JSON.parse(json)
+  } catch {
+    return undefined
+  }
+  const handler = modules.handlerOfOutcome(kind, row.taskType)
+  const body = handler ? handler.parseOutcome(row.schemaVersion, raw) : raw
+  if (body === undefined) return undefined
+  return { ...outcomeMetaOf(row), taskType: handler?.taskType ?? null, body }
 }
 
 /** A stored outcome decoded by its handler. Throws on a body that does not parse. */
 export function decodeOutcome(
   modules: ProjectKindModuleRegistry,
-  { row, json }: { row: ProjectOutcomeRow; json: string },
+  kind: string,
+  stored: { row: ProjectOutcomeRow; json: string },
 ): DecodedProjectOutcome {
-  const body = decodeOutcomeBody(modules, row, JSON.parse(json) as unknown)
-  if (body === undefined) throw new Error(`Outcome '${row.id}' holds an unreadable body`)
-  return { ...outcomeMetaOf(row), taskType: row.taskType, body }
+  const decoded = tryDecodeOutcome(modules, kind, stored)
+  if (!decoded) throw new Error(`Outcome '${stored.row.id}' holds an unreadable body`)
+  return decoded
 }

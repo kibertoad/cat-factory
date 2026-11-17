@@ -724,6 +724,7 @@
         "project_definition_not_found": "Żadna definicja tego rodzaju projektu w tej organizacji nie pasuje do tego klucza i wersji. Sprawdź klucz albo zostaw wersję pustą, aby przypiąć najnowszą.",
         "project_definition_inputs_invalid": "Wartości wejść definicji jej nie spełniają. Wypełnij każde wymagane wejście dozwoloną wartością i spróbuj ponownie.",
         "task_type_requires_project": "Zadanie tego typu należy do projektu, nie do usługi. Dodaj je do projektu rodzaju, który je oferuje.",
+        "project_task_type_changed": "Typ zadania zmienił się po zaplanowaniu jego uruchomienia, więc uruchomienie zatrzymało się, zamiast zakończyć się z inną obsługą. Uruchom zadanie ponownie.",
         "project_not_pinned": "Zadanie tego typu wymaga, by jego projekt przypinał definicję, a ten nie przypina żadnej. Dodaj zadanie do projektu, który ją przypina.",
         "project_definition_changed": "Definicja przypięta przez ten projekt zmieniła się od tego czasu, więc przebieg zatrzymał się, zamiast pracować na definicji, na którą projekt nigdy się nie zgodził. Poproś operatora wdrożenia o opublikowanie zmiany jako nowej wersji.",
         "project_task_already_recorded": "To zadanie już zapisało swój wynik w projekcie. Utwórz nowe zadanie, aby kontynuować.",

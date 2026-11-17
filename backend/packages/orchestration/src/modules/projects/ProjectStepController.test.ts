@@ -311,6 +311,21 @@ describe('ProjectStepController with the research kind', () => {
   })
 })
 
+describe('ProjectStepController with outcomes that record no task type', () => {
+  it("attributes them to a one-handler kind's handler, so research still folds them", async () => {
+    const { ctrl, task } = harness({
+      kind: 'research',
+      rows: [{ ...outcomeRow('task_1', 1, body({ scheme: 'answered' })), taskType: null }],
+    })
+    const step = { agentKind: 'project-researcher' } as PipelineStep
+    await ctrl.prepare(step, task)
+    expect(step.project).toMatchObject({
+      intent: 'extend',
+      plan: { questionIds: ['scopes', 'expiry'] },
+    })
+  })
+})
+
 describe('ProjectStepController with a pinless kind', () => {
   const noting = { agentKind: 'note-taker' } as PipelineStep
 
@@ -344,18 +359,45 @@ describe('ProjectStepController with a pinless kind', () => {
     expect(run.brief).toEqual({ nth: 2 })
   })
 
-  it('refuses a task type its project kind does not offer', async () => {
+  it('refuses a task type its project kind does not offer, naming both', async () => {
     const { ctrl, task } = harness({ kind: 'notes', taskType: 'research', pin: null })
     await expect(
       ctrl.prepare({ agentKind: 'project-researcher' } as PipelineStep, task),
-    ).rejects.toMatchObject({ details: { reason: 'task_type_requires_project' } })
+    ).rejects.toMatchObject({
+      details: { reason: 'task_type_not_offered_by_project', kind: 'notes', taskType: 'research' },
+    })
+  })
+
+  it("never reads another task type's outcomes, so an unreadable one cannot stop a task", async () => {
+    const { ctrl, task } = harness({
+      kind: 'mixed',
+      taskType: 'notes',
+      pin: null,
+      rows: [
+        { ...outcomeRow('r', 1, {}), body: { kind: 'inline', json: 'not json' } },
+        outcomeRow('a', 2, { note: 'x' }, 'notes'),
+      ],
+    })
+    const run = await ctrl.prepare({ ...noting }, task)
+    expect(run.brief).toEqual({ nth: 2 })
+  })
+
+  it('records the task type on the step and refuses a replay after the type changed', async () => {
+    const { ctrl, task } = harness({ kind: 'mixed', taskType: 'notes', pin: null })
+    const step = { ...noting }
+    await ctrl.prepare(step, task)
+    expect(step.project?.taskType).toBe('notes')
+    Object.assign(task, { taskType: 'research' })
+    await expect(
+      ctrl.prepare({ ...step, agentKind: 'project-researcher' }, task),
+    ).rejects.toMatchObject({ details: { reason: 'project_task_type_changed' } })
   })
 
   it("refuses a step under a project of another kind, and the kind's own refusal", async () => {
     const { ctrl, task } = harness({ kind: 'notes', pin: null })
     await expect(
       ctrl.prepare({ agentKind: 'project-researcher' } as PipelineStep, task),
-    ).rejects.toMatchObject({ details: { reason: 'task_type_requires_project' } })
+    ).rejects.toMatchObject({ details: { reason: 'task_type_not_offered_by_project' } })
     const full = harness({
       kind: 'notes',
       pin: null,

@@ -1230,6 +1230,7 @@ export {
 export {
   PROJECT_RESEARCHER_AGENT_KIND,
   RESEARCH_PROJECT_KIND,
+  RESEARCH_TASK_TYPE,
   mergeFindingsBodies,
   researchKindModule,
   researchTaskHandler,

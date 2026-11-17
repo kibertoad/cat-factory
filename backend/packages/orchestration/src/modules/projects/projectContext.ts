@@ -54,7 +54,9 @@ export function projectContextContributor(deps: ProjectContextDeps): ProjectCont
       const rendered = new Map<string, ProjectContextEntry>()
       for (const project of projects) {
         const module = deps.modules.get(project.kind)
-        const outcomes = (stored.get(project.id) ?? []).map((o) => decodeOutcome(deps.modules, o))
+        const outcomes = (stored.get(project.id) ?? []).map((o) =>
+          decodeOutcome(deps.modules, project.kind, o),
+        )
         const input = {
           definition: definitions.get(project.id) ?? null,
           inputs: pinOf.get(project.id)?.inputs ?? {},

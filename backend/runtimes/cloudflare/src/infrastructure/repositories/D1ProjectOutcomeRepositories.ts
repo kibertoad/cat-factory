@@ -273,7 +273,8 @@ export class D1ProjectRecordRepository implements ProjectRecordRepository {
         row.intent,
         row.schemaVersion,
         row.taskId,
-        row.taskType,
+        // A node one build behind sends no task type; the decoder attributes such a row.
+        row.taskType ?? null,
         row.definitionKey,
         row.definitionVersion,
         JSON.stringify(row.artifactRefs),

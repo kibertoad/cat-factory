@@ -38,7 +38,11 @@ export class ProjectOutcomeReader {
   async get(project: ReadableProject, id: string): Promise<ProjectOutcome | null> {
     const stored = await this.deps.outcomes.get(project, id)
     if (!stored) return null
-    const { taskType: _taskType, ...outcome } = decodeOutcome(this.deps.modules, stored)
+    const { taskType: _taskType, ...outcome } = decodeOutcome(
+      this.deps.modules,
+      project.kind,
+      stored,
+    )
     return outcome
   }
 
@@ -64,7 +68,7 @@ export class ProjectOutcomeReader {
       view: module.view({
         definition: resolved?.definition ?? null,
         inputs: pin?.inputs ?? {},
-        outcomes: stored.map((outcome) => decodeOutcome(this.deps.modules, outcome)),
+        outcomes: stored.map((outcome) => decodeOutcome(this.deps.modules, project.kind, outcome)),
       }),
     }
   }

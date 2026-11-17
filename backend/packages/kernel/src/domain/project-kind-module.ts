@@ -90,7 +90,7 @@ export function eraseTaskHandler<Body>(
 
 /** An outcome decoded by the handler of the task type that wrote it. */
 export interface DecodedProjectOutcome extends ProjectOutcome<unknown> {
-  /** The task type whose handler wrote the body; null for one written before it was recorded. */
+  /** The task type whose handler decoded the body; null when no handler in this process did. */
   taskType: string | null
 }
 
@@ -152,11 +152,13 @@ export interface ProjectViewInput {
 export class ProjectKindModuleRegistry {
   private readonly byKind = new Map<string, ProjectKindModule>()
   private readonly byTaskType = new Map<string, ErasedProjectTaskHandler>()
+  private readonly byAgentKind = new Map<string, ErasedProjectTaskHandler>()
 
   /**
    * Register a kind's module. Throws on a second module for one kind, a module with no handler,
-   * or a handler that differs from one already registered for the same task type or agent kind:
-   * a task type and an agent kind each name exactly one handler, which any kind may offer.
+   * or a handler that differs from another (registered before or listed beside it) for the same
+   * task type or agent kind: a task type and an agent kind each name exactly one handler, which
+   * any kind may offer. Nothing is registered when it throws.
    */
   register(module: ProjectKindModule): void {
     if (this.byKind.has(module.kind)) {
@@ -165,20 +167,25 @@ export class ProjectKindModuleRegistry {
     if (module.handlers.length === 0) {
       throw new Error(`project kind '${module.kind}' names no task handler`)
     }
+    const byTaskType = new Map(this.byTaskType)
+    const byAgentKind = new Map(this.byAgentKind)
     for (const handler of module.handlers) {
-      const known = this.byTaskType.get(handler.taskType)
+      const known = byTaskType.get(handler.taskType)
       if (known && known !== handler) {
         throw new Error(`two different handlers are registered for task type '${handler.taskType}'`)
       }
-      const sharing = this.forAgentKind(handler.agentKind)
+      const sharing = byAgentKind.get(handler.agentKind)
       if (sharing && sharing !== handler) {
         throw new Error(
           `task types '${sharing.taskType}' and '${handler.taskType}' cannot share the agent kind '${handler.agentKind}'`,
         )
       }
+      byTaskType.set(handler.taskType, handler)
+      byAgentKind.set(handler.agentKind, handler)
     }
     this.byKind.set(module.kind, module)
-    for (const handler of module.handlers) this.byTaskType.set(handler.taskType, handler)
+    for (const [taskType, handler] of byTaskType) this.byTaskType.set(taskType, handler)
+    for (const [agentKind, handler] of byAgentKind) this.byAgentKind.set(agentKind, handler)
   }
 
   get(kind: string): ProjectKindModule | undefined {
@@ -192,12 +199,32 @@ export class ProjectKindModuleRegistry {
 
   /** The handler whose tasks dispatch `agentKind`, if any. */
   forAgentKind(agentKind: string): ErasedProjectTaskHandler | undefined {
-    return [...this.byTaskType.values()].find((h) => h.agentKind === agentKind)
+    return this.byAgentKind.get(agentKind)
   }
 
   /** The handler `kind` offers for `taskType`, or undefined when the kind does not offer it. */
   handlerOf(kind: string, taskType: string): ErasedProjectTaskHandler | undefined {
     return this.byKind.get(kind)?.handlers.find((h) => h.taskType === taskType)
+  }
+
+  /**
+   * The handler that decodes an outcome of a `kind` project: the one its recorded task type names,
+   * or, for an outcome with none recorded (written before outcomes recorded it, or by a build that
+   * did not send it), the kind's handler when the kind has exactly one. Undefined when neither
+   * resolves, and the body is then served as stored.
+   */
+  handlerOfOutcome(
+    kind: string,
+    taskType: string | null | undefined,
+  ): ErasedProjectTaskHandler | undefined {
+    if (taskType) return this.byTaskType.get(taskType)
+    const handlers = this.byKind.get(kind)?.handlers ?? []
+    return handlers.length === 1 ? handlers[0] : undefined
+  }
+
+  /** Every registered handler, each once. */
+  handlers(): ErasedProjectTaskHandler[] {
+    return [...this.byTaskType.values()]
   }
 
   all(): ProjectKindModule[] {

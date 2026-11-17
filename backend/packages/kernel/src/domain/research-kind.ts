@@ -44,6 +44,9 @@ import { renderResearchContext } from './research-context.js'
 /** The agent kind a research task dispatches. */
 export const PROJECT_RESEARCHER_AGENT_KIND = 'project-researcher'
 
+/** The task type of a research task, run by {@link researchTaskHandler}. */
+export const RESEARCH_TASK_TYPE = 'research'
+
 /** The descriptor the board offers: research tasks that read linked repos and write none. */
 export const RESEARCH_PROJECT_KIND: ProjectKindDescriptor = {
   id: RESEARCH_KIND,
@@ -51,7 +54,11 @@ export const RESEARCH_PROJECT_KIND: ProjectKindDescriptor = {
   description: 'Research a vendor or system against a research definition and keep the findings.',
   definition: 'required',
   taskTypes: [
-    { taskType: 'research', repoAccess: 'linked-read-only', defaultPipelineId: 'pl_research' },
+    {
+      taskType: RESEARCH_TASK_TYPE,
+      repoAccess: 'linked-read-only',
+      defaultPipelineId: 'pl_research',
+    },
   ],
 }
 
@@ -163,7 +170,7 @@ function renderRevision(
 }
 
 export const researchTaskHandler: ProjectTaskHandler<FindingsRevisionBody> = {
-  taskType: 'research',
+  taskType: RESEARCH_TASK_TYPE,
   agentKind: PROJECT_RESEARCHER_AGENT_KIND,
   outcomeSchemaVersion: RESEARCH_OUTCOME_SCHEMA_VERSION,
 

@@ -724,6 +724,7 @@
         "project_definition_not_found": "Aucune définition de ce type de projet dans cette organisation ne correspond à cette clé et à cette version. Vérifiez la clé, ou laissez la version vide pour épingler la plus récente.",
         "project_definition_inputs_invalid": "Les valeurs des entrées de la définition ne la satisfont pas. Renseignez chaque entrée obligatoire avec une valeur acceptée, puis réessayez.",
         "task_type_requires_project": "Une tâche de ce type appartient à un projet, pas à un service. Ajoutez-la à un projet d'un type qui la propose.",
+        "project_task_type_changed": "Le type de la tâche a changé après la planification de son exécution : l'exécution s'est arrêtée plutôt que de se terminer avec un autre gestionnaire. Relancez la tâche.",
         "project_not_pinned": "Une tâche de ce type a besoin que son projet épingle une définition, et celui-ci n'en épingle aucune. Ajoutez la tâche à un projet qui en épingle une.",
         "project_definition_changed": "La définition épinglée par ce projet a changé depuis : l'exécution s'est arrêtée plutôt que de travailler à partir d'une définition que le projet n'a jamais acceptée. Demandez à l'opérateur du déploiement de publier la modification comme nouvelle version.",
         "project_task_already_recorded": "Cette tâche a déjà enregistré son résultat sur le projet. Créez une nouvelle tâche pour faire un suivi.",

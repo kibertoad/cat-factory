@@ -799,6 +799,7 @@
         "project_definition_not_found": "No definition of this project kind matches that key and version for this organization. Check the key, or leave the version empty to pin the latest.",
         "project_definition_inputs_invalid": "The values for the definition's inputs do not satisfy it. Fill in every required input with an accepted value, then try again.",
         "task_type_requires_project": "A task of this type belongs under a project, not under a service. Add it to a project of a kind that offers it.",
+        "project_task_type_changed": "The task's type changed after its run was planned, so the run stopped rather than finish under a different handler. Start the task again.",
         "project_not_pinned": "A task of this type needs its project to pin a definition, and this one pins none. Add the task to a project that does.",
         "project_definition_changed": "The definition this project pinned has changed since, so the run stopped rather than work from a definition the project never agreed to. Ask your deployment operator to publish the change as a new version.",
         "project_task_already_recorded": "This task already recorded its result on the project. Create a new task to follow up.",

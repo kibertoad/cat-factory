@@ -16,7 +16,7 @@ import {
 } from '@cat-factory/kernel'
 import type { ProjectOutcomeStore, ReadOutcome } from './ProjectOutcomeStore.js'
 import type { MountedProject } from './ProjectService.js'
-import { decodeOutcomeBody, outcomeMetaOf } from './outcomeDecoding.js'
+import { outcomeMetaOf, tryDecodeOutcome } from './outcomeDecoding.js'
 
 export interface ProjectBoardViewsDeps {
   getMounted: (workspaceId: string, projectId: string) => Promise<MountedProject>
@@ -61,11 +61,12 @@ export class ProjectBoardViews {
         : null,
       this.deps.outcomes.readAll(project),
     ])
-    const decoded = read.map((outcome) => ({ outcome, body: this.decode(outcome) }))
-    const readable: DecodedProjectOutcome[] = decoded.flatMap(({ outcome, body }) =>
-      body === undefined
-        ? []
-        : [{ ...outcomeMetaOf(outcome.row), taskType: outcome.row.taskType, body }],
+    const decoded = read.map((outcome) => ({
+      outcome,
+      decoded: tryDecodeOutcome(this.deps.modules, project.kind, outcome),
+    }))
+    const readable: DecodedProjectOutcome[] = decoded.flatMap(({ decoded }) =>
+      decoded ? [decoded] : [],
     )
     const definition = resolved?.definition ?? null
     return {
@@ -81,7 +82,7 @@ export class ProjectBoardViews {
         : null,
       definition,
       definitionChanged: !!pin && !!resolved && resolved.contentHash !== pin.definitionHash,
-      outcomes: decoded.map(({ outcome, body }) => entryOf(outcome, body !== undefined)),
+      outcomes: decoded.map(({ outcome, decoded }) => entryOf(outcome, decoded !== undefined)),
       credentials: definition ? await checkCredentials(project, definition) : [],
       view: module?.view
         ? module.view({ definition, inputs: pin?.inputs ?? {}, outcomes: readable })
@@ -97,27 +98,15 @@ export class ProjectBoardViews {
     const { project } = await this.deps.getMounted(workspaceId, projectId)
     const read = await this.deps.outcomes.readOne(project, outcomeId)
     if (!read) throw new NotFoundError('ProjectOutcome', outcomeId)
-    const body = this.decode(read)
-    if (body === undefined) {
+    const decoded = tryDecodeOutcome(this.deps.modules, project.kind, read)
+    if (!decoded) {
       throw new UnavailableError(
         'A project outcome body is stored in the blob store, which cannot serve it now',
         'outcome_body_unavailable',
         { outcomeId },
       )
     }
-    return { ...entryOf(read, true), body }
-  }
-
-  /** A body as its handler decodes it, or undefined when it cannot be read or does not parse. */
-  private decode({ row, json }: ReadOutcome): unknown {
-    if (json === null) return undefined
-    let raw: unknown
-    try {
-      raw = JSON.parse(json)
-    } catch {
-      return undefined
-    }
-    return decodeOutcomeBody(this.deps.modules, row, raw)
+    return { ...entryOf(read, true), body: decoded.body }
   }
 }
 

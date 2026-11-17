@@ -231,7 +231,8 @@ export class DrizzleProjectRecordRepository implements ProjectRecordRepository {
         intent: row.intent,
         schema_version: row.schemaVersion,
         task_id: row.taskId,
-        task_type: row.taskType,
+        // A node one build behind sends no task type; the decoder attributes such a row.
+        task_type: row.taskType ?? null,
         definition_key: row.definitionKey,
         definition_version: row.definitionVersion,
         artifact_refs: JSON.stringify(row.artifactRefs),
