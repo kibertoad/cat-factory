@@ -38,6 +38,7 @@ function definitions() {
         title: 'Deepen',
         taskType: 'research',
         after: ['discover'],
+        consumes: [{ stage: 'discover' }],
         produces: 'deepening',
         config: config('paging', 'How does pagination work?'),
       },
@@ -166,7 +167,13 @@ export function defineCoreProjectStagesConformance(harness: ConformanceHarness):
       const deepened = await run(deeper.body)
       expect(
         deepened.steps.find((s) => s.agentKind === 'project-researcher')?.project,
-      ).toMatchObject({ stageId: 'deepen', stream: 'deepening', plan: { questionIds: ['paging'] } })
+      ).toMatchObject({
+        stageId: 'deepen',
+        stream: 'deepening',
+        plan: { questionIds: ['paging'] },
+        // It read the discovery result it started from.
+        upstream: [{ stageId: 'discover', outcomeId: `pout_${task.body.id}`, seq: 1 }],
+      })
       const repeat = await start('discover')
       expect(reasonOf(repeat.body)).toBe('project_stage_not_repeatable')
     })

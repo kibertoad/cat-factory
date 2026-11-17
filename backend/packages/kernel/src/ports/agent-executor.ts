@@ -1030,6 +1030,23 @@ export interface ProjectRunContext {
   linkedFrameBlockIds: string[]
   /** What the kind asks of this task, in the kind's own shape, for the kind's agent prompt. */
   brief: unknown
+  /**
+   * The results of the stages a staged task reads (its stage's `consumes`), each the upstream
+   * result the task started from, rendered by the handler that wrote it. Empty for an unstaged
+   * task. Delivered beside linked projects, as `.cat-context/` files and an index line each.
+   */
+  upstream: ProjectUpstreamContext[]
+}
+
+/** One upstream stage's result as a staged task reads it. */
+export interface ProjectUpstreamContext {
+  stageId: string
+  title: string
+  /** The outcome the rendering ends at; null when the stage had no accepted result to read. */
+  revision: { id: string; seq: number } | null
+  summary: string
+  coverage: string
+  body: string
 }
 
 /** A credential the agent stopped to ask a person for. */

@@ -39,6 +39,16 @@ export interface ProjectTaskInput<Body> {
   outcomes: ReadonlyArray<ProjectOutcome<Body>>
 }
 
+/** What a handler reads to render one stream's outcomes as context. */
+export interface ProjectStreamContextInput<Body> {
+  definition: ProjectDefinition | null
+  inputs: Record<string, unknown>
+  /** The stage that wrote the stream, with its config as normalized; null for an unstaged one. */
+  stage: { id: string; title: string; config: unknown } | null
+  /** The stream's outcomes to render, `seq` ascending, decoded by this handler. */
+  outcomes: ReadonlyArray<ProjectOutcome<Body>>
+}
+
 /** A task's plan, fixed on its step at its first dispatch. */
 export interface ProjectTaskPlan {
   /** What the task asks for, in the handler's own vocabulary; recorded on the outcome. */
@@ -80,6 +90,12 @@ export interface ProjectTaskHandler<Body = unknown> {
   describe(input: { plan: unknown; seq: number; body: Body }): string
   /** The binary artifacts a body references, for the outcome's `artifactRefs`. */
   artifactRefs(body: Body): string[]
+  /**
+   * One stream's outcomes, written by tasks of this type, rendered as read-only context for
+   * another agent: a later stage that reads this one. Absent: the platform shows the newest
+   * outcome as recorded.
+   */
+  renderContext?(input: ProjectStreamContextInput<Body>): ProjectContextRendering
   /**
    * Validate and normalize the `config` a definition's stage gives this task type. Absent: the
    * task type takes no config, and a stage that gives one is refused.

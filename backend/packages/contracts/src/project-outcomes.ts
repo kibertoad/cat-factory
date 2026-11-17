@@ -126,6 +126,19 @@ export const projectStepStateSchema = v.object({
   checkpoint: v.optional(v.unknown()),
   /** The stage of its project's definition the task runs, for a staged project. */
   stageId: v.optional(projectStageIdSchema),
+  /**
+   * What the task read of each stage its stage consumes, set on every dispatch: the upstream
+   * outcome it read, or null where that stage had no accepted result.
+   */
+  upstream: v.optional(
+    v.array(
+      v.object({
+        stageId: v.string(),
+        outcomeId: v.nullable(v.string()),
+        seq: v.nullable(v.number()),
+      }),
+    ),
+  ),
   /** The outcome this task wrote, once written. */
   outcomeId: v.optional(v.string()),
 })

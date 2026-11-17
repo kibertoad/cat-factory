@@ -510,6 +510,65 @@ describe('ProjectStepController with a staged project', () => {
     expect(stageTasks[0]!.recordedAt).toBe(5)
   })
 
+  it('reads each consumed stage up to the result it started from, and records what it read', async () => {
+    const reading = stages.map((s) =>
+      s.id === 'deepen' ? { ...s, consumes: [{ stage: 'discover' }] } : s,
+    )
+    const discovered = (taskId: string): ProjectStageTask => ({
+      ...bound('discover'),
+      taskId,
+      recordedAt: 2,
+    })
+    const { ctrl, task } = harness({
+      kind: 'research',
+      stages: reading,
+      stageTasks: [
+        discovered('task_1'),
+        discovered('task_3'),
+        { ...bound('deepen'), basis: { discover: 'pout_task_1' } },
+      ],
+      rows: [
+        outcomeRow('task_1', 1, body({ scheme: 'answered' }), 'discovery'),
+        // Recorded after the deepen task started, so it is not what that task reads.
+        outcomeRow('task_3', 3, body({ scheme: 'partial' }), 'discovery'),
+      ],
+    })
+    const step = { ...researching }
+    const run = await ctrl.prepare(step, task)
+    expect(run.upstream).toHaveLength(1)
+    expect(run.upstream[0]).toMatchObject({
+      stageId: 'discover',
+      title: 'Stage Discover',
+      revision: { id: 'pout_task_1', seq: 1 },
+      coverage: '1 of 1 questions answered, 0 partial, 0 blocked, 0 unanswered',
+    })
+    expect(run.upstream[0]!.body).toContain('Research stage: Discover')
+    expect(step.project?.upstream).toEqual([
+      { stageId: 'discover', outcomeId: 'pout_task_1', seq: 1 },
+    ])
+  })
+
+  it('states a consumed stage that had no accepted result rather than leaving it out', async () => {
+    const reading = stages.map((s) =>
+      s.id === 'deepen' ? { ...s, consumes: [{ stage: 'discover' }] } : s,
+    )
+    const { ctrl, task } = harness({
+      kind: 'research',
+      stages: reading,
+      stageTasks: [{ ...bound('deepen'), basis: { discover: null } }],
+    })
+    const step = { ...researching }
+    const run = await ctrl.prepare(step, task)
+    expect(run.upstream).toEqual([
+      expect.objectContaining({
+        stageId: 'discover',
+        revision: null,
+        coverage: 'no accepted result',
+      }),
+    ])
+    expect(step.project?.upstream).toEqual([{ stageId: 'discover', outcomeId: null, seq: null }])
+  })
+
   it("frees its stage once the outcome is recorded, on the stage's stream", async () => {
     const { ctrl, rows, task, stageTasks } = harness({
       kind: 'research',

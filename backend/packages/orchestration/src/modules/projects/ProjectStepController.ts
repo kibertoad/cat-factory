@@ -3,6 +3,7 @@ import {
   type Project,
   type ProjectDefinition,
   type ProjectStage,
+  type ProjectStageTask,
   type ProjectStepState,
 } from '@cat-factory/contracts'
 import {
@@ -32,6 +33,7 @@ import type { ProjectOutcomeStore } from './ProjectOutcomeStore.js'
 import type { ProjectStageService } from './ProjectStageService.js'
 import { decodeOutcome, outcomeTaskType } from './outcomeDecoding.js'
 import { resolvePinnedDefinition } from './pinnedDefinition.js'
+import { renderStageUpstream } from './stageUpstream.js'
 
 // ---------------------------------------------------------------------------
 // The engine half of a project task's run, for every project kind: what its step is asked when it
@@ -65,8 +67,8 @@ interface ResolvedTask {
   definition: ProjectDefinition | null
   inputs: Record<string, unknown>
   outcomes: DecodedProjectOutcome[]
-  /** The stage the task runs, for a project whose definition declares stages. */
-  stage: ProjectStage | null
+  /** The stage the task runs, with its record and the project's, for a staged project. */
+  staged: { stage: ProjectStage; record: ProjectStageTask; records: ProjectStageTask[] } | null
 }
 
 /** The outcome id a task writes: one per task, so a replayed write is a no-op. */
@@ -108,7 +110,7 @@ export class ProjectStepController {
     if (task.outcomes.some((o) => o.taskId === block.id)) {
       // The outcome landed but the stage was never told (the process died between the two
       // writes): free the stage now, or its slot stays held by a task that already finished.
-      if (task.stage) {
+      if (task.staged) {
         await this.deps.records.markStageTaskRecorded(
           task.project.id,
           block.id,
@@ -127,10 +129,10 @@ export class ProjectStepController {
         projectId: task.project.id,
         kind: task.project.kind,
         taskType: task.handler.taskType,
-        ...(task.stage ? { stageId: task.stage.id } : {}),
+        ...(task.staged ? { stageId: task.staged.stage.id } : {}),
         seq,
         // A stage names the stream its tasks write, whatever the handler would pick on its own.
-        stream: task.stage?.produces ?? planned.stream,
+        stream: task.staged?.stage.produces ?? planned.stream,
         intent: planned.intent,
         definitionKey: task.definition?.key ?? null,
         definitionVersion: task.definition?.version ?? null,
@@ -138,6 +140,32 @@ export class ProjectStepController {
       }
     }
     if (!step.project.taskType) step.project = { ...step.project, taskType: task.handler.taskType }
+    const upstream =
+      task.staged && task.definition
+        ? await renderStageUpstream(
+            {
+              records: this.deps.records,
+              outcomes: this.deps.outcomes,
+              modules: this.deps.modules,
+            },
+            {
+              project: task.project,
+              definition: task.definition,
+              inputs: task.inputs,
+              ...task.staged,
+            },
+          )
+        : []
+    if (task.staged) {
+      step.project = {
+        ...step.project,
+        upstream: upstream.map((u) => ({
+          stageId: u.stageId,
+          outcomeId: u.revision?.id ?? null,
+          seq: u.revision?.seq ?? null,
+        })),
+      }
+    }
     const state = step.project
     const checkpoint = this.parse(task.handler, state.checkpoint)
     const services = task.project.serviceIds.length
@@ -149,6 +177,7 @@ export class ProjectStepController {
       definition: task.definition,
       inputs: task.inputs,
       linkedFrameBlockIds: services.map((s) => s.frameBlockId).filter((id): id is string => !!id),
+      upstream,
       brief: task.handler.brief({
         ...input,
         plan: state.plan,
@@ -268,9 +297,9 @@ export class ProjectStepController {
       task: block,
       definition: task.definition,
       inputs: task.inputs,
-      stage: task.stage ? { id: task.stage.id, config: task.stage.config } : null,
+      stage: task.staged ? { id: task.staged.stage.id, config: task.staged.stage.config } : null,
       outcomes: outcomesOf(task.handler, task.outcomes).filter(
-        (o) => !task.stage || o.stream === task.stage.produces,
+        (o) => !task.staged || o.stream === task.staged.stage.produces,
       ),
     }
   }
@@ -284,12 +313,12 @@ export class ProjectStepController {
     definition: ProjectDefinition | null,
     block: Block,
     handler: ErasedProjectTaskHandler,
-  ): Promise<ProjectStage | null> {
+  ): Promise<ResolvedTask['staged']> {
     if (!definition?.stages.length) return null
     const records = await this.deps.records.listStageTasks(project.id)
-    const stageId = records.find((r) => r.taskId === block.id)?.stageId
-    const stage = definition.stages.find((s) => s.id === stageId)
-    if (!stage) {
+    const record = records.find((r) => r.taskId === block.id)
+    const stage = definition.stages.find((s) => s.id === record?.stageId)
+    if (!stage || !record) {
       throw new ValidationError('This task was not started from a stage of its project', {
         reason: 'project_task_has_no_stage',
         projectId: project.id,
@@ -302,7 +331,7 @@ export class ProjectStepController {
         taskType: handler.taskType,
       })
     }
-    return stage
+    return { stage, record, records }
   }
 
   private async resolveTask(block: Block, agentKind: string): Promise<ResolvedTask> {
@@ -334,7 +363,7 @@ export class ProjectStepController {
     return {
       project,
       handler,
-      stage: await this.stageOf(project, definition, block, handler),
+      staged: await this.stageOf(project, definition, block, handler),
       definition,
       inputs: pin?.inputs ?? {},
       outcomes: stored.map((outcome) => decodeOutcome(this.deps.modules, project.kind, outcome)),

@@ -283,6 +283,21 @@ export const researchTaskHandler: ProjectTaskHandler<FindingsRevisionBody> = {
 
   parseConfig: parseResearchSpec,
 
+  renderContext: ({ definition, stage, outcomes }) => {
+    if (stage) {
+      const config = parseResearchSpec(stage.config)
+      return renderResearchContext(
+        { spec: config.ok ? config.value : null, label: `Research stage: ${stage.title}` },
+        outcomes,
+      )
+    }
+    const parsed = definition ? parseResearchDefinition(definition) : undefined
+    return renderResearchContext(
+      { spec: parsed?.ok ? parsed.value.spec : null, label: null },
+      outcomes,
+    )
+  },
+
   schemas: { outcome: findingsRevisionBodySchema },
 }
 
@@ -315,7 +330,16 @@ export const researchKindModule: ProjectKindModule = {
     )
   },
 
-  renderContext: (input) => renderResearchContext(input.definition, researchOutcomesOf(input)),
+  renderContext: (input) => {
+    const parsed = input.definition ? parseResearchDefinition(input.definition) : undefined
+    const source = parsed?.ok
+      ? {
+          spec: parsed.value.spec,
+          label: `Research definition: ${parsed.value.key} v${parsed.value.version}`,
+        }
+      : { spec: null, label: null }
+    return renderResearchContext(source, researchOutcomesOf(input))
+  },
 
   schemas: { spec: researchSpecSchema, view: researchProjectViewSchema },
 }

@@ -62,7 +62,7 @@ export function projectContextContributor(deps: ProjectContextDeps): ProjectCont
           inputs: pinOf.get(project.id)?.inputs ?? {},
           outcomes,
         }
-        const rendering = module?.renderContext?.(input) ?? renderLatest(outcomes)
+        const rendering = module?.renderContext?.(input) ?? renderLatestOutcomes(outcomes)
         const latest = outcomes.at(-1)
         rendered.set(project.id, {
           summary: redactSecrets(rendering.summary) ?? '',
@@ -106,7 +106,9 @@ async function definitionsOf(
 }
 
 /** The newest outcome of each stream as recorded, for a kind that renders no context itself. */
-function renderLatest(outcomes: readonly DecodedProjectOutcome[]): ProjectContextRendering {
+export function renderLatestOutcomes(
+  outcomes: readonly DecodedProjectOutcome[],
+): ProjectContextRendering {
   const latest = new Map<string, DecodedProjectOutcome>()
   for (const outcome of outcomes) latest.set(outcome.stream, outcome)
   const lines: string[] = []

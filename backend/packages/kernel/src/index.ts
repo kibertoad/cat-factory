@@ -1219,6 +1219,7 @@ export {
   type ErasedProjectTaskHandler,
   type ProjectKindModule,
   ProjectKindModuleRegistry,
+  type ProjectStreamContextInput,
   type ProjectTaskHandler,
   type ProjectTaskInput,
   eraseTaskHandler,
