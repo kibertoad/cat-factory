@@ -22,6 +22,7 @@ import org.jspecify.annotations.Nullable;
  * @param start the {@code start} field.
  * @param taskType the {@code taskType} field.
  * @param title Length 1..200.
+ * @param writes May be absent entirely.
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record PublicProjectDefinitionDefinitionStage(
@@ -48,7 +49,10 @@ public record PublicProjectDefinitionDefinitionStage(
     @JsonProperty("taskType") String taskType,
 
     /** Length 1..200. */
-    @JsonProperty("title") String title
+    @JsonProperty("title") String title,
+
+    /** May be absent entirely. */
+    @JsonInclude(JsonInclude.Include.NON_NULL) @JsonProperty("writes") @Nullable Boolean writes
 ) {
 
     /** A new builder for {@link PublicProjectDefinitionDefinitionStage}. */
@@ -74,6 +78,7 @@ public record PublicProjectDefinitionDefinitionStage(
         private @Nullable PublicProjectDefinitionDefinitionStageStart start;
         private @Nullable String taskType;
         private @Nullable String title;
+        private @Nullable Boolean writes;
 
         /** Set {@code after}. */
         public Builder after(@Nullable List<String> after) {
@@ -141,9 +146,15 @@ public record PublicProjectDefinitionDefinitionStage(
             return this;
         }
 
+        /** Set {@code writes}. */
+        public Builder writes(@Nullable Boolean writes) {
+            this.writes = writes;
+            return this;
+        }
+
         /** Build the {@link PublicProjectDefinitionDefinitionStage}. */
         public PublicProjectDefinitionDefinitionStage build() {
-            return new PublicProjectDefinitionDefinitionStage(after, checkpoint, config, consumes, description, id, produces, repeatable, start, taskType, title);
+            return new PublicProjectDefinitionDefinitionStage(after, checkpoint, config, consumes, description, id, produces, repeatable, start, taskType, title, writes);
         }
     }
 }

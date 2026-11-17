@@ -64,17 +64,25 @@ describe('projectStageIssues', () => {
     expect(issues).toEqual(['stages run after each other in a cycle: a -> c -> b -> a'])
   })
 
-  it('lets a stage write only after a stage a person accepts at a checkpoint', () => {
+  it('lets a stage write only from plans a person accepted, and only once each', () => {
+    const plan = stage('plan', { checkpoint: true })
+    const apply = (over: Partial<ProjectStage>) =>
+      stage('apply', { after: ['plan'], consumes: [{ stage: 'plan' }], writes: true, ...over })
+    expect(projectStageIssues([plan, apply({})])).toEqual([])
+    const unreviewed =
+      "stage 'apply' writes, so every stage it reads must be one a person accepts at a checkpoint, and it must read at least one"
+    expect(projectStageIssues([stage('plan'), apply({})])).toEqual([unreviewed])
+    expect(projectStageIssues([plan, apply({ consumes: [] })])).toEqual([unreviewed])
+    // A checkpointed ancestor is not enough when the plan it writes from was never reviewed.
     expect(
       projectStageIssues([
-        stage('plan', { checkpoint: true }),
-        stage('apply', { after: ['plan'], writes: true }),
+        stage('scope', { checkpoint: true }),
+        stage('plan', { after: ['scope'] }),
+        apply({}),
       ]),
-    ).toEqual([])
-    expect(
-      projectStageIssues([stage('plan'), stage('apply', { after: ['plan'], writes: true })]),
-    ).toEqual([
-      "stage 'apply' writes, so it must run after a stage a person accepts at a checkpoint",
+    ).toEqual([unreviewed])
+    expect(projectStageIssues([plan, apply({ repeatable: true })])).toEqual([
+      "stage 'apply' writes, so it cannot be repeatable",
     ])
   })
 
@@ -89,7 +97,7 @@ describe('projectStageIssues', () => {
       ],
       stages: [
         stage('plan', { checkpoint: true }),
-        stage('apply', { after: ['plan'], writes: true }),
+        stage('apply', { after: ['plan'], consumes: [{ stage: 'plan' }], writes: true }),
       ],
       spec: {},
     })
@@ -98,6 +106,29 @@ describe('projectStageIssues', () => {
       issues: ["stage 'apply' writes, but no target allows writes"],
     })
     expect(parseProjectDefinition(definition('write')).ok).toBe(true)
+  })
+
+  it('refuses two targets on one origin that reach the same paths, and an unnormalized prefix', () => {
+    const definition = (targets: unknown[]) => ({
+      kind: 'research',
+      key: 'acme:vendor',
+      version: 1,
+      title: 'Vendor',
+      targets,
+      spec: {},
+    })
+    const ui = { baseUrl: 'https://vendor.example', surface: 'ui' }
+    const api = { baseUrl: 'https://vendor.example/api', surface: 'api', access: 'write' }
+    expect(parseProjectDefinition(definition([ui, api]))).toEqual({
+      ok: false,
+      issues: [
+        'two targets reach https://vendor.example; give targets on one origin distinct pathPrefix values',
+      ],
+    })
+    expect(parseProjectDefinition(definition([ui, { ...api, pathPrefix: '/api' }])).ok).toBe(true)
+    for (const pathPrefix of ['/api/', '/a/../b', 'api', '/api?x=1']) {
+      expect(parseProjectDefinition(definition([{ ...api, pathPrefix }])).ok).toBe(false)
+    }
   })
 
   it('is applied by the definition envelope', () => {

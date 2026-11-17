@@ -635,3 +635,9 @@ Additive. A consumer built against 1.97.0 keeps parsing.
 A project definition may declare `stages`: each runs one task type and writes one outcome stream, runs after the stages it names in `after`, reads the stages in its ancestry it names in `consumes`, and may hold each result at a `checkpoint` until a person accepts it. `start`, `checkpoint` and `repeatable` say how it starts and reruns, and `config` is validated by the stage's task type. A definition published through `PUT /api/v1/project-kinds/{kind}/definitions/{key}/versions/{version}` is validated against them, and one read back carries them (empty when it declares none).
 
 Additive. A consumer built against 1.98.0 keeps parsing, and a definition that declares no stages hashes as before.
+
+## 1.100.0
+
+A project definition's target may declare `access` (`read`, or `write` for a stage that writes) and a `pathPrefix` bounding the paths a run's API requests reach; two targets on one origin must differ in `pathPrefix`. A stage may declare `writes`: it must read at least one stage, every stage it reads must hold its result at a checkpoint, and it cannot be `repeatable`. A run's API requests to a target are read-only unless the target allows writes and the run is a writing stage.
+
+Additive on the wire, and both target fields are optional with no default, so a definition that names neither hashes as before. What a consumer NOTICES: a project run's API requests to its targets are refused for any method but GET, HEAD and OPTIONS unless the definition grants a writing stage, where before any method was sent.

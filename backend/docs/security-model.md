@@ -666,8 +666,11 @@ Do not lean on any of these; the codebase explicitly refuses to:
 - **Project targets are read-only unless a stage writes.** `http_request` sends only GET, HEAD
   and OPTIONS to a target unless the target declares `access: 'write'` AND the run is a stage
   declared `writes`, and a target's `pathPrefix` bounds which paths it reaches at all (the most
-  specific matching target decides). A writing stage must run after a stage whose result a person
-  accepts at a checkpoint, so a write follows a human-reviewed plan. This bounds the API tool, not
+  specific matching target decides, and two targets on one origin must differ in prefix). A path
+  with an encoded slash, backslash or dot, or a `;`, never matches a prefix, since a server may
+  resolve it outside one. A writing stage reads only stages whose results a person accepts at a
+  checkpoint and cannot be repeatable, so every write follows a plan a person accepted. Enforced
+  by runner image 1.168.0 and later: an older image ignores both fields. This bounds the API tool, not
   the browser: a page reached through Playwright can still submit a form, so a `ui` target's
   writes are governed by the agent's instructions and that checkpoint, not by the harness.
 

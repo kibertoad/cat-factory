@@ -143,6 +143,14 @@ describe('buildProjectJobBody', () => {
 
 describe('buildProjectJobBody target access', () => {
   async function targetsFor(writes: boolean) {
+    return ((await bodyFor(writes)).access as { targets: unknown[] }).targets
+  }
+
+  async function promptFor(writes: boolean) {
+    return (await bodyFor(writes)).userPrompt as string
+  }
+
+  async function bodyFor(writes: boolean) {
     const { body } = await buildProjectJobBody(
       {
         agentKind: 'project-researcher',
@@ -185,7 +193,7 @@ describe('buildProjectJobBody target access', () => {
         }),
       },
     )
-    return (body.access as { targets: unknown[] }).targets
+    return body
   }
 
   it('opens a writable target only to a run of a stage that writes', async () => {
@@ -198,6 +206,9 @@ describe('buildProjectJobBody target access', () => {
       },
       { baseUrl: 'https://app.vendor.example', surface: 'ui', access: 'read' },
     ])
+    const prompt = await promptFor(true)
+    expect(prompt).toContain('- https://api.vendor.example: this run may write under /drafts')
+    expect(prompt).toContain('- https://app.vendor.example: read-only for this run')
     expect(await targetsFor(false)).toEqual([
       {
         baseUrl: 'https://api.vendor.example',

@@ -46,11 +46,13 @@ export const projectStageSchema = v.object({
   /** Whether a stage with an accepted result may run again. */
   repeatable: v.optional(v.boolean(), false),
   /**
-   * Whether this stage's runs may write to the targets that allow writes. Every other run is
-   * read-only. A writing stage must run after a stage whose result a person accepts at a
-   * checkpoint, so nothing is written before a person has seen what will be.
+   * Whether this stage's runs may write to the targets that allow writes; every other run is
+   * read-only. A writing stage reads only stages whose results a person accepts at a checkpoint,
+   * and at least one, so it writes from a plan a person saw; it cannot be `repeatable`, so each
+   * write follows an acceptance. Left out rather than defaulted, so a stage that does not write
+   * hashes as it always did.
    */
-  writes: v.optional(v.boolean(), false),
+  writes: v.optional(v.boolean()),
   /** What the stage's task handler is configured with, validated by that handler. */
   config: v.optional(v.unknown()),
 })
@@ -82,10 +84,17 @@ export function projectStageIssues(stages: readonly ProjectStage[]): string[] {
     const checkpointed = new Set(stages.filter((s) => s.checkpoint).map((s) => s.id))
     for (const stage of stages) {
       const ancestry = ancestorsOf(stages, stage.id)
-      if (stage.writes && ![...ancestry].some((id) => checkpointed.has(id))) {
-        issues.push(
-          `stage '${stage.id}' writes, so it must run after a stage a person accepts at a checkpoint`,
-        )
+      if (stage.writes === true) {
+        const unreviewed = stage.consumes.filter((c) => !checkpointed.has(c.stage))
+        if (stage.consumes.length === 0 || unreviewed.length > 0) {
+          issues.push(
+            `stage '${stage.id}' writes, so every stage it reads must be one a person accepts at ` +
+              'a checkpoint, and it must read at least one',
+          )
+        }
+        if (stage.repeatable) {
+          issues.push(`stage '${stage.id}' writes, so it cannot be repeatable`)
+        }
       }
       const read = stage.consumes.map((c) => c.stage)
       for (const repeated of new Set(read.filter((id, i) => read.indexOf(id) !== i))) {

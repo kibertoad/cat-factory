@@ -45,6 +45,18 @@ describe('access tool rules', () => {
     expect(targetFor('https://evil.example/v2/drafts', TARGETS)).toBeUndefined()
   })
 
+  it('never matches a prefix through a path a server could resolve differently', () => {
+    for (const path of ['/v2/drafts/..%2fitems', '/v2/drafts/..%5Citems', '/v2/drafts/..;/items']) {
+      expect(targetFor(`https://api.vendor.example${path}`, TARGETS)?.access).toBe('read')
+    }
+  })
+
+  it('reads a prefix with a trailing slash as its own root', () => {
+    const slashed = [{ ...TARGETS[2]!, pathPrefix: '/v2/drafts/' }]
+    expect(targetFor('https://api.vendor.example/v2/drafts', slashed)?.access).toBe('write')
+    expect(targetFor('https://api.vendor.example/v2/drafts/7', slashed)?.access).toBe('write')
+  })
+
   it('attaches a credential by scheme', () => {
     expect(applyAuth('https://x.example', {}, { scheme: 'bearer' }, 'tok').headers).toEqual({
       authorization: 'Bearer tok',
@@ -156,7 +168,7 @@ describe('the access tool server', () => {
       body: { name: 'x' },
     })
     expect(refused.isError).toBe(true)
-    expect(refused.text).toContain('read-only for this run')
+    expect(refused.text).toContain('https://api.vendor.example is read-only for this run')
     expect(fetchSpy).not.toHaveBeenCalled()
     const sent = await access.definition.call('http_request', {
       method: 'POST',

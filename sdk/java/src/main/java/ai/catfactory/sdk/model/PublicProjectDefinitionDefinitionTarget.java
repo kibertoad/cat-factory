@@ -4,17 +4,26 @@
 package ai.catfactory.sdk.model;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import org.jspecify.annotations.Nullable;
 
 /**
  * The {@code PublicProjectDefinitionDefinitionTarget} wire model.
+ * @param access May be absent entirely.
  * @param baseUrl the {@code baseUrl} field.
+ * @param pathPrefix May be absent entirely.
  * @param surface the {@code surface} field.
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record PublicProjectDefinitionDefinitionTarget(
+    /** May be absent entirely. */
+    @JsonInclude(JsonInclude.Include.NON_NULL) @JsonProperty("access") @Nullable PublicProjectDefinitionDefinitionTargetAccess access,
+
     @JsonProperty("baseUrl") String baseUrl,
+
+    /** May be absent entirely. */
+    @JsonInclude(JsonInclude.Include.NON_NULL) @JsonProperty("pathPrefix") @Nullable String pathPrefix,
 
     @JsonProperty("surface") PublicProjectDefinitionDefinitionTargetSurface surface
 ) {
@@ -31,12 +40,26 @@ public record PublicProjectDefinitionDefinitionTarget(
      * shape that reads naturally from both languages.
      */
     public static final class Builder {
+        private @Nullable PublicProjectDefinitionDefinitionTargetAccess access;
         private @Nullable String baseUrl;
+        private @Nullable String pathPrefix;
         private @Nullable PublicProjectDefinitionDefinitionTargetSurface surface;
+
+        /** Set {@code access}. */
+        public Builder access(@Nullable PublicProjectDefinitionDefinitionTargetAccess access) {
+            this.access = access;
+            return this;
+        }
 
         /** Set {@code baseUrl}. */
         public Builder baseUrl(@Nullable String baseUrl) {
             this.baseUrl = baseUrl;
+            return this;
+        }
+
+        /** Set {@code pathPrefix}. */
+        public Builder pathPrefix(@Nullable String pathPrefix) {
+            this.pathPrefix = pathPrefix;
             return this;
         }
 
@@ -48,7 +71,7 @@ public record PublicProjectDefinitionDefinitionTarget(
 
         /** Build the {@link PublicProjectDefinitionDefinitionTarget}. */
         public PublicProjectDefinitionDefinitionTarget build() {
-            return new PublicProjectDefinitionDefinitionTarget(baseUrl, surface);
+            return new PublicProjectDefinitionDefinitionTarget(access, baseUrl, pathPrefix, surface);
         }
     }
 }

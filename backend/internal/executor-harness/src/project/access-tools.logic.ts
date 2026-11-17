@@ -48,10 +48,27 @@ export function targetFor(url: string, targets: readonly AccessTarget[]): Access
   return matching.sort((a, b) => (b.pathPrefix?.length ?? 0) - (a.pathPrefix?.length ?? 0))[0]
 }
 
+/**
+ * A path a server could resolve differently from how it reads here: an encoded slash, backslash or
+ * dot, or a `;` parameter (`..;` climbs on some servlet stacks). Such a path never matches a path
+ * prefix, so it reaches only an origin-wide target.
+ */
+const AMBIGUOUS_PATH = /%2f|%5c|%2e|;/i
+
 function withinPrefix(path: string, prefix: string | undefined): boolean {
   if (!prefix) return true
-  const dir = prefix.endsWith('/') ? prefix : `${prefix}/`
-  return path === prefix || path.startsWith(dir)
+  if (AMBIGUOUS_PATH.test(path)) return false
+  const root = prefix.length > 1 && prefix.endsWith('/') ? prefix.slice(0, -1) : prefix
+  return path === root || path.startsWith(root === '/' ? '/' : `${root}/`)
+}
+
+/** How a target is named in a refusal: its origin and, when it has one, its path prefix. */
+export function describeTarget(target: AccessTarget): string {
+  try {
+    return `${new URL(target.baseUrl).origin}${target.pathPrefix ?? ''}`
+  } catch {
+    return target.baseUrl
+  }
 }
 
 /** How `http_request` attaches a credential. */

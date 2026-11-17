@@ -107,7 +107,7 @@ export async function buildProjectJobBody(
     model: model.model,
     ...authResult.auth,
     systemPrompt: toolSection ? `${role}\n\n${toolSection}` : role,
-    userPrompt: `${userPrompt}${known}${linked.section ? `\n\n${linked.section}` : ''}`,
+    userPrompt: `${userPrompt}${known}${targetAccessSection(targets)}${linked.section ? `\n\n${linked.section}` : ''}`,
     ...(contextFiles.length ? { contextFiles } : {}),
     ...(output ? { output } : {}),
     ...(ghToken ? { ghToken } : {}),
@@ -129,6 +129,23 @@ export async function buildProjectJobBody(
       : {}),
     toolServers: tools,
   }
+}
+
+/**
+ * What this run may do at each target, stated so the agent plans within it rather than learning it
+ * from refusals: read-only, or writable (within a path prefix where one is set).
+ */
+function targetAccessSection(
+  targets: readonly { baseUrl: string; access: 'read' | 'write'; pathPrefix?: string }[],
+): string {
+  if (targets.length === 0) return ''
+  const lines = targets.map((t) => {
+    const scope = t.pathPrefix ? ` under ${t.pathPrefix}` : ''
+    return t.access === 'write'
+      ? `- ${t.baseUrl}: this run may write${scope} (any method)`
+      : `- ${t.baseUrl}: read-only for this run (GET, HEAD and OPTIONS${scope})`
+  })
+  return `\n\n## What this run may do at each target\n${lines.join('\n')}`
 }
 
 function requireProject(context: AgentRunContext): ProjectRunContext {

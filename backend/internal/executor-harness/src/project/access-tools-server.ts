@@ -18,6 +18,7 @@ import {
   loginFields,
   oauthClient,
   scrub,
+  describeTarget,
   targetFor,
   targetOrigins,
   READ_METHODS,
@@ -240,8 +241,7 @@ export function accessTools(config: AccessToolsConfig): AccessTools {
     }
     if (target.access !== 'write' && !READ_METHODS.has(method)) {
       return refuse(
-        `${target.baseUrl}${target.pathPrefix ?? ''} is read-only for this run, so the ${method} ` +
-          'was not sent.',
+        `${describeTarget(target)} is read-only for this run, so the ${method} ` + 'was not sent.',
       )
     }
     let url = rawUrl
