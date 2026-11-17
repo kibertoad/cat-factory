@@ -95,7 +95,7 @@ bucket for every new repository method in the same PR.
       task plans from its stage's config and history and writes its stage's stream. PR: [#2523](https://github.com/kibertoad/cat-factory/pull/2523)
 - [x] **2b. Auto-start.** A stage with `start: 'auto'` creates and starts its task once it is
       ready: at project creation, after an outcome records, and after a checkpoint clears
-      (`ProjectStageService.advance`, through a late-bound run starter). PR: (this slice)
+      (`ProjectStageService.advance`, through a late-bound run starter). PR: [#2524](https://github.com/kibertoad/cat-factory/pull/2524)
 - [ ] **3. Upstream context.** A stage's consumed streams rendered by their handlers into
       `.cat-context/`; the read `seq` recorded on the step; a consumed stream that cannot be read
       breaks the run naming it.
