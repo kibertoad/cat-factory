@@ -5,6 +5,7 @@ import type {
 } from '@cat-factory/kernel'
 import type { CoreDependencies } from '../../container/dependencies.js'
 import { ProjectOutcomeStore } from './ProjectOutcomeStore.js'
+import type { ProjectStageService } from './ProjectStageService.js'
 import { ProjectStepController } from './ProjectStepController.js'
 
 /**
@@ -13,7 +14,12 @@ import { ProjectStepController } from './ProjectStepController.js'
  */
 export function createProjectStepController(
   deps: CoreDependencies,
-  sources: { definitions: ProjectDefinitionSource; modules: ProjectKindModuleRegistry },
+  sources: {
+    definitions: ProjectDefinitionSource
+    modules: ProjectKindModuleRegistry
+    /** The projects module's stages, so a recorded outcome starts what it made ready. */
+    stages?: Pick<ProjectStageService, 'advance'>
+  },
 ): ProjectStepController | undefined {
   const { projectRepository, projectRecordRepository } = deps
   if (!projectRepository || !projectRecordRepository) return undefined
@@ -27,6 +33,8 @@ export function createProjectStepController(
     outcomes,
     modules: sources.modules,
     clock: deps.clock,
+    ...(sources.stages ? { stages: sources.stages } : {}),
+    logger: deps.logger,
   })
 }
 

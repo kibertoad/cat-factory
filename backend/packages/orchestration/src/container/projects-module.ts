@@ -13,6 +13,7 @@ import { ProjectOutcomeReader } from '../modules/projects/ProjectOutcomeReader.j
 import { ProjectService } from '../modules/projects/ProjectService.js'
 import {
   ProjectStageService,
+  type StageRunStarter,
   type StageTaskBoard,
 } from '../modules/projects/ProjectStageService.js'
 import { TaskProjectLinkService } from '../modules/projects/TaskProjectLinkService.js'
@@ -31,8 +32,14 @@ export function createProjectsModule(
     projectKindModules: ProjectKindModuleRegistry
   },
   events: ExecutionEventPublisher,
-  /** Late-bound: the board is built after this module, and a stage creates its tasks on it. */
-  board: () => StageTaskBoard | undefined,
+  /**
+   * Late-bound: the board and the engine are built after this module; a stage creates its tasks on
+   * the board and starts an automatic stage's run through the engine.
+   */
+  late: {
+    board: () => StageTaskBoard | undefined
+    runStarter: () => StageRunStarter | undefined
+  },
 ): ProjectsModule | undefined {
   const {
     projectRepository,
@@ -48,6 +55,9 @@ export function createProjectsModule(
   ) {
     return undefined
   }
+  // Assigned below: the stages read projects through the service, and a new project starts its
+  // automatic stages through the stages.
+  let stagesRef: ProjectStageService | undefined
   const service = new ProjectService({
     projectRepository,
     serviceRepository,
@@ -61,6 +71,9 @@ export function createProjectsModule(
     clock: deps.clock,
     events,
     logger: deps.logger,
+    onCreated: async (workspaceId, projectId) => {
+      await stagesRef?.advance(workspaceId, projectId)
+    },
   })
   const { projectDefinitionRepository, outcomeStoragePolicyRepository, taskProjectLinkRepository } =
     deps
@@ -72,10 +85,12 @@ export function createProjectsModule(
     listTasks: (project) => service.listTasks(project),
     records: projectRecordRepository,
     definitions: sources.projectDefinitions,
-    board,
+    board: late.board,
+    runStarter: late.runStarter,
     clock: deps.clock,
     logger: deps.logger,
   })
+  stagesRef = stages
   return {
     stages,
     service,

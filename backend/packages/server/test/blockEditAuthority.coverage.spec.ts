@@ -109,6 +109,10 @@ const UNATTRIBUTED: Record<string, string> = {
   'orchestration:modules/boardScan/BoardScanService.ts':
     'blueprint reconciliation runs in the engine with no request behind it: it materialises what ' +
     'a scan found rather than what a person chose, so there is no acting tier to read.',
+  'orchestration:modules/projects/ProjectStageService.ts':
+    'an automatic project stage starting its own task when the stages before it settle: the ' +
+    'engine acting on a definition the project pinned, with no session behind it. A stage a ' +
+    'person starts goes through the project controller, which names that person.',
   'orchestration:modules/execution/PostMergeBoardController.ts':
     'the post-merge follow-up that materialises the module a merged task named and moves the ' +
     'task into it: the engine acting on what the run produced, with no session behind it. The ' +

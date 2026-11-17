@@ -43,6 +43,33 @@ function definitions() {
       },
     ],
   })
+  registry.register({
+    kind: 'research',
+    key: 'acme:auto',
+    version: 1,
+    title: 'Automatic vendor study',
+    spec: config('scheme', 'Which auth scheme?'),
+    targets: [{ baseUrl: 'https://vendor.example', surface: 'api' }],
+    stages: [
+      {
+        id: 'discover',
+        title: 'Discover',
+        taskType: 'research',
+        produces: 'discovery',
+        start: 'auto',
+        config: config('scheme', 'Which auth scheme?'),
+      },
+      {
+        id: 'deepen',
+        title: 'Deepen',
+        taskType: 'research',
+        after: ['discover'],
+        produces: 'deepening',
+        start: 'auto',
+        config: config('paging', 'How does pagination work?'),
+      },
+    ],
+  })
   return registry
 }
 
@@ -52,7 +79,7 @@ function reasonOf(body: unknown): unknown {
 
 export function defineCoreProjectStagesConformance(harness: ConformanceHarness): void {
   describe('project stages', () => {
-    async function setup() {
+    async function setup(key = 'acme:staged') {
       const app = harness.makeApp(
         { asyncKinds: ['project-researcher'] },
         { projectDefinitionRegistry: definitions() },
@@ -62,7 +89,7 @@ export function defineCoreProjectStagesConformance(harness: ConformanceHarness):
       const created = await app.call<{ project: Project }>('POST', `/workspaces/${wsId}/projects`, {
         kind: 'research',
         title: 'Staged study',
-        definition: { key: 'acme:staged' },
+        definition: { key },
       })
       expect(created.status).toBe(201)
       const project = created.body.project
@@ -142,6 +169,22 @@ export function defineCoreProjectStagesConformance(harness: ConformanceHarness):
       ).toMatchObject({ stageId: 'deepen', stream: 'deepening', plan: { questionIds: ['paging'] } })
       const repeat = await start('discover')
       expect(reasonOf(repeat.body)).toBe('project_stage_not_repeatable')
+    })
+
+    it('starts automatic stages on their own as each becomes ready', async () => {
+      const { app, wsId, stages } = await setup('acme:auto')
+      // Creating the project started the first stage; its result starts the next one, which the
+      // same drive then runs.
+      expect(await stages()).toEqual([
+        ['discover', 'in-progress'],
+        ['deepen', 'blocked'],
+      ])
+      await app.drive(wsId)
+      const settled = await stages()
+      expect(settled).toEqual([
+        ['discover', 'done'],
+        ['deepen', 'done'],
+      ])
     })
 
     it('frees a stage whose task was deleted before it recorded a result', async () => {

@@ -22,10 +22,14 @@ import {
   type ProjectRepository,
   type ProjectRunContext,
   type ProjectTaskInput,
+  type Logger,
   type ServiceRepository,
+  noopLogger,
   outcomesOf,
+  runBestEffort,
 } from '@cat-factory/kernel'
 import type { ProjectOutcomeStore } from './ProjectOutcomeStore.js'
+import type { ProjectStageService } from './ProjectStageService.js'
 import { decodeOutcome, outcomeTaskType } from './outcomeDecoding.js'
 import { resolvePinnedDefinition } from './pinnedDefinition.js'
 
@@ -47,6 +51,9 @@ export interface ProjectStepControllerDeps {
   outcomes: ProjectOutcomeStore
   modules: ProjectKindModuleRegistry
   clock: Clock
+  /** Starts the stages a recorded outcome made ready. Absent where projects are not wired. */
+  stages?: Pick<ProjectStageService, 'advance'>
+  logger?: Logger
 }
 
 const REQUEST_TEXT_MAX = 2000
@@ -68,7 +75,11 @@ export function outcomeIdFor(taskId: string): string {
 }
 
 export class ProjectStepController {
-  constructor(private readonly deps: ProjectStepControllerDeps) {}
+  private readonly log: Logger
+
+  constructor(private readonly deps: ProjectStepControllerDeps) {
+    this.log = deps.logger ?? noopLogger
+  }
 
   /** The agent kinds whose steps are project tasks' runs, one per registered task handler. */
   agentKinds(): string[] {
@@ -229,6 +240,17 @@ export class ProjectStepController {
     step.project = { ...state, outcomeId: id }
     if (state.stageId) {
       await this.deps.records.markStageTaskRecorded(state.projectId, taskId, this.deps.clock.now())
+      const stages = this.deps.stages
+      if (stages) {
+        // The outcome is on record whatever happens next: a later stage that fails to start
+        // stays `ready` for a person. A replay advances again and finds nothing new to start.
+        await runBestEffort(
+          this.log,
+          'projects.stages.advanceOnOutcome',
+          () => stages.advance(workspaceId, state.projectId),
+          { projectId: state.projectId, taskId },
+        )
+      }
     }
     if (recorded.written) return { output: finished.output, outputIsRendered: true }
     // A replayed completion lost to the write that landed first: describe the outcome on record,

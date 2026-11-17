@@ -7,6 +7,7 @@
  */
 
 import { InitiativeLoopService } from '../modules/initiative/InitiativeLoopService.js'
+import type { StageRunStarter } from '../modules/projects/ProjectStageService.js'
 import type { InitiativeService } from '../modules/initiative/InitiativeService.js'
 import { BLUEPRINT_AGENT_KIND } from '@cat-factory/kernel'
 import { createRunnerPoolSeeder } from '@cat-factory/integrations'
@@ -47,6 +48,8 @@ export interface EngineDependentModulesInput {
   mergeTrackRecords: MergeTrackRecordModule | undefined
   initiativeService: InitiativeService | undefined
   setInitiativeLoop: (loop: InitiativeLoopService | undefined) => void
+  /** Binds the engine as the run starter of project stages that start on their own. */
+  bindStageRunStarter: (starter: StageRunStarter) => void
   /** The spend safeguard, so the monorepo survey's billable call honours the budget a run does. */
   spend: SpendService
 }
@@ -64,6 +67,7 @@ export function registerEngineDependentModules(input: EngineDependentModulesInpu
     mergeTrackRecords,
     initiativeService,
     setInitiativeLoop,
+    bindStageRunStarter,
     spend,
   } = input
   const externalMergeObserver = mergeTrackRecords
@@ -72,6 +76,13 @@ export function registerEngineDependentModules(input: EngineDependentModulesInpu
         notifications: notifications?.service,
       })
     : undefined
+  // A project stage that starts on its own starts its run through the engine, built just before.
+  bindStageRunStarter({
+    individualVendorsForBlock: (workspaceId, blockId, pipelineId) =>
+      executionService.individualVendorsForBlock(workspaceId, blockId, pipelineId),
+    start: (workspaceId, blockId, pipelineId) =>
+      executionService.start(workspaceId, blockId, pipelineId),
+  })
   modules.build('github', () => createGitHubModule(dependencies, caches, externalMergeObserver))
   const runners = modules.build('runners', () => createRunnersModule(dependencies))
   // The deployment-declared runner-pool seeder, the account-keyed sibling of the environment-handler
