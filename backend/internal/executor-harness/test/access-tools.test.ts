@@ -8,12 +8,20 @@ import {
   credentialSecrets,
   isTargetOrigin,
   scrub,
+  targetFor,
   targetOrigins,
 } from '../src/project/access-tools.logic.js'
 
 const TARGETS = [
-  { baseUrl: 'https://api.vendor.example/v2', surface: 'api' as const },
-  { baseUrl: 'https://app.vendor.example', surface: 'ui' as const },
+  { baseUrl: 'https://api.vendor.example/v2', surface: 'api' as const, access: 'read' as const },
+  { baseUrl: 'https://app.vendor.example', surface: 'ui' as const, access: 'read' as const },
+  // A writable corner of the read-only API: only the drafts path takes writes.
+  {
+    baseUrl: 'https://api.vendor.example',
+    surface: 'api' as const,
+    access: 'write' as const,
+    pathPrefix: '/v2/drafts',
+  },
 ]
 
 describe('access tool rules', () => {
@@ -23,6 +31,18 @@ describe('access tool rules', () => {
     expect(isTargetOrigin('https://evil.example/api.vendor.example', origins)).toBe(false)
     expect(isTargetOrigin('http://api.vendor.example', origins)).toBe(false)
     expect(isTargetOrigin('not a url', origins)).toBe(false)
+  })
+
+  it('matches a request to its most specific target, within the path prefix', () => {
+    expect(targetFor('https://api.vendor.example/v2/drafts/7', TARGETS)?.access).toBe('write')
+    expect(targetFor('https://api.vendor.example/v2/drafts', TARGETS)?.access).toBe('write')
+    expect(targetFor('https://api.vendor.example/v2/draftsx', TARGETS)?.access).toBe('read')
+    // A dot segment, encoded or not, cannot climb out of the writable prefix.
+    expect(targetFor('https://api.vendor.example/v2/drafts/../items', TARGETS)?.access).toBe('read')
+    expect(targetFor('https://api.vendor.example/v2/drafts/%2e%2e/items', TARGETS)?.access).toBe(
+      'read',
+    )
+    expect(targetFor('https://evil.example/v2/drafts', TARGETS)).toBeUndefined()
   })
 
   it('attaches a credential by scheme', () => {
@@ -124,6 +144,27 @@ describe('the access tool server', () => {
     })
     expect(result.isError).toBe(true)
     expect(fetchSpy).not.toHaveBeenCalled()
+  })
+
+  it('refuses a write to a read-only target and sends one to a writable path', async () => {
+    const fetchSpy = vi.fn(async () => new Response('{}', { status: 201 }))
+    vi.stubGlobal('fetch', fetchSpy)
+    const access = tools()
+    const refused = await access.definition.call('http_request', {
+      method: 'post',
+      url: 'https://api.vendor.example/v2/items',
+      body: { name: 'x' },
+    })
+    expect(refused.isError).toBe(true)
+    expect(refused.text).toContain('read-only for this run')
+    expect(fetchSpy).not.toHaveBeenCalled()
+    const sent = await access.definition.call('http_request', {
+      method: 'POST',
+      url: 'https://api.vendor.example/v2/drafts',
+      body: { name: 'x' },
+    })
+    expect(sent.isError).not.toBe(true)
+    expect(fetchSpy).toHaveBeenCalledTimes(1)
   })
 
   it('attaches the credential, scrubs it from the response and records the exchange', async () => {
@@ -262,8 +303,28 @@ describe('parseProjectJob', () => {
     },
   }
 
-  it('parses a project job with no repository', () => {
-    expect(parseProjectJob(body).access).toEqual(body.access)
+  it('parses a project job with no repository, reading a target without access as read-only', () => {
+    expect(parseProjectJob(body).access).toEqual({
+      ...body.access,
+      targets: [{ baseUrl: 'https://api.vendor.example', surface: 'api', access: 'read' }],
+    })
+  })
+
+  it('keeps a writable target and its path prefix, and refuses a relative prefix', () => {
+    const target = {
+      baseUrl: 'https://api.vendor.example',
+      surface: 'api',
+      access: 'write',
+      pathPrefix: '/drafts',
+    }
+    const parsed = parseProjectJob({ ...body, access: { ...body.access, targets: [target] } })
+    expect(parsed.access.targets).toEqual([target])
+    expect(() =>
+      parseProjectJob({
+        ...body,
+        access: { ...body.access, targets: [{ ...target, pathPrefix: 'drafts' }] },
+      }),
+    ).toThrow(/pathPrefix/)
   })
 
   it('accepts no targets, since a project kind need not reach any', () => {

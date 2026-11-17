@@ -446,6 +446,7 @@ describe('ProjectStepController with a staged project', () => {
       start: 'manual',
       checkpoint: false,
       repeatable: false,
+      writes: false,
       config: config('scheme', 'Which auth scheme?'),
     },
     {
@@ -458,6 +459,7 @@ describe('ProjectStepController with a staged project', () => {
       start: 'manual',
       checkpoint: false,
       repeatable: false,
+      writes: false,
       config: config('depth', 'How deep does pagination go?'),
     },
   ]

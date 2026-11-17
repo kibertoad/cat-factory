@@ -14,6 +14,44 @@ export interface AccessCredential {
 export interface AccessTarget {
   baseUrl: string
   surface: 'ui' | 'api'
+  /** `write` admits any method through `http_request`; `read` only the methods that read. */
+  access: 'read' | 'write'
+  /** When set, `http_request` reaches only paths at or under it on the target's origin. */
+  pathPrefix?: string
+}
+
+/** The methods a read-only target admits. */
+export const READ_METHODS: ReadonlySet<string> = new Set(['GET', 'HEAD', 'OPTIONS'])
+
+/**
+ * The target a request URL falls under: its origin, and within its path prefix when it has one.
+ * The most specific prefix wins, so a narrower writable path inside a read-only API is honoured.
+ * The URL parser resolves dot segments (encoded ones too) before the prefix is compared.
+ */
+export function targetFor(url: string, targets: readonly AccessTarget[]): AccessTarget | undefined {
+  let parsed: URL
+  try {
+    parsed = new URL(url)
+  } catch {
+    return undefined
+  }
+  const matching = targets.filter((target) => {
+    try {
+      return (
+        new URL(target.baseUrl).origin === parsed.origin &&
+        withinPrefix(parsed.pathname, target.pathPrefix)
+      )
+    } catch {
+      return false
+    }
+  })
+  return matching.sort((a, b) => (b.pathPrefix?.length ?? 0) - (a.pathPrefix?.length ?? 0))[0]
+}
+
+function withinPrefix(path: string, prefix: string | undefined): boolean {
+  if (!prefix) return true
+  const dir = prefix.endsWith('/') ? prefix : `${prefix}/`
+  return path === prefix || path.startsWith(dir)
 }
 
 /** How `http_request` attaches a credential. */

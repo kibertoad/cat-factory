@@ -187,6 +187,7 @@ export class ProjectStepController {
       inputs: task.inputs,
       linkedFrameBlockIds: services.map((s) => s.frameBlockId).filter((id): id is string => !!id),
       upstream,
+      writes: task.staged?.stage.writes ?? false,
       brief: task.handler.brief({
         ...input,
         plan: state.plan,

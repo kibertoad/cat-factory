@@ -28,6 +28,7 @@ function stage(id: string, over: Partial<ProjectStage> = {}): ProjectStage {
     start: 'auto',
     checkpoint: false,
     repeatable: false,
+    writes: false,
     ...over,
   }
 }

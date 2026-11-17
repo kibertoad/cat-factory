@@ -140,3 +140,72 @@ describe('buildProjectJobBody', () => {
     )
   })
 })
+
+describe('buildProjectJobBody target access', () => {
+  async function targetsFor(writes: boolean) {
+    const { body } = await buildProjectJobBody(
+      {
+        agentKind: 'project-researcher',
+        block: { id: 'task_1', title: 'Apply', description: 'Apply.' },
+        project: {
+          projectId: 'prj_1',
+          kind: 'research',
+          definition: {
+            ...definition([]),
+            targets: [
+              {
+                baseUrl: 'https://api.vendor.example',
+                surface: 'api',
+                access: 'write',
+                pathPrefix: '/drafts',
+              },
+              { baseUrl: 'https://app.vendor.example', surface: 'ui' },
+            ],
+          },
+          inputs: {},
+          linkedFrameBlockIds: [],
+          upstream: [],
+          writes,
+          brief: { mode: 'initial', brief: 'Learn.', questions: [], priorFindings: [] },
+        },
+      } as unknown as AgentRunContext,
+      { workspaceId: 'ws_1', executionId: 'exec_1', jobId: 'job_1' },
+      {
+        agentKindRegistry: defaultAgentKindRegistry(),
+        mintInstallationToken: async () => 'token',
+        resolveRepoOrigin: () => {
+          throw new Error('no repo is linked')
+        },
+        resolveModel: async () => ({ model: 'm', provider: 'p' }),
+        resolveAuth: async () => ({ auth: {} }),
+        resolveToolServers: async () => ({
+          toolServers: [],
+          unavailableToolServers: [],
+          mcpServers: [],
+        }),
+      },
+    )
+    return (body.access as { targets: unknown[] }).targets
+  }
+
+  it('opens a writable target only to a run of a stage that writes', async () => {
+    expect(await targetsFor(true)).toEqual([
+      {
+        baseUrl: 'https://api.vendor.example',
+        surface: 'api',
+        access: 'write',
+        pathPrefix: '/drafts',
+      },
+      { baseUrl: 'https://app.vendor.example', surface: 'ui', access: 'read' },
+    ])
+    expect(await targetsFor(false)).toEqual([
+      {
+        baseUrl: 'https://api.vendor.example',
+        surface: 'api',
+        access: 'read',
+        pathPrefix: '/drafts',
+      },
+      { baseUrl: 'https://app.vendor.example', surface: 'ui', access: 'read' },
+    ])
+  })
+})

@@ -63,8 +63,14 @@ export async function buildProjectJobBody(
   deps: ProjectJobBodyDeps,
 ): Promise<ProjectJobBody> {
   const project = requireProject(context)
-  // A kind that pins no definition reaches no target and holds no credential.
-  const targets = project.definition?.targets ?? []
+  // A kind that pins no definition reaches no target and holds no credential. A target admits
+  // writes only for a run of a stage that writes; the harness refuses anything else.
+  const targets = (project.definition?.targets ?? []).map((t) => ({
+    baseUrl: t.baseUrl,
+    surface: t.surface,
+    access: t.access === 'write' && project.writes ? ('write' as const) : ('read' as const),
+    ...(t.pathPrefix ? { pathPrefix: t.pathPrefix } : {}),
+  }))
   const credentials = project.definition
     ? await resolveProjectCredentials(project.definition, {
         workspaceId: ids.workspaceId,

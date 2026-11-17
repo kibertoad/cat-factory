@@ -83,7 +83,12 @@ export const projectCredentialSchema = v.object({
 })
 export type ProjectCredential = v.InferOutput<typeof projectCredentialSchema>
 
-/** An external system a project's runs reach. A credential is only ever sent to one of these. */
+/**
+ * An external system a project's runs reach. A credential is only ever sent to one of these. A
+ * run's API requests to a target are read-only (GET, HEAD, OPTIONS) unless the target allows
+ * writes AND the run is a stage that writes; both fields are left out rather than defaulted, so a
+ * definition that names neither hashes as it always did.
+ */
 export const projectTargetSchema = v.object({
   baseUrl: v.pipe(
     v.string(),
@@ -91,6 +96,12 @@ export const projectTargetSchema = v.object({
     v.check((url) => url.startsWith('https://'), 'a target must be https'),
   ),
   surface: v.picklist(['ui', 'api']),
+  /** `write`: a stage that writes may send any method here. Absent: read-only for every run. */
+  access: v.optional(v.picklist(['read', 'write'])),
+  /** When set, API requests reach only paths at or under it on the target's origin. */
+  pathPrefix: v.optional(
+    v.pipe(v.string(), v.regex(/^\/[^?#]*$/, 'must be a path starting with /, with no query')),
+  ),
 })
 export type ProjectTarget = v.InferOutput<typeof projectTargetSchema>
 
@@ -134,6 +145,7 @@ interface EnvelopeLists {
   credentials: ReadonlyArray<{ key: string }>
   inputs: ReadonlyArray<{ key: string }>
   stages: readonly ProjectStage[]
+  targets: ReadonlyArray<{ access?: 'read' | 'write' }>
 }
 
 /** The envelope's own rules, typed for the schema they are piped after. */
@@ -150,6 +162,12 @@ export function projectDefinitionChecks<T extends EnvelopeLists>() {
     v.rawCheck<T>(({ dataset, addIssue }) => {
       if (!dataset.typed) return
       for (const message of projectStageIssues(dataset.value.stages)) addIssue({ message })
+      const writable = dataset.value.targets.some((t) => t.access === 'write')
+      for (const stage of dataset.value.stages) {
+        if (stage.writes && !writable) {
+          addIssue({ message: `stage '${stage.id}' writes, but no target allows writes` })
+        }
+      }
     }),
   ] as const
 }

@@ -45,6 +45,12 @@ export const projectStageSchema = v.object({
   checkpoint: v.optional(v.boolean(), false),
   /** Whether a stage with an accepted result may run again. */
   repeatable: v.optional(v.boolean(), false),
+  /**
+   * Whether this stage's runs may write to the targets that allow writes. Every other run is
+   * read-only. A writing stage must run after a stage whose result a person accepts at a
+   * checkpoint, so nothing is written before a person has seen what will be.
+   */
+  writes: v.optional(v.boolean(), false),
   /** What the stage's task handler is configured with, validated by that handler. */
   config: v.optional(v.unknown()),
 })
@@ -73,8 +79,14 @@ export function projectStageIssues(stages: readonly ProjectStage[]): string[] {
   const cycle = findCycle(stages)
   if (cycle) issues.push(`stages run after each other in a cycle: ${cycle.join(' -> ')}`)
   else {
+    const checkpointed = new Set(stages.filter((s) => s.checkpoint).map((s) => s.id))
     for (const stage of stages) {
       const ancestry = ancestorsOf(stages, stage.id)
+      if (stage.writes && ![...ancestry].some((id) => checkpointed.has(id))) {
+        issues.push(
+          `stage '${stage.id}' writes, so it must run after a stage a person accepts at a checkpoint`,
+        )
+      }
       const read = stage.consumes.map((c) => c.stage)
       for (const repeated of new Set(read.filter((id, i) => read.indexOf(id) !== i))) {
         issues.push(`stage '${stage.id}' reads stage '${repeated}' more than once`)

@@ -68,13 +68,10 @@ built-in definition of this shape. A definition without stages behaves exactly a
 2. `resolveRepoTarget` stops at a project root with `project_has_no_writable_repo`. ADR 0069 lists
    "which linked service an item writes to" as the open question that blocks repo work under a
    project.
-3. The harness `http_request` tool (`executor-harness/src/project/access-tools-server.ts`) accepts
-   any HTTP method. Only the origin is bounded by `targets`; "change nothing in the vendor account"
-   is prompt text in `project-researcher`, not enforcement.
-4. Initiatives already have phase checkpoints, just-in-time spawning and item reconciliation
+3. Initiatives already have phase checkpoints, just-in-time spawning and item reconciliation
    (`modules/initiative/InitiativeLoopService.ts`, `initiative.logic.ts`), and an interview on the
    park/signal spine (`InterviewGateController`), all tied to the initiative entity.
-5. Human approvals go through `buildStepApproval`; rubric verdicts go through `JudgeRegistry`.
+4. Human approvals go through `buildStepApproval`; rubric verdicts go through `JudgeRegistry`.
 
 ## Slices
 
@@ -103,10 +100,11 @@ bucket for every new repository method in the same PR.
       the prompt index, both now in every project job's body); the step records what it read in
       `step.project.upstream`; a consumed stage with no accepted result is stated, and one whose
       result cannot be read refuses the dispatch with `project_stage_upstream_unreadable`. PR: [#2525](https://github.com/kibertoad/cat-factory/pull/2525)
-- [ ] **4. Controlled vendor writes.** `targets[].access: 'read' | 'write'` and optional path
-      scoping; the harness refuses non-GET/HEAD on a read target and anything outside the scope; a
-      write stage parks for approval of its write plan through `buildStepApproval`. Bumps the
-      runner image. Tightens research projects too, so it is worth landing early.
+- [x] **4. Controlled vendor writes.** A target may declare `access: 'write'` and a `pathPrefix`;
+      a stage may declare `writes`, and must then run after a checkpointed stage in a definition
+      with a writable target. The job body opens a writable target only to a writing stage's run,
+      and the harness refuses any non-read method on a read target and any path outside a prefix
+      (runner image 1.168.0). The browser is not bound: see `security-model.md`. PR: (this slice)
 - [ ] **5. Decision stage.** A handler whose agent proposes items (question, recommended default,
       trade-off, evidence) and parks for the human to answer, accept, or dismiss each one; writes a
       `decisions` stream. Reuses the clarification-item vocabulary and component.

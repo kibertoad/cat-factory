@@ -18,6 +18,7 @@ function stage(id: string, over: Partial<ProjectStage> = {}): ProjectStage {
     start: 'manual',
     checkpoint: false,
     repeatable: false,
+    writes: false,
     ...over,
   }
 }
@@ -61,6 +62,42 @@ describe('projectStageIssues', () => {
       stage('c', { after: ['b'] }),
     ])
     expect(issues).toEqual(['stages run after each other in a cycle: a -> c -> b -> a'])
+  })
+
+  it('lets a stage write only after a stage a person accepts at a checkpoint', () => {
+    expect(
+      projectStageIssues([
+        stage('plan', { checkpoint: true }),
+        stage('apply', { after: ['plan'], writes: true }),
+      ]),
+    ).toEqual([])
+    expect(
+      projectStageIssues([stage('plan'), stage('apply', { after: ['plan'], writes: true })]),
+    ).toEqual([
+      "stage 'apply' writes, so it must run after a stage a person accepts at a checkpoint",
+    ])
+  })
+
+  it('refuses a writing stage in a definition whose targets allow no writes', () => {
+    const definition = (access?: 'write') => ({
+      kind: 'research',
+      key: 'acme:vendor',
+      version: 1,
+      title: 'Vendor',
+      targets: [
+        { baseUrl: 'https://api.vendor.example', surface: 'api', ...(access ? { access } : {}) },
+      ],
+      stages: [
+        stage('plan', { checkpoint: true }),
+        stage('apply', { after: ['plan'], writes: true }),
+      ],
+      spec: {},
+    })
+    expect(parseProjectDefinition(definition())).toEqual({
+      ok: false,
+      issues: ["stage 'apply' writes, but no target allows writes"],
+    })
+    expect(parseProjectDefinition(definition('write')).ok).toBe(true)
   })
 
   it('is applied by the definition envelope', () => {

@@ -72,7 +72,20 @@ function parseAccessSection(value: unknown): ProjectJob['access'] {
     if (t.surface !== 'ui' && t.surface !== 'api') {
       throw new Error(`Invalid project job: access.targets[${i}].surface must be ui or api`)
     }
-    return { baseUrl, surface: t.surface }
+    // Absent is read-only: only a run the platform granted writes may send anything but a read.
+    const access = t.access === 'write' ? 'write' : 'read'
+    if (
+      t.pathPrefix !== undefined &&
+      (typeof t.pathPrefix !== 'string' || !t.pathPrefix.startsWith('/'))
+    ) {
+      throw new Error(`Invalid project job: access.targets[${i}].pathPrefix must start with /`)
+    }
+    return {
+      baseUrl,
+      surface: t.surface,
+      access,
+      ...(typeof t.pathPrefix === 'string' ? { pathPrefix: t.pathPrefix } : {}),
+    }
   })
   const credentials = (Array.isArray(o.credentials) ? o.credentials : []).map((raw, i) => {
     const c = (raw ?? {}) as Record<string, unknown>
