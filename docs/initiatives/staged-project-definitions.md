@@ -116,7 +116,7 @@ bucket for every new repository method in the same PR.
       `project-decider` agent proposes items (question, options, recommended default, rationale,
       evidence) from the stages it reads, and its handler requires every item settled at the
       checkpoint. Any kind lists the shipped `decisionTaskHandler` beside its own; the research
-      kind does not. The stage rail renders the register (slice 9). PR: (this slice)
+      kind does not. The stage rail renders the register (slice 9). PR: [#2528](https://github.com/kibertoad/cat-factory/pull/2528)
 - [ ] **6. Spawn stage.** Extract the initiative spawn and reconcile logic into a shared service;
       a spawn stage creates tasks in the linked services it names, links the project, runs their
       normal pipelines, and completes when they settle.
