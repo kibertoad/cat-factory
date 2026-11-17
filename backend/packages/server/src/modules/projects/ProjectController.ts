@@ -1,5 +1,7 @@
 import {
+  clearProjectStageCheckpointContract,
   createProjectContract,
+  createProjectStageTaskContract,
   getProjectBoardViewContract,
   getProjectOutcomeContract,
   listPinnableProjectDefinitionsContract,
@@ -16,6 +18,7 @@ import type { ProjectsModule } from '@cat-factory/orchestration'
 import type { AppEnv } from '../../http/env.js'
 import { param } from '../../http/params.js'
 import { requireCapability } from '../../http/guards.js'
+import { blockEditAuthority } from '../../http/workspaceAccess.js'
 import { projectCredentialReadiness } from './projectCredentialReadiness.js'
 
 /** Resolve the projects module, or refuse with a 503 naming what isn't wired. */
@@ -25,9 +28,9 @@ function requireProjects<E extends AppEnv>(c: Context<E>): ProjectsModule {
 
 /**
  * Projects on a workspace board: create one, set its service links, list the account's catalog,
- * and mount, unmount or re-lay it out. Mounted under `/workspaces/:workspaceId`. Member-level
- * writes, under the auth gate's viewer write floor like the service mount routes. Deleting a
- * project is deleting its root block.
+ * mount, unmount or re-lay it out, and start a stage or accept a stage's result. Mounted under
+ * `/workspaces/:workspaceId`. Member-level writes, under the auth gate's viewer write floor like
+ * the service mount routes. Deleting a project is deleting its root block.
  */
 export function projectController(): Hono<AppEnv> {
   const app = new Hono<AppEnv>()
@@ -81,6 +84,30 @@ export function projectController(): Hono<AppEnv> {
       outcomeId,
     )
     return c.json(detail, 200)
+  })
+
+  buildHonoRoute(app, createProjectStageTaskContract, async (c) => {
+    const { projectId, stageId } = c.req.valid('param')
+    const block = await requireProjects(c).stages.createTask(
+      param(c, 'workspaceId'),
+      projectId,
+      stageId,
+      // The stage's task is created on the board like any task, under the author's own tier.
+      blockEditAuthority(c),
+      c.get('user')?.id ?? null,
+    )
+    return c.json(block, 201)
+  })
+
+  buildHonoRoute(app, clearProjectStageCheckpointContract, async (c) => {
+    const { projectId, stageId } = c.req.valid('param')
+    const state = await requireProjects(c).stages.clearCheckpoint(
+      param(c, 'workspaceId'),
+      projectId,
+      stageId,
+      c.get('user')?.id ?? null,
+    )
+    return c.json(state, 200)
   })
 
   buildHonoRoute(app, createProjectContract, async (c) => {

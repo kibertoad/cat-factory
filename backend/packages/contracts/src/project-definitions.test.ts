@@ -25,6 +25,7 @@ describe('project definition envelope', () => {
         targets: [],
         inputs: [],
         promptAdditions: {},
+        stages: [],
       },
     })
   })

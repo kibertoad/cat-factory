@@ -1,13 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import {
-  type ProjectDefinitionSpecValidator,
-  type ResearchDefinitionInput,
-  researchSpecValidator,
-} from '@cat-factory/contracts'
+import type { ResearchDefinitionInput } from '@cat-factory/contracts'
 import {
   ProjectDefinitionRegistry,
   projectDefinitionContentHash,
 } from './project-definition-registry.js'
+import { type ProjectKindModule, eraseTaskHandler } from './project-kind-module.js'
+import { researchKindModule } from './research-kind.js'
 
 function research(version: number, question = 'Which auth scheme?'): ResearchDefinitionInput {
   return {
@@ -24,12 +22,31 @@ function research(version: number, question = 'Which auth scheme?'): ResearchDef
 }
 
 /** A second kind with a spec of a different shape, so nothing here is research-shaped. */
-const notesValidator: ProjectDefinitionSpecValidator = {
+const notesModule: ProjectKindModule = {
   kind: 'notes',
+  handlers: [
+    eraseTaskHandler<unknown>({
+      taskType: 'acme:note',
+      agentKind: 'note-taker',
+      outcomeSchemaVersion: 1,
+      parseOutcome: (_version, value) => value,
+      planTask: () => ({ intent: 'write', stream: 'main', plan: {} }),
+      brief: () => ({}),
+      mergeCheckpoint: (_earlier, later) => later,
+      finish: ({ reply }) => ({ body: reply, output: '' }),
+      describe: () => '',
+      artifactRefs: () => [],
+      parseConfig: (config) =>
+        typeof (config as { topic?: unknown })?.topic === 'string'
+          ? { ok: true, value: config }
+          : { ok: false, issues: ['topic: required'] },
+    }),
+  ],
   parseSpec: (definition) =>
     typeof (definition.spec as { heading?: unknown })?.heading === 'string'
       ? { ok: true, value: definition.spec }
       : { ok: false, issues: ['spec.heading: required'] },
+  definitionSummary: (definition) => definition.title,
 }
 
 function notes(version: number, heading: unknown = 'Decisions') {
@@ -37,7 +54,7 @@ function notes(version: number, heading: unknown = 'Decisions') {
 }
 
 function registry() {
-  return new ProjectDefinitionRegistry([researchSpecValidator, notesValidator])
+  return new ProjectDefinitionRegistry([researchKindModule, notesModule])
 }
 
 describe('ProjectDefinitionRegistry', () => {
@@ -76,6 +93,55 @@ describe('ProjectDefinitionRegistry', () => {
     expect(defs.get('research', 'acme:vendor', 1)?.spec).toMatchObject({
       topics: [{ questions: [{ question: 'Which auth scheme?' }] }],
     })
+  })
+})
+
+describe('ProjectDefinitionRegistry stages', () => {
+  const stage = (id: string, over: Record<string, unknown> = {}) => ({
+    id,
+    title: id,
+    taskType: 'acme:note',
+    produces: id,
+    config: { topic: ` ${id}` },
+    ...over,
+  })
+
+  it("validates each stage's config with its task type's handler and stores it normalized", () => {
+    const defs = registry()
+    defs.register({ ...notes(1), stages: [stage('a'), stage('b', { after: ['a'] })] })
+    expect(
+      defs.get('notes', 'acme:vendor', 1)?.stages.map((s) => [s.id, s.start, s.config]),
+    ).toEqual([
+      ['a', 'manual', { topic: ' a' }],
+      ['b', 'manual', { topic: ' b' }],
+    ])
+  })
+
+  it('refuses a stage whose task type the kind does not offer, or whose config its handler refuses', () => {
+    expect(() =>
+      registry().register({ ...notes(1), stages: [stage('a', { taskType: 'research' })] }),
+    ).toThrow(/stages\.a: project kind 'notes' offers no task type 'research'/)
+    expect(() =>
+      registry().register({ ...notes(1), stages: [stage('a', { config: {} })] }),
+    ).toThrow(/stages\.a: topic: required/)
+  })
+
+  it('refuses a research stage whose config is not a research spec', () => {
+    expect(() =>
+      registry().register({
+        ...research(1),
+        stages: [
+          stage('a', { taskType: 'research', config: undefined }),
+          stage('b', {
+            taskType: 'research',
+            config: {
+              brief: 'x',
+              topics: [{ id: 't', title: 'T', questions: [{ id: 'q', question: 'Q?' }] }],
+            },
+          }),
+        ],
+      }),
+    ).toThrow(/stages\.a: /)
   })
 })
 

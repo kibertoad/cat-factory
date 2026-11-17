@@ -82,6 +82,7 @@ describe('researchKindModule.view', () => {
     targets: [{ baseUrl: 'https://vendor.example', surface: 'ui' as const }],
     inputs: [],
     promptAdditions: {},
+    stages: [],
     spec,
   }
   const outcome = (id: string, seq: number, findings: FindingsRevisionBody) => ({

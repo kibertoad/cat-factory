@@ -9,6 +9,7 @@ import type {
   WorkspaceRepository,
 } from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
+import { defineStageTaskPersistence, stageTaskRecord } from './project-stage-task-persistence.js'
 
 // Cross-runtime parity for what projects of any kind keep: account-published definitions
 // (immutable per version), a project's pin and outcome sequence, outcome revisions (first write
@@ -40,6 +41,7 @@ function researchDefinition(version: number, question = 'Which auth scheme?') {
     targets: [{ baseUrl: 'https://vendor.example', surface: 'api' as const }],
     inputs: [],
     promptAdditions: {},
+    stages: [],
     spec: {
       brief: 'Learn the vendor.',
       topics: [{ id: 'auth', title: 'Auth', questions: [{ id: 'scheme', question }] }],
@@ -57,6 +59,7 @@ function notesDefinition(version: number) {
     targets: [],
     inputs: [],
     promptAdditions: {},
+    stages: [],
     spec: { heading: 'Decisions' },
   }
 }
@@ -113,6 +116,8 @@ export function defineProjectOutcomePersistenceSuite(
     row?.body.kind === 'inline' ? (JSON.parse(row.body.json) as unknown) : undefined
 
   describe(`[${name}] project outcome persistence`, () => {
+    defineStageTaskPersistence(makeRepos, unique)
+
     it('publishes a definition version once, isolated per account and per kind', async () => {
       const repos = makeRepos()
       const account = unique('acc')
@@ -364,7 +369,11 @@ export function defineProjectOutcomePersistenceSuite(
       await repos.records.insertOutcome(outcome(projectId, unique('out'), 1, {}))
       await repos.records.insertOutcome(outcome(survivor, unique('out'), 1, {}))
       await repos.policies.set('project', projectId, { offload: 'disabled' })
+      await repos.records.insertStageTask(stageTaskRecord(projectId, unique('task'), 'discover'))
+      await repos.records.insertStageTask(stageTaskRecord(survivor, unique('task'), 'discover'))
       await repos.records.deleteByProjects([projectId])
+      expect(await repos.records.listStageTasks(projectId)).toEqual([])
+      expect(await repos.records.listStageTasks(survivor)).toHaveLength(1)
       expect(await repos.records.getPin(projectId)).toBeNull()
       expect(await repos.records.listOutcomes(projectId)).toEqual([])
       expect(await repos.policies.get('project', projectId)).toBeNull()

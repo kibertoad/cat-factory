@@ -260,6 +260,15 @@ export const CONFLICT_REASONS = [
   // A project's tasks are created and run on the board that homes it; this key's board only
   // mounts it.
   'project_homed_elsewhere',
+  // A project stage cannot start a task now: a task of it is still running, a stage it runs after
+  // has no accepted result, its newest result awaits its checkpoint, or it is done and its
+  // definition does not let it run again.
+  'project_stage_in_progress',
+  'project_stage_blocked',
+  'project_stage_awaiting_checkpoint',
+  'project_stage_not_repeatable',
+  // A person accepted a stage's result that is not waiting at its checkpoint.
+  'project_stage_checkpoint_not_pending',
   // A key resumed a wait on a lapsed PERSONAL credential, which only the run's initiator renews,
   // with their password, in the app.
   'credential_wait_personal_in_app',
@@ -632,6 +641,8 @@ export type CredentialWaitReason = (typeof CREDENTIAL_WAIT_REASONS)[number]
  *  - `project_task_type_changed`        the task's type changed after its run was planned, so a
  *                                       replayed dispatch refuses rather than finish under another
  *                                       task type's handler.
+ *  - `project_task_has_no_stage`        the task is under a staged project but was not started from
+ *                                       one of its stages, so no stage says what it runs.
  *  - `research_nothing_to_ask`          the research kind's own: the task's mode selects no
  *                                       question (an `extend` with no new question, or a `clarify`
  *                                       with nothing partial or blocked).
@@ -667,6 +678,7 @@ export const PROJECT_REASONS = [
   'project_definition_changed',
   'project_task_already_recorded',
   'project_task_type_changed',
+  'project_task_has_no_stage',
   'research_nothing_to_ask',
   'outcome_too_large_for_inline',
   'task_owned_by_project',

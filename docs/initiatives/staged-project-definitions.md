@@ -86,10 +86,15 @@ bucket for every new repository method in the same PR.
       kinds. Dispatch resolves the handler from the task's type under its project's kind, and each
       outcome row records `taskType` so readers decode it with that handler. Research moves onto
       one handler with no behaviour change. PR: [#2522](https://github.com/kibertoad/cat-factory/pull/2522)
-- [ ] **2. Stages and derived state.** `stages` in the envelope with validation (acyclic `after`,
-      `consumes` naming a produced stream, task types the kind offers); the checkpoint-clearance
-      table (D1 migration and Drizzle schema); a pure `deriveStageState` over outcomes and
-      clearances; auto-start of `auto` stages when their inputs settle; stale marking.
+- [x] **2a. Stages and derived state.** `stages` in the envelope (`project-stages.ts`), validated
+      structurally (unique ids and streams, known and acyclic `after`, `consumes` within the
+      ancestry) and per stage by its task type's handler (`parseConfig`); `project_stage_tasks`
+      (D1 0119 and its Drizzle twin) binding a task to its stage, with a partial unique index as the
+      one-open-task-per-stage claim; `deriveProjectStageStates` in contracts; the board view's
+      `stages`; `POST .../stages/:stageId/tasks` and `POST .../stages/:stageId/checkpoint`. A staged
+      task plans from its stage's config and history and writes its stage's stream. PR: (this slice)
+- [ ] **2b. Auto-start.** A stage with `start: 'auto'` creates and starts its task once it is
+      ready: at project creation, after an outcome records, and after a checkpoint clears.
 - [ ] **3. Upstream context.** A stage's consumed streams rendered by their handlers into
       `.cat-context/`; the read `seq` recorded on the step; a consumed stream that cannot be read
       breaks the run naming it.
@@ -132,6 +137,13 @@ bucket for every new repository method in the same PR.
 - `GET /api/v1/project-kinds/{kind}` serves one outcome schema, its single handler's. A kind
   offering several handlers serves null there until slice 9 adds per-task-type schemas.
 - The outcome row's `taskType` is internal: the public outcome envelope does not carry it yet.
+
+- A staged project's task belongs to the stage that started it (`project_stage_tasks`). A task
+  created under a staged project any other way is refused at dispatch with
+  `project_task_has_no_stage`, so until the stage rail lands (slice 9) the stage routes are the
+  only way to start one.
+- A stage holds one task with no recorded outcome at a time. A task deleted before it recorded
+  one would hold that slot forever, so every stage read drops such records first.
 
 ## Open questions
 

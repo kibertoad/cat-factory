@@ -733,7 +733,8 @@
         "task_owned_by_project": "このタスクはサービスを持たないプロジェクトに属しています。代わりにプロジェクトのタスクのアドレスを使ってください。",
         "project_definition_invalid": "この定義は、その構造またはプロジェクトの種類によって拒否されました。レスポンスに各問題が記載されています。修正してから再度公開してください。",
         "project_link_invalid": "そのプロジェクトは存在しないか、別の組織に属しています。この組織のプロジェクトをリンクしてください。",
-        "project_has_no_result": "そのプロジェクトにはまだ読める結果がありません。先にその中でタスクを実行してから、リンクしてください。"
+        "project_has_no_result": "そのプロジェクトにはまだ読める結果がありません。先にその中でタスクを実行してから、リンクしてください。",
+        "project_task_has_no_stage": "このタスクはステージのあるプロジェクトに属していますが、そのステージから開始されていないため実行できません。代わりにプロジェクトのステージから作業を開始してください。"
       }
     },
     "action": {
@@ -828,7 +829,12 @@
         "project_definition_version_exists": "バージョンは公開済みです",
         "project_definition_key_registered": "名前空間は使用されています",
         "project_homed_elsewhere": "プロジェクトは別のボードにあります",
-        "credential_wait_personal_in_app": "アプリで更新してください"
+        "credential_wait_personal_in_app": "アプリで更新してください",
+        "project_stage_in_progress": "ステージは実行中です",
+        "project_stage_blocked": "前のステージが完了していません",
+        "project_stage_awaiting_checkpoint": "結果がレビュー待ちです",
+        "project_stage_not_repeatable": "ステージは完了済みです",
+        "project_stage_checkpoint_not_pending": "承認するものがありません"
       },
       "description": {
         "dependencies_unmet": "このタスクは、まだ完了していない他のタスクに依存しています。それらを完了または解除してから、もう一度開始してください。",
@@ -898,7 +904,12 @@
         "project_definition_version_exists": "この定義のバージョンは公開済みで、変更できません。代わりに新しいバージョンを公開してください。",
         "project_definition_key_registered": "この名前空間は、デプロイメントに含まれる定義のものです。組織自身の名前空間で公開してください。",
         "project_homed_elsewhere": "プロジェクトのタスクは、そのプロジェクトがあるボードで作成・実行されます。作業するにはそのボードを開いてください。",
-        "credential_wait_personal_in_app": "期限切れの個人用認証情報は、実行を開始した人がアプリで自分のパスワードを使って更新します。"
+        "credential_wait_personal_in_app": "期限切れの個人用認証情報は、実行を開始した人がアプリで自分のパスワードを使って更新します。",
+        "project_stage_in_progress": "このステージではすでにタスクが作業中です。そのタスクが結果を記録するのを待つか、削除してから、別のタスクを開始してください。",
+        "project_stage_blocked": "このステージは、まだ承認された結果がないステージの後に実行されます。先にそれらを完了してください。",
+        "project_stage_awaiting_checkpoint": "このステージの最新の結果は、チェックポイントで誰かが承認するのを待っています。ステージを再実行する前に、確認して承認してください。",
+        "project_stage_not_repeatable": "このステージには承認済みの結果があり、その定義では再実行が許可されていません。",
+        "project_stage_checkpoint_not_pending": "このステージには、チェックポイントで待機している結果がありません。すでに承認されたか、タスクがまだ結果を記録していない可能性があります。"
       },
       "action": {
         "connectGitHub": "GitHub に接続",

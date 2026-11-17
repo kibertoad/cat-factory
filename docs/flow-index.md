@@ -24,7 +24,10 @@ before the kind's module folds it into its view;
 a credential it lacks parks the step with its partial result, and a task linking the project reads
 the kind's rendering of it at every dispatch. Traps: the claim is per task, so a replayed start must
 read it back rather than take another; and a linked project that cannot be read must break the run,
-never reach the agent as nothing. [ADR 0069](../backend/docs/adr/0069-projects-and-research-projects.md).
+never reach the agent as nothing. A task of a STAGED project runs the stage that started it and
+writes that stage's stream; stage state is derived, never stored, so a status written anywhere is a
+bug. [ADR 0069](../backend/docs/adr/0069-projects-and-research-projects.md), [staged
+definitions](./initiatives/staged-project-definitions.md).
 
 **Repo bootstrap** mirrors the execution pattern: `BootstrapService` → `bootstrap_jobs` →
 `BootstrapWorkflow` polling the idempotent `pollBootstrapJob()`, then links the repo and flips the frame

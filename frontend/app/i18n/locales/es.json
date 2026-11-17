@@ -733,7 +733,8 @@
         "task_owned_by_project": "Esta tarea pertenece a un proyecto, que no tiene servicio. Usa en su lugar la dirección de tareas del proyecto.",
         "project_definition_invalid": "La definición la rechaza su estructura o su tipo de proyecto. La respuesta enumera cada problema; corrígelos y vuelve a publicar.",
         "project_link_invalid": "Ese proyecto no existe o pertenece a otra organización. Vincula un proyecto de esta organización.",
-        "project_has_no_result": "Ese proyecto aún no tiene ningún resultado que leer. Ejecuta primero una tarea en él y luego vincúlalo."
+        "project_has_no_result": "Ese proyecto aún no tiene ningún resultado que leer. Ejecuta primero una tarea en él y luego vincúlalo.",
+        "project_task_has_no_stage": "Esta tarea pertenece a un proyecto por etapas, pero no se inició desde una de sus etapas, así que no puede ejecutarse. Inicia el trabajo desde la etapa del proyecto."
       }
     },
     "action": {
@@ -828,7 +829,12 @@
         "project_definition_version_exists": "Versión ya publicada",
         "project_definition_key_registered": "Espacio de nombres ocupado",
         "project_homed_elsewhere": "Proyecto alojado en otro tablero",
-        "credential_wait_personal_in_app": "Renuévala en la aplicación"
+        "credential_wait_personal_in_app": "Renuévala en la aplicación",
+        "project_stage_in_progress": "La etapa ya está en marcha",
+        "project_stage_blocked": "Etapa anterior sin terminar",
+        "project_stage_awaiting_checkpoint": "El resultado espera revisión",
+        "project_stage_not_repeatable": "La etapa ya está hecha",
+        "project_stage_checkpoint_not_pending": "Nada que aceptar"
       },
       "description": {
         "dependencies_unmet": "Esta tarea depende de otras que aún no están terminadas. Complétalas o desbloquéalas y vuelve a iniciarla.",
@@ -898,7 +904,12 @@
         "project_definition_version_exists": "Esta versión de la definición ya está publicada y no puede cambiar. Publica una versión nueva.",
         "project_definition_key_registered": "Este espacio de nombres pertenece a definiciones que incluye la instalación. Publica en el espacio de nombres propio de tu organización.",
         "project_homed_elsewhere": "Las tareas de un proyecto se crean y ejecutan en el tablero que lo aloja. Abre ese tablero para trabajar en ellas.",
-        "credential_wait_personal_in_app": "Una credencial personal caducada la renueva quien inició la ejecución, con su contraseña, en la aplicación."
+        "credential_wait_personal_in_app": "Una credencial personal caducada la renueva quien inició la ejecución, con su contraseña, en la aplicación.",
+        "project_stage_in_progress": "Esta etapa ya tiene una tarea trabajando en ella. Espera a que esa tarea registre su resultado, o elimínala, antes de iniciar otra.",
+        "project_stage_blocked": "Esta etapa se ejecuta después de etapas que aún no tienen un resultado aceptado. Termínalas primero.",
+        "project_stage_awaiting_checkpoint": "El último resultado de esta etapa espera que alguien lo acepte en su punto de control. Revísalo y acéptalo antes de volver a ejecutar la etapa.",
+        "project_stage_not_repeatable": "Esta etapa tiene un resultado aceptado y su definición no permite volver a ejecutarla.",
+        "project_stage_checkpoint_not_pending": "Esta etapa no tiene ningún resultado esperando en su punto de control. Puede que ya se haya aceptado o que su tarea aún no haya registrado uno."
       },
       "action": {
         "connectGitHub": "Conectar GitHub",

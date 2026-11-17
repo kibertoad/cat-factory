@@ -3,6 +3,8 @@ import type {
   Project,
   ProjectDefinition,
   ProjectPin,
+  ProjectStage,
+  ProjectStageTask,
 } from '@cat-factory/contracts'
 import {
   ProjectKindModuleRegistry,
@@ -26,6 +28,7 @@ const definition: ProjectDefinition = {
   key: 'acme:vendor',
   version: 1,
   title: 'Vendor',
+  stages: [],
   spec: {
     brief: 'Learn the vendor.',
     topics: [
@@ -130,6 +133,8 @@ function harness(opts: {
   taskType?: string
   pin?: Partial<ProjectPin> | null
   rows?: ProjectOutcomeRow[]
+  stages?: ProjectStage[]
+  stageTasks?: ProjectStageTask[]
 }) {
   const project: Project = {
     id: 'prj_1',
@@ -145,8 +150,9 @@ function harness(opts: {
     taskTypeFields: {},
   } as unknown as Block
   const rows = [...(opts.rows ?? [])]
+  const stageTasks = [...(opts.stageTasks ?? [])]
   const resolved: ResolvedProjectDefinition = {
-    definition,
+    definition: { ...definition, stages: opts.stages ?? [] },
     contentHash: 'h1',
     origin: 'registered',
   }
@@ -193,6 +199,17 @@ function harness(opts: {
     listOutcomes: async () => rows,
     listOutcomesOfProjects: async () => rows,
     projectsWithOutcomes: async () => (rows.length ? ['prj_1'] : []),
+    insertStageTask: async (row: ProjectStageTask) => {
+      stageTasks.push(row)
+      return true
+    },
+    listStageTasks: async () => stageTasks,
+    markStageTaskRecorded: async (_projectId: string, taskId: string, recordedAt: number) => {
+      const found = stageTasks.find((t) => t.taskId === taskId)
+      if (found && found.recordedAt === null) found.recordedAt = recordedAt
+    },
+    clearStageCheckpoint: async () => false,
+    deleteStageTasks: async () => {},
     deleteByProjects: async () => {},
   }
   const ctrl = new ProjectStepController({
@@ -208,7 +225,7 @@ function harness(opts: {
     modules,
     clock: { now: () => 5 },
   })
-  return { ctrl, rows, task }
+  return { ctrl, rows, task, stageTasks }
 }
 
 const reply = (custom: unknown): AgentRunResult => ({ output: '', custom })
@@ -409,5 +426,86 @@ describe('ProjectStepController with a pinless kind', () => {
     await expect(full.ctrl.prepare({ ...noting }, full.task)).rejects.toMatchObject({
       details: { reason: 'notes_full' },
     })
+  })
+})
+
+describe('ProjectStepController with a staged project', () => {
+  const researching = { agentKind: 'project-researcher' } as PipelineStep
+  const config = (id: string, question: string) => ({
+    brief: `Stage ${id}.`,
+    topics: [{ id: 'main', title: 'Main', questions: [{ id, question }] }],
+  })
+  const stages: ProjectStage[] = [
+    {
+      id: 'discover',
+      title: 'Discover',
+      taskType: 'research',
+      after: [],
+      consumes: [],
+      produces: 'discovery',
+      start: 'manual',
+      checkpoint: false,
+      repeatable: false,
+      config: config('scheme', 'Which auth scheme?'),
+    },
+    {
+      id: 'deepen',
+      title: 'Deepen',
+      taskType: 'research',
+      after: ['discover'],
+      consumes: [],
+      produces: 'deepening',
+      start: 'manual',
+      checkpoint: false,
+      repeatable: false,
+      config: config('depth', 'How deep does pagination go?'),
+    },
+  ]
+  const bound = (stageId: string): ProjectStageTask => ({
+    taskId: 'task_2',
+    projectId: 'prj_1',
+    stageId,
+    createdAt: 1,
+    recordedAt: null,
+    clearedAt: null,
+    clearedBy: null,
+  })
+
+  it("plans from its stage's config and history and writes the stage's stream", async () => {
+    const { ctrl, task } = harness({
+      kind: 'research',
+      stages,
+      stageTasks: [bound('deepen')],
+      rows: [outcomeRow('task_1', 1, body({ scheme: 'answered' }), 'discovery')],
+    })
+    const step = { ...researching }
+    const run = await ctrl.prepare(step, task)
+    expect(step.project).toMatchObject({
+      stageId: 'deepen',
+      stream: 'deepening',
+      intent: 'initial',
+      plan: { questionIds: ['depth'] },
+    })
+    expect(run.brief).toMatchObject({ brief: 'Stage depth.', priorFindings: [] })
+  })
+
+  it('refuses a task its project started from no stage', async () => {
+    const { ctrl, task } = harness({ kind: 'research', stages })
+    await expect(ctrl.prepare({ ...researching }, task)).rejects.toMatchObject({
+      details: { reason: 'project_task_has_no_stage' },
+    })
+  })
+
+  it("frees its stage once the outcome is recorded, on the stage's stream", async () => {
+    const { ctrl, rows, task, stageTasks } = harness({
+      kind: 'research',
+      stages,
+      stageTasks: [bound('discover')],
+    })
+    const step = { ...researching }
+    await ctrl.prepare(step, task)
+    await ctrl.record('ws_1', step, task.id, reply(body({ scheme: 'answered' })))
+    expect(rows.find((r) => r.taskId === task.id)).toMatchObject({ stream: 'discovery' })
+    expect(stageTasks[0]!.recordedAt).toBe(5)
   })
 })

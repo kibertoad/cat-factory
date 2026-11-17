@@ -6,6 +6,7 @@ import {
   type OutcomeStorageOwnerKind,
   type OutcomeStoragePolicy,
   type ProjectPin,
+  type ProjectStageTask,
 } from '@cat-factory/contracts'
 import type {
   OutcomeStoragePolicyRepository,
@@ -141,6 +142,28 @@ function rowToOutcome(row: OutcomeRow): ProjectOutcomeRow {
   }
 }
 
+interface StageTaskRow {
+  task_id: string
+  project_id: string
+  stage_id: string
+  created_at: number
+  recorded_at: number | null
+  cleared_at: number | null
+  cleared_by: string | null
+}
+
+function rowToStageTask(row: StageTaskRow): ProjectStageTask {
+  return {
+    taskId: row.task_id,
+    projectId: row.project_id,
+    stageId: row.stage_id,
+    createdAt: row.created_at,
+    recordedAt: row.recorded_at,
+    clearedAt: row.cleared_at,
+    clearedBy: row.cleared_by,
+  }
+}
+
 /**
  * The statements reclaiming every record of the projects `projectIds` selects: a placeholder
  * list or a subquery, bound with `binds`. The board delete runs them too, inside its own batch.
@@ -156,6 +179,9 @@ export function projectRecordDeletes(
       .prepare(`DELETE FROM project_outcome_seqs WHERE project_id IN (${projectIds})`)
       .bind(...binds),
     db.prepare(`DELETE FROM project_task_seqs WHERE project_id IN (${projectIds})`).bind(...binds),
+    db
+      .prepare(`DELETE FROM project_stage_tasks WHERE project_id IN (${projectIds})`)
+      .bind(...binds),
     db.prepare(`DELETE FROM project_pins WHERE project_id IN (${projectIds})`).bind(...binds),
     db
       .prepare(
@@ -176,7 +202,7 @@ function rowToPin(row: PinRow): ProjectPin {
   }
 }
 
-/** A project's pin, outcome sequence and outcome revisions (migrations 0115, 0116). */
+/** A project's pin, outcome sequence, outcome revisions and stage tasks (migrations 0115-0119). */
 export class D1ProjectRecordRepository implements ProjectRecordRepository {
   constructor(private readonly deps: { db: D1Database }) {}
 
@@ -338,6 +364,75 @@ export class D1ProjectRecordRepository implements ProjectRecordRepository {
       for (const row of results ?? []) found.push(row.project_id)
     }
     return found
+  }
+
+  async insertStageTask(row: ProjectStageTask): Promise<boolean> {
+    const result = await this.deps.db
+      .prepare(
+        `INSERT INTO project_stage_tasks
+           (task_id, project_id, stage_id, created_at, recorded_at, cleared_at, cleared_by)
+         VALUES (?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT DO NOTHING`,
+      )
+      .bind(
+        row.taskId,
+        row.projectId,
+        row.stageId,
+        row.createdAt,
+        row.recordedAt,
+        row.clearedAt,
+        row.clearedBy,
+      )
+      .run()
+    return (result.meta.changes ?? 0) > 0
+  }
+
+  async listStageTasks(projectId: string): Promise<ProjectStageTask[]> {
+    const { results } = await this.deps.db
+      .prepare(
+        `SELECT * FROM project_stage_tasks WHERE project_id = ? ORDER BY created_at ASC, task_id ASC`,
+      )
+      .bind(projectId)
+      .all<StageTaskRow>()
+    return results.map(rowToStageTask)
+  }
+
+  async markStageTaskRecorded(projectId: string, taskId: string, recordedAt: number) {
+    await this.deps.db
+      .prepare(
+        `UPDATE project_stage_tasks SET recorded_at = ?
+         WHERE project_id = ? AND task_id = ? AND recorded_at IS NULL`,
+      )
+      .bind(recordedAt, projectId, taskId)
+      .run()
+  }
+
+  async clearStageCheckpoint(
+    projectId: string,
+    taskId: string,
+    clearedAt: number,
+    clearedBy: string | null,
+  ): Promise<boolean> {
+    const result = await this.deps.db
+      .prepare(
+        `UPDATE project_stage_tasks SET cleared_at = ?, cleared_by = ?
+         WHERE project_id = ? AND task_id = ? AND recorded_at IS NOT NULL AND cleared_at IS NULL`,
+      )
+      .bind(clearedAt, clearedBy, projectId, taskId)
+      .run()
+    return (result.meta.changes ?? 0) > 0
+  }
+
+  async deleteStageTasks(projectId: string, taskIds: string[]): Promise<void> {
+    for (const chunk of chunkForIn(taskIds)) {
+      await this.deps.db
+        .prepare(
+          `DELETE FROM project_stage_tasks
+           WHERE project_id = ? AND task_id IN (${chunk.map(() => '?').join(', ')})`,
+        )
+        .bind(projectId, ...chunk)
+        .run()
+    }
   }
 
   async deleteByProjects(projectIds: string[]): Promise<void> {

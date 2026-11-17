@@ -147,6 +147,7 @@ export const researchBoardView: ProjectBoardView = {
     targets: [{ baseUrl: 'https://app.vendor.example', surface: 'ui' }],
     inputs: [],
     promptAdditions: {},
+    stages: [],
   },
   definitionChanged: false,
   outcomes: researchOutcomes,
@@ -164,6 +165,7 @@ export const researchBoardView: ProjectBoardView = {
     },
   ],
   view: kindView,
+  stages: [],
 }
 
 export const outcomePolicy: OutcomeStoragePolicyView = {
@@ -198,6 +200,7 @@ export const notesBoardView: ProjectBoardView = {
   ],
   credentials: [],
   view: null,
+  stages: [],
 }
 
 export const notesOutcomeBody = {

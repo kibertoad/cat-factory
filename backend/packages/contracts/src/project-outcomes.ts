@@ -3,6 +3,7 @@ import {
   projectDefinitionKeySchema,
   projectDefinitionVersionSchema,
 } from './project-definitions.js'
+import { projectSlugSchema, projectStageIdSchema } from './project-stages.js'
 
 // ---------------------------------------------------------------------------
 // Project outcomes: the durable results a project's work records, whatever the project's kind.
@@ -12,7 +13,7 @@ import {
 // `backend/docs/adr/0069-projects-and-research-projects.md`.
 // ---------------------------------------------------------------------------
 
-const slug = v.pipe(v.string(), v.regex(/^[a-z][a-z0-9-]{0,39}$/, 'must be a lowercase slug'))
+const slug = projectSlugSchema
 
 /** The stream a kind writes when it declares only one. */
 export const DEFAULT_OUTCOME_STREAM = 'main'
@@ -123,6 +124,8 @@ export const projectStepStateSchema = v.object({
   plan: v.unknown(),
   /** What the agent recorded before it stopped to wait for a credential: step state, never an outcome. */
   checkpoint: v.optional(v.unknown()),
+  /** The stage of its project's definition the task runs, for a staged project. */
+  stageId: v.optional(projectStageIdSchema),
   /** The outcome this task wrote, once written. */
   outcomeId: v.optional(v.string()),
 })

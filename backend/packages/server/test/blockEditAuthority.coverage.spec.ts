@@ -69,6 +69,7 @@ const ATTRIBUTED = [
   'server:modules/documents/DocumentSourceController.ts',
   'server:modules/bugHunt/BugHuntController.ts',
   'server:modules/assistant/AssistantController.ts',
+  'server:modules/projects/ProjectController.ts',
 ]
 
 /**

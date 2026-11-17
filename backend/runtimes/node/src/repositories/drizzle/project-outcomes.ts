@@ -6,6 +6,7 @@ import {
   type OutcomeStorageOwnerKind,
   type OutcomeStoragePolicy,
   type ProjectPin,
+  type ProjectStageTask,
 } from '@cat-factory/contracts'
 import type {
   OutcomeStoragePolicyRepository,
@@ -14,7 +15,7 @@ import type {
   ProjectRecordRepository,
   StoredProjectDefinition,
 } from '@cat-factory/kernel'
-import { and, asc, eq, inArray, sql } from 'drizzle-orm'
+import { and, asc, eq, inArray, isNotNull, isNull, sql } from 'drizzle-orm'
 import type { DrizzleDb } from '../../db/client.js'
 import {
   outcomeStoragePolicies,
@@ -22,6 +23,7 @@ import {
   projectOutcomeSeqs,
   projectOutcomes,
   projectPins,
+  projectStageTasks,
   projectTaskSeqs,
 } from '../../db/schema.js'
 
@@ -131,6 +133,7 @@ export async function deleteProjectRecords(
   await tx.delete(projectOutcomes).where(inArray(projectOutcomes.project_id, projectIds))
   await tx.delete(projectOutcomeSeqs).where(inArray(projectOutcomeSeqs.project_id, projectIds))
   await tx.delete(projectTaskSeqs).where(inArray(projectTaskSeqs.project_id, projectIds))
+  await tx.delete(projectStageTasks).where(inArray(projectStageTasks.project_id, projectIds))
   await tx.delete(projectPins).where(inArray(projectPins.project_id, projectIds))
   await tx
     .delete(outcomeStoragePolicies)
@@ -292,11 +295,96 @@ export class DrizzleProjectRecordRepository implements ProjectRecordRepository {
     return found
   }
 
+  async insertStageTask(row: ProjectStageTask): Promise<boolean> {
+    const inserted = await this.db
+      .insert(projectStageTasks)
+      .values({
+        task_id: row.taskId,
+        project_id: row.projectId,
+        stage_id: row.stageId,
+        created_at: row.createdAt,
+        recorded_at: row.recordedAt,
+        cleared_at: row.clearedAt,
+        cleared_by: row.clearedBy,
+      })
+      .onConflictDoNothing()
+      .returning({ id: projectStageTasks.task_id })
+    return inserted.length > 0
+  }
+
+  async listStageTasks(projectId: string): Promise<ProjectStageTask[]> {
+    const rows = await this.db
+      .select()
+      .from(projectStageTasks)
+      .where(eq(projectStageTasks.project_id, projectId))
+      .orderBy(asc(projectStageTasks.created_at), asc(projectStageTasks.task_id))
+    return rows.map(rowToStageTask)
+  }
+
+  async markStageTaskRecorded(projectId: string, taskId: string, recordedAt: number) {
+    await this.db
+      .update(projectStageTasks)
+      .set({ recorded_at: recordedAt })
+      .where(
+        and(
+          eq(projectStageTasks.project_id, projectId),
+          eq(projectStageTasks.task_id, taskId),
+          isNull(projectStageTasks.recorded_at),
+        ),
+      )
+  }
+
+  async clearStageCheckpoint(
+    projectId: string,
+    taskId: string,
+    clearedAt: number,
+    clearedBy: string | null,
+  ): Promise<boolean> {
+    const cleared = await this.db
+      .update(projectStageTasks)
+      .set({ cleared_at: clearedAt, cleared_by: clearedBy })
+      .where(
+        and(
+          eq(projectStageTasks.project_id, projectId),
+          eq(projectStageTasks.task_id, taskId),
+          isNotNull(projectStageTasks.recorded_at),
+          isNull(projectStageTasks.cleared_at),
+        ),
+      )
+      .returning({ id: projectStageTasks.task_id })
+    return cleared.length > 0
+  }
+
+  async deleteStageTasks(projectId: string, taskIds: string[]): Promise<void> {
+    for (let i = 0; i < taskIds.length; i += CHUNK) {
+      await this.db
+        .delete(projectStageTasks)
+        .where(
+          and(
+            eq(projectStageTasks.project_id, projectId),
+            inArray(projectStageTasks.task_id, taskIds.slice(i, i + CHUNK)),
+          ),
+        )
+    }
+  }
+
   async deleteByProjects(projectIds: string[]): Promise<void> {
     for (let i = 0; i < projectIds.length; i += CHUNK) {
       const chunk = projectIds.slice(i, i + CHUNK)
       await this.db.transaction((tx) => deleteProjectRecords(tx, chunk))
     }
+  }
+}
+
+function rowToStageTask(row: typeof projectStageTasks.$inferSelect): ProjectStageTask {
+  return {
+    taskId: row.task_id,
+    projectId: row.project_id,
+    stageId: row.stage_id,
+    createdAt: row.created_at,
+    recordedAt: row.recorded_at,
+    clearedAt: row.cleared_at,
+    clearedBy: row.cleared_by,
   }
 }
 

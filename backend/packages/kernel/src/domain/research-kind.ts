@@ -16,6 +16,7 @@ import {
   foldFindings,
   parseFindingsRevisionBody,
   parseResearchDefinition,
+  parseResearchSpec,
   parseResearchTaskPlan,
   researchProjectView,
   researchProjectViewSchema,
@@ -62,7 +63,16 @@ export const RESEARCH_PROJECT_KIND: ProjectKindDescriptor = {
   ],
 }
 
+/**
+ * The questions a research task answers: its stage's config in a staged project, or the pinned
+ * research definition's spec in a research project.
+ */
 function specOf(input: ProjectTaskInput<FindingsRevisionBody>): ResearchSpec {
+  if (input.stage) {
+    const config = parseResearchSpec(input.stage.config)
+    if (config.ok) return config.value
+    throw new Error(`Research stage '${input.stage.id}' carries no readable config`)
+  }
   const parsed = input.definition ? parseResearchDefinition(input.definition) : undefined
   if (!parsed?.ok) {
     throw new ValidationError('A research task needs its project to pin a research definition', {
@@ -266,6 +276,8 @@ export const researchTaskHandler: ProjectTaskHandler<FindingsRevisionBody> = {
   describe: ({ plan, seq, body }) => renderRevision(body, planOf(plan), seq, []),
 
   artifactRefs: findingsArtifactRefs,
+
+  parseConfig: parseResearchSpec,
 
   schemas: { outcome: findingsRevisionBodySchema },
 }

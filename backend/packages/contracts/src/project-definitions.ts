@@ -1,5 +1,11 @@
 import * as v from 'valibot'
 import { capabilityCredentialKeySchema } from './capability-credentials.js'
+import {
+  PROJECT_STAGES_MAX,
+  projectStageIssues,
+  projectStageSchema,
+  type ProjectStage,
+} from './project-stages.js'
 import { projectKindIdSchema } from './projects.js'
 import { taskTypeFieldDescriptorSchema } from './task-types.js'
 
@@ -115,6 +121,11 @@ export const projectDefinitionEntries = {
     v.record(v.string(), v.pipe(v.string(), v.maxLength(PROJECT_DEFINITION_PROSE_MAX))),
     {},
   ),
+  /**
+   * The stages a project's work runs in, each one task type writing one stream, earlier stages
+   * feeding later ones. Empty: the project's tasks run in any order.
+   */
+  stages: v.optional(v.pipe(v.array(projectStageSchema), v.maxLength(PROJECT_STAGES_MAX)), []),
   /** The kind's own content, opaque to the platform. */
   spec: v.unknown(),
 }
@@ -122,6 +133,7 @@ export const projectDefinitionEntries = {
 interface EnvelopeLists {
   credentials: ReadonlyArray<{ key: string }>
   inputs: ReadonlyArray<{ key: string }>
+  stages: readonly ProjectStage[]
 }
 
 /** The envelope's own rules, typed for the schema they are piped after. */
@@ -135,6 +147,10 @@ export function projectDefinitionChecks<T extends EnvelopeLists>() {
       (d) => duplicateValues(d.inputs.map((field) => field.key)).length === 0,
       'input keys must be unique',
     ),
+    v.rawCheck<T>(({ dataset, addIssue }) => {
+      if (!dataset.typed) return
+      for (const message of projectStageIssues(dataset.value.stages)) addIssue({ message })
+    }),
   ] as const
 }
 

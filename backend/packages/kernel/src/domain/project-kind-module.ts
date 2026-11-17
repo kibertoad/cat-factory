@@ -1,4 +1,5 @@
 import type {
+  DefinitionParseResult,
   ProjectDefinition,
   ProjectDefinitionSpecValidator,
   ProjectKindSchemas,
@@ -26,7 +27,15 @@ export interface ProjectTaskInput<Body> {
   definition: ProjectDefinition | null
   /** The project's values for the definition's `inputs`. */
   inputs: Record<string, unknown>
-  /** The outcomes tasks of this handler's type wrote so far, `seq` ascending, decoded by it. */
+  /**
+   * The stage of the pinned definition the task runs, with its `config` as this handler
+   * normalized it; null for a project whose definition declares no stages.
+   */
+  stage: { id: string; config: unknown } | null
+  /**
+   * The outcomes tasks of this handler's type wrote so far, `seq` ascending, decoded by it; for a
+   * staged task, only those of its own stage.
+   */
   outcomes: ReadonlyArray<ProjectOutcome<Body>>
 }
 
@@ -71,6 +80,11 @@ export interface ProjectTaskHandler<Body = unknown> {
   describe(input: { plan: unknown; seq: number; body: Body }): string
   /** The binary artifacts a body references, for the outcome's `artifactRefs`. */
   artifactRefs(body: Body): string[]
+  /**
+   * Validate and normalize the `config` a definition's stage gives this task type. Absent: the
+   * task type takes no config, and a stage that gives one is refused.
+   */
+  parseConfig?(config: unknown): DefinitionParseResult<unknown>
   /** The schema of the outcome body, served so a client can type what the API leaves opaque. */
   schemas?: Pick<ProjectKindSchemas, 'outcome'>
 }

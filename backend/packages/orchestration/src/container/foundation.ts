@@ -38,6 +38,7 @@ import {
   createWorkspaceSettingsModule,
 } from './modules.js'
 import type { ModuleRegistry } from './module-registry.js'
+import type { StageTaskBoard } from '../modules/projects/ProjectStageService.js'
 import type { resolveCoreRuntime } from './runtime.js'
 import type {
   CoreDependencies,
@@ -120,11 +121,14 @@ export function createCoreFoundation(params: CoreFoundationParams): CoreFoundati
   const notifications = modules.build('notifications', () =>
     createNotificationsModule(dependencies),
   )
+  // Late-bound: a project stage creates its task on the board, which is built below.
+  let stageBoard: StageTaskBoard | undefined
   modules.build('projects', () =>
     createProjectsModule(
       dependencies,
       { projectKinds, projectDefinitions, registeredProjectDefinitions, projectKindModules },
       executionEventPublisher,
+      () => stageBoard,
     ),
   )
   const settings = modules.build('settings', () =>
@@ -154,6 +158,11 @@ export function createCoreFoundation(params: CoreFoundationParams): CoreFoundati
     workspaceSettings: settings?.service,
     reviewFrictionNotifications: notifications?.service,
   })
+  stageBoard = {
+    addTask: (workspaceId, rootBlockId, input, editor, createdBy) =>
+      boardService.addTask(workspaceId, rootBlockId, input, editor, createdBy),
+    removeTask: (homeWorkspaceId, blockId) => boardService.removeBlock(homeWorkspaceId, blockId),
+  }
   const workspaceService = new WorkspaceService({
     ...dependencies,
     // The resolved (defaulted) pipeline registry, so a new workspace is seeded with the built-in

@@ -112,6 +112,26 @@ export const CONFLICT_INFO: Record<Exclude<ConflictReason, BespokeConflictReason
     titleKey: 'errors.conflict.title.credential_wait_personal_in_app',
     descriptionKey: 'errors.conflict.description.credential_wait_personal_in_app',
   },
+  project_stage_in_progress: {
+    titleKey: 'errors.conflict.title.project_stage_in_progress',
+    descriptionKey: 'errors.conflict.description.project_stage_in_progress',
+  },
+  project_stage_blocked: {
+    titleKey: 'errors.conflict.title.project_stage_blocked',
+    descriptionKey: 'errors.conflict.description.project_stage_blocked',
+  },
+  project_stage_awaiting_checkpoint: {
+    titleKey: 'errors.conflict.title.project_stage_awaiting_checkpoint',
+    descriptionKey: 'errors.conflict.description.project_stage_awaiting_checkpoint',
+  },
+  project_stage_not_repeatable: {
+    titleKey: 'errors.conflict.title.project_stage_not_repeatable',
+    descriptionKey: 'errors.conflict.description.project_stage_not_repeatable',
+  },
+  project_stage_checkpoint_not_pending: {
+    titleKey: 'errors.conflict.title.project_stage_checkpoint_not_pending',
+    descriptionKey: 'errors.conflict.description.project_stage_checkpoint_not_pending',
+  },
   input_gate_parked: {
     titleKey: 'errors.conflict.title.input_gate_parked',
     descriptionKey: 'errors.conflict.description.input_gate_parked',

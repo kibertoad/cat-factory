@@ -4,6 +4,7 @@ import type {
   ProjectDefinition,
   ProjectOutcomeMeta,
   ProjectPin,
+  ProjectStageTask,
 } from '@cat-factory/contracts'
 
 // Persistence for what projects of any kind keep: the definitions an account publishes, the
@@ -82,7 +83,28 @@ export interface ProjectRecordRepository {
   /** Which of the given projects hold at least one outcome, in one (chunked) read. */
   projectsWithOutcomes(projectIds: string[]): Promise<string[]>
   /**
-   * Reclaim every record of deleted projects: pins, sequences, outcomes and the project tier of
+   * Bind a task to the stage it runs. Returns false, writing nothing, when the stage already has a
+   * task with no recorded outcome (or the task is already bound): one open task per stage.
+   */
+  insertStageTask(row: ProjectStageTask): Promise<boolean>
+  /** The project's stage-task records, oldest first. */
+  listStageTasks(projectId: string): Promise<ProjectStageTask[]>
+  /** Note that the task recorded its outcome, freeing its stage. A repeated call changes nothing. */
+  markStageTaskRecorded(projectId: string, taskId: string, recordedAt: number): Promise<void>
+  /**
+   * Accept the task's result at its stage's checkpoint. Returns false, changing nothing, when the
+   * task has no record, has recorded no outcome, or was already accepted.
+   */
+  clearStageCheckpoint(
+    projectId: string,
+    taskId: string,
+    clearedAt: number,
+    clearedBy: string | null,
+  ): Promise<boolean>
+  /** Drop stage-task records, for tasks that no longer exist, freeing their stages. */
+  deleteStageTasks(projectId: string, taskIds: string[]): Promise<void>
+  /**
+   * Reclaim every record of deleted projects: pins, sequences, outcomes, stage tasks and the project tier of
    * the outcome-storage policy. Empty input is a no-op.
    */
   deleteByProjects(projectIds: string[]): Promise<void>
