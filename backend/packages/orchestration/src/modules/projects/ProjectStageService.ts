@@ -44,12 +44,17 @@ export interface StageTaskBoard {
   removeTask(homeWorkspaceId: string, blockId: string): Promise<void>
 }
 
-/** Starts a task's run on the pipeline the task pins, with no person behind it. */
-export type StageRunStarter = (
-  workspaceId: string,
-  blockId: string,
-  pipelineId: string,
-) => Promise<unknown>
+/** What starting an automatic stage's run needs of the engine. */
+export interface StageRunStarter {
+  /** The individual-usage vendors a run of the task would lease a personal credential for. */
+  individualVendorsForBlock(
+    workspaceId: string,
+    blockId: string,
+    pipelineId: string,
+  ): Promise<readonly string[]>
+  /** Start the task's run on the pipeline it pins, with no person behind it. */
+  start(workspaceId: string, blockId: string, pipelineId: string): Promise<unknown>
+}
 
 export interface ProjectStageServiceDeps {
   getMounted: (workspaceId: string, projectId: string) => Promise<MountedProject>
@@ -84,6 +89,8 @@ type OutcomeFacts = ReadonlyArray<{
 /** Everything a stage write reads before it decides. */
 interface StageSnapshot {
   stages: readonly ProjectStage[]
+  /** The project's live tasks by id. */
+  tasks: Map<string, Block>
   states: ProjectStageState[]
   stageTasks: ProjectStageTask[]
   liveTaskIds: Set<string>
@@ -128,15 +135,88 @@ export class ProjectStageService {
     editor: BlockEditAuthority,
     createdBy: string | null,
   ): Promise<Block> {
-    const { project, rootBlock, homeWorkspaceId } = await this.deps.getMounted(
-      workspaceId,
-      projectId,
-    )
-    const snapshot = await this.snapshot(project, await this.stagesOf(project))
+    const mounted = await this.deps.getMounted(workspaceId, projectId)
+    const snapshot = await this.snapshot(mounted.project, await this.stagesOf(mounted.project))
     const index = snapshot.stages.findIndex((s) => s.id === stageId)
     const stage = snapshot.stages[index]
     if (!stage) throw new NotFoundError('ProjectStage', stageId)
     assertStartable(stage, snapshot.states[index]!)
+    return this.createFor(workspaceId, mounted, snapshot, stage, editor, createdBy)
+  }
+
+  /**
+   * Start what the definition starts on its own (`start: 'auto'`). An automatic stage starts
+   * ONCE, when it first becomes ready and no task of it exists yet: after that a person decides,
+   * so deleting its task stops it rather than inviting the next trigger to recreate it. A task an
+   * automatic stage created whose run never started (the process died between the two, or the
+   * start failed) has its run started here instead, so every trigger resumes rather than strands
+   * it. Called when a project is created, after an outcome records and after a checkpoint clears;
+   * each stage is best-effort, and one that cannot start is logged with its task left on the board
+   * for a person to start.
+   */
+  async advance(workspaceId: string, projectId: string): Promise<void> {
+    const mounted = await this.deps.getMounted(workspaceId, projectId)
+    const stages = await this.stagesOf(mounted.project)
+    if (!stages.some((s) => s.start === 'auto')) return
+    const snapshot = await this.snapshot(mounted.project, stages)
+    for (const [i, stage] of stages.entries()) {
+      if (stage.start !== 'auto') continue
+      const state = snapshot.states[i]!
+      const active = state.activeTaskId ? snapshot.tasks.get(state.activeTaskId) : undefined
+      const unstarted = active && active.executionId === null ? active : undefined
+      const due =
+        state.status === 'ready' && !snapshot.stageTasks.some((t) => t.stageId === stage.id)
+      if (!due && !unstarted) continue
+      await runBestEffort(
+        this.log,
+        'projects.stages.autoStart',
+        async () => {
+          const task =
+            unstarted ??
+            (await this.createFor(
+              mounted.homeWorkspaceId,
+              mounted,
+              snapshot,
+              stage,
+              // No person authors an automatic stage's task, so no tier narrows its merge policy.
+              UNATTRIBUTED_BLOCK_EDIT_AUTHORITY,
+              null,
+            ))
+          await this.startRun(mounted.homeWorkspaceId, stage, task)
+        },
+        { projectId, stageId: stage.id },
+      )
+    }
+  }
+
+  /** Start an automatic stage's task's run, unless it needs a person to start it. */
+  private async startRun(homeWorkspaceId: string, stage: ProjectStage, task: Block): Promise<void> {
+    const runs = this.deps.runStarter()
+    if (!runs) throw new Error('The engine is not wired, so a stage cannot start its run')
+    if (!task.pipelineId) {
+      throw new Error(`Stage '${stage.id}' task '${task.id}' pins no pipeline; a person starts it`)
+    }
+    // A personal subscription is leased by the person who starts a run, and nobody starts this
+    // one, so such a run is left on the board for a person rather than failing at its first step.
+    const [vendor] = await runs.individualVendorsForBlock(homeWorkspaceId, task.id, task.pipelineId)
+    if (vendor) {
+      throw new Error(
+        `Stage '${stage.id}' runs on an individual-usage ${vendor} model, which cannot start ` +
+          'unattended; its task waits on the board for a person to start',
+      )
+    }
+    await runs.start(homeWorkspaceId, task.id, task.pipelineId)
+  }
+
+  /** Create a stage's task and claim the stage's open slot for it, from reads already made. */
+  private async createFor(
+    workspaceId: string,
+    { project, rootBlock, homeWorkspaceId }: MountedProject,
+    snapshot: StageSnapshot,
+    stage: ProjectStage,
+    editor: BlockEditAuthority,
+    createdBy: string | null,
+  ): Promise<Block> {
     const board = this.deps.board()
     // An invariant of the composition root, not a refusal: the board is wired before any request.
     if (!board) throw new Error('The board is not wired, so a stage cannot create its task')
@@ -153,8 +233,8 @@ export class ProjectStageService {
     )
     const record: ProjectStageTask = {
       taskId: block.id,
-      projectId,
-      stageId,
+      projectId: project.id,
+      stageId: stage.id,
       createdAt: this.deps.clock.now(),
       basis: basisOf(stage, snapshot),
       recordedAt: null,
@@ -163,74 +243,22 @@ export class ProjectStageService {
     }
     const claimed =
       (await this.deps.records.insertStageTask(record)) ||
-      ((await this.freeStaleSlot(project, stageId, snapshot.stages)) &&
+      ((await this.freeStaleSlot(project, stage.id, snapshot.stages)) &&
         (await this.deps.records.insertStageTask(record)))
     if (claimed) return block
     await runBestEffort(
       this.log,
       'projects.stage.rollbackTask',
       () => board.removeTask(homeWorkspaceId, block.id),
-      { projectId, stageId, blockId: block.id },
+      { projectId: project.id, stageId: stage.id, blockId: block.id },
     )
     throw new ConflictError(
       'Another task of this stage started first',
       'project_stage_in_progress',
       {
-        stageId,
+        stageId: stage.id,
       },
     )
-  }
-
-  /**
-   * Start every stage whose definition starts it on its own (`start: 'auto'`) and that is ready
-   * now: create its task and start the task's run. Called when a project is created, after an
-   * outcome records and after a checkpoint clears. Idempotent: a stage already running is not
-   * ready, and a concurrent advance that claims the same stage first wins it. A stage that fails
-   * to start is logged and stays `ready` for a person.
-   */
-  async advance(workspaceId: string, projectId: string): Promise<void> {
-    const { project, homeWorkspaceId } = await this.deps.getMounted(workspaceId, projectId)
-    const snapshot = await this.snapshot(project, await this.stagesOf(project))
-    const due = snapshot.stages.filter(
-      (stage, i) => stage.start === 'auto' && snapshot.states[i]!.status === 'ready',
-    )
-    for (const stage of due) {
-      await runBestEffort(
-        this.log,
-        'projects.stages.autoStart',
-        () => this.autoStart(homeWorkspaceId, projectId, stage),
-        { projectId, stageId: stage.id },
-      )
-    }
-  }
-
-  private async autoStart(
-    homeWorkspaceId: string,
-    projectId: string,
-    stage: ProjectStage,
-  ): Promise<void> {
-    let task: Block
-    try {
-      // No person authors an automatic stage's task, so no one's tier narrows its merge policy.
-      task = await this.createTask(
-        homeWorkspaceId,
-        projectId,
-        stage.id,
-        UNATTRIBUTED_BLOCK_EDIT_AUTHORITY,
-        null,
-      )
-    } catch (error) {
-      // Another advance claimed the stage first: it starts the run, so there is nothing to do.
-      if (error instanceof ConflictError && error.details?.reason === 'project_stage_in_progress') {
-        return
-      }
-      throw error
-    }
-    const start = this.deps.runStarter()
-    if (!task.pipelineId || !start) {
-      throw new Error(`Stage '${stage.id}' created task '${task.id}' but cannot start its run`)
-    }
-    await start(homeWorkspaceId, task.id, task.pipelineId)
   }
 
   /**
@@ -297,7 +325,14 @@ export class ProjectStageService {
     ])
     const liveTaskIds = new Set(tasks.map((t) => t.id))
     const states = deriveProjectStageStates({ stages, stageTasks, liveTaskIds, outcomes })
-    return { stages, states, stageTasks, liveTaskIds, outcomes }
+    return {
+      stages,
+      tasks: new Map(tasks.map((t) => [t.id, t] as const)),
+      states,
+      stageTasks,
+      liveTaskIds,
+      outcomes,
+    }
   }
 
   /**

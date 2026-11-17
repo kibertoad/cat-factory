@@ -158,8 +158,12 @@ bucket for every new repository method in the same PR.
 
 - An automatic stage is started by the engine with no person behind it, like an initiative's
   spawned task: its task is created under the unattributed editor and its run is started with no
-  initiator. Each trigger is best-effort, so a stage that fails to start stays `ready` for a
-  person rather than undoing the outcome or checkpoint that made it ready.
+  initiator. It starts ONCE, when it first becomes ready with no task of it yet; after that a
+  person decides, so deleting its task stops it. A task it created whose run never started (the
+  process died in between, or the start failed) has its run started by the next trigger. A run on
+  an individual-usage model is never started unattended: the task waits on the board for a
+  person, and the log says why. Each trigger is best-effort, so nothing undoes the outcome or
+  checkpoint that made the stage ready.
 
 ## Open questions
 

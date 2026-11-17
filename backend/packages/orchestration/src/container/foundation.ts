@@ -38,7 +38,7 @@ import {
   createWorkspaceSettingsModule,
 } from './modules.js'
 import type { ModuleRegistry } from './module-registry.js'
-import type { StageTaskBoard } from '../modules/projects/ProjectStageService.js'
+import type { StageRunStarter, StageTaskBoard } from '../modules/projects/ProjectStageService.js'
 import type { resolveCoreRuntime } from './runtime.js'
 import type {
   CoreDependencies,
@@ -82,6 +82,8 @@ export interface CoreFoundationParams {
 }
 
 export interface CoreFoundation {
+  /** Bind the engine, built after the foundation, as the run starter of automatic stages. */
+  bindStageRunStarter: (starter: StageRunStarter) => void
   notifications: NotificationsModule | undefined
   settings: WorkspaceSettingsModule | undefined
   boardService: BoardService
@@ -123,12 +125,13 @@ export function createCoreFoundation(params: CoreFoundationParams): CoreFoundati
   )
   // Late-bound: a project stage creates its task on the board, which is built below.
   let stageBoard: StageTaskBoard | undefined
+  let stageRunStarter: StageRunStarter | undefined
   modules.build('projects', () =>
     createProjectsModule(
       dependencies,
       { projectKinds, projectDefinitions, registeredProjectDefinitions, projectKindModules },
       executionEventPublisher,
-      () => stageBoard,
+      { board: () => stageBoard, runStarter: () => stageRunStarter },
     ),
   )
   const settings = modules.build('settings', () =>
@@ -275,5 +278,15 @@ export function createCoreFoundation(params: CoreFoundationParams): CoreFoundati
       : undefined,
   )
 
-  return { notifications, settings, boardService, workspaceService, accountService, userService }
+  return {
+    bindStageRunStarter: (starter) => {
+      stageRunStarter = starter
+    },
+    notifications,
+    settings,
+    boardService,
+    workspaceService,
+    accountService,
+    userService,
+  }
 }

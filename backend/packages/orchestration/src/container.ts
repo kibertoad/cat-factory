@@ -41,10 +41,7 @@ import { ProjectService } from './modules/projects/ProjectService.js'
 import type { ProjectDefinitionPublisher } from './modules/projects/ProjectDefinitionPublisher.js'
 import type { ProjectOutcomeReader } from './modules/projects/ProjectOutcomeReader.js'
 import type { ProjectBoardViews } from './modules/projects/ProjectBoardViews.js'
-import type {
-  ProjectStageService,
-  StageRunStarter,
-} from './modules/projects/ProjectStageService.js'
+import type { ProjectStageService } from './modules/projects/ProjectStageService.js'
 import type { OutcomeStoragePolicyService } from './modules/projects/OutcomeStoragePolicyService.js'
 import type { TaskProjectLinkService } from './modules/projects/TaskProjectLinkService.js'
 import { createInlineUseCaseService } from './container/use-case-service.js'
@@ -125,7 +122,6 @@ import {
 import { BootstrapService } from './modules/bootstrap/BootstrapService.js'
 import { EnvConfigRepairService } from './modules/envConfigRepair/EnvConfigRepairService.js'
 import { EnvironmentTestService } from './modules/environments/EnvironmentTestService.js'
-import { BoardScanService } from './modules/boardScan/BoardScanService.js'
 import { TutorialTelemetryService } from './modules/tutorial/TutorialTelemetryService.js'
 import { type AgentKindRegistry, type AgentKindSource } from '@cat-factory/agents'
 import type {
@@ -775,8 +771,6 @@ export interface ProjectsModule {
   views: ProjectBoardViews
   /** The stages of a staged project: where each stands, starting one, clearing its checkpoint. */
   stages: ProjectStageService
-  /** Bind the engine's run start, built after this module, for stages that start on their own. */
-  bindStageRunStarter: (starter: StageRunStarter) => void
   /** The outcome-storage policy tiers. Absent when the facade wires no policy store. */
   storagePolicy?: OutcomeStoragePolicyService
   /** Absent when the facade wires no definition store. */
@@ -871,26 +865,27 @@ export function createCore(injected: CoreDependencies): Core {
   let sharedStackSeederRef: SharedStackSeeder | undefined
   // The foundation slice (notifications/settings, board/workspace/account/user + the account-
   // onboarding modules) is built up-front as a cohesive collaborator; see container/foundation.ts.
+  const foundation = createCoreFoundation({
+    dependencies,
+    modules,
+    caches,
+    executionEventPublisher,
+    taskTypeRegistry,
+    pipelineRegistry,
+    promptFragments,
+    projectKinds,
+    projectDefinitions,
+    registeredProjectDefinitions: runtime.registeredProjectDefinitions,
+    projectKindModules: projectKindModuleRegistry,
+    getSpendService: () => spendServiceRef,
+    getEnvironmentHandlerSeeder: () => environmentHandlerSeederRef,
+    getSharedStackSeeder: () => sharedStackSeederRef,
+    // Built with the runners module (after the foundation), and read through the registry at call
+    // time, so no separate ref is needed.
+    getRunnerPoolSeeder: () => modules.get('runnerPoolSeeder'),
+  })
   const { notifications, settings, boardService, workspaceService, accountService, userService } =
-    createCoreFoundation({
-      dependencies,
-      modules,
-      caches,
-      executionEventPublisher,
-      taskTypeRegistry,
-      pipelineRegistry,
-      promptFragments,
-      projectKinds,
-      projectDefinitions,
-      registeredProjectDefinitions: runtime.registeredProjectDefinitions,
-      projectKindModules: projectKindModuleRegistry,
-      getSpendService: () => spendServiceRef,
-      getEnvironmentHandlerSeeder: () => environmentHandlerSeederRef,
-      getSharedStackSeeder: () => sharedStackSeederRef,
-      // Built with the runners module (after the foundation), and read through the registry at call
-      // time, so no separate ref is needed.
-      getRunnerPoolSeeder: () => modules.get('runnerPoolSeeder'),
-    })
+    foundation
   // All three registries are passed from the RESOLVED set, not spread in from `injected`: a facade
   // may leave any unset and `resolveCoreRuntime` supplies the default. That matters most for
   // `agentKindRegistry`, which decides whether a step's kind may be estimate-gated, and for
@@ -935,13 +930,6 @@ export function createCore(injected: CoreDependencies): Core {
   environmentHandlerSeederRef = environmentHandlerSeeder
   sharedStackSeederRef = sharedStackSeeder
 
-  // Reconciles a `blueprints` step's decomposition onto the board. Needs only the
-  // board service + block repository (both always present), so it is wired
-  // unconditionally — there is no standalone scan command or persisted blueprint store.
-  const blueprintReconciler = new BoardScanService({
-    boardService,
-    blockRepository: dependencies.blockRepository,
-  })
   // `notifications` + `settings` are built up-front (near the board service) so the friction
   // guard, the per-service task limit, and the escalation sweep can read them.
   modules.build('slack', () => createSlackModule(dependencies))
@@ -982,7 +970,6 @@ export function createCore(injected: CoreDependencies): Core {
     settings,
     notifications,
     mergeTrackRecords,
-    blueprintReconciler,
     platform,
     collaborators,
     projects: modules.get('projects'),
@@ -1004,6 +991,7 @@ export function createCore(injected: CoreDependencies): Core {
     notifications,
     initiativeService,
     setInitiativeLoop,
+    bindStageRunStarter: foundation.bindStageRunStarter,
     spend: spendService,
   })
 

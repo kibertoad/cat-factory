@@ -30,7 +30,6 @@ export interface ExecutionServiceWiringInput {
   settings: ReturnType<typeof createCoreFoundation>['settings']
   notifications: ReturnType<typeof createCoreFoundation>['notifications']
   mergeTrackRecords: OptionalCoreModules['mergeTrackRecords'] | undefined
-  blueprintReconciler: BoardScanService
   platform: ReturnType<typeof createPlatformModules>
   collaborators: ReturnType<typeof createEngineCollaborators>
   /**
@@ -51,7 +50,6 @@ export function buildExecutionService(input: ExecutionServiceWiringInput): Execu
     settings,
     notifications,
     mergeTrackRecords,
-    blueprintReconciler,
     platform,
     collaborators,
     projects,
@@ -74,6 +72,12 @@ export function buildExecutionService(input: ExecutionServiceWiringInput): Execu
     pokeInitiativeLoop,
   } = collaborators
 
+  // Reconciles a `blueprints` step's decomposition onto the board. Needs only the board service and
+  // the block repository (both always present), so it is wired unconditionally.
+  const blueprintReconciler = new BoardScanService({
+    boardService,
+    blockRepository: dependencies.blockRepository,
+  })
   return new ExecutionService({
     ...dependencies,
     agentKindRegistry: runtime.agentKindRegistry,

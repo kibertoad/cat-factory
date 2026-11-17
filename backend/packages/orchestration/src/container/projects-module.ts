@@ -32,8 +32,14 @@ export function createProjectsModule(
     projectKindModules: ProjectKindModuleRegistry
   },
   events: ExecutionEventPublisher,
-  /** Late-bound: the board is built after this module, and a stage creates its tasks on it. */
-  board: () => StageTaskBoard | undefined,
+  /**
+   * Late-bound: the board and the engine are built after this module; a stage creates its tasks on
+   * the board and starts an automatic stage's run through the engine.
+   */
+  late: {
+    board: () => StageTaskBoard | undefined
+    runStarter: () => StageRunStarter | undefined
+  },
 ): ProjectsModule | undefined {
   const {
     projectRepository,
@@ -52,7 +58,6 @@ export function createProjectsModule(
   // Assigned below: the stages read projects through the service, and a new project starts its
   // automatic stages through the stages.
   let stagesRef: ProjectStageService | undefined
-  let runStarter: StageRunStarter | undefined
   const service = new ProjectService({
     projectRepository,
     serviceRepository,
@@ -80,18 +85,14 @@ export function createProjectsModule(
     listTasks: (project) => service.listTasks(project),
     records: projectRecordRepository,
     definitions: sources.projectDefinitions,
-    board,
-    // The engine is built after this module: `bindStageRunStarter` binds it once it exists.
-    runStarter: () => runStarter,
+    board: late.board,
+    runStarter: late.runStarter,
     clock: deps.clock,
     logger: deps.logger,
   })
   stagesRef = stages
   return {
     stages,
-    bindStageRunStarter: (starter) => {
-      runStarter = starter
-    },
     service,
     records: projectRecordRepository,
     definitions: sources.projectDefinitions,
