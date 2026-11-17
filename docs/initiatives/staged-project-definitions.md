@@ -85,7 +85,7 @@ bucket for every new repository method in the same PR.
       handler owns its task type's agent kind, body schema and version, and may serve several
       kinds. Dispatch resolves the handler from the task's type under its project's kind, and each
       outcome row records `taskType` so readers decode it with that handler. Research moves onto
-      one handler with no behaviour change. PR: (this slice)
+      one handler with no behaviour change. PR: [#2522](https://github.com/kibertoad/cat-factory/pull/2522)
 - [ ] **2. Stages and derived state.** `stages` in the envelope with validation (acyclic `after`,
       `consumes` naming a produced stream, task types the kind offers); the checkpoint-clearance
       table (D1 migration and Drizzle schema); a pure `deriveStageState` over outcomes and
