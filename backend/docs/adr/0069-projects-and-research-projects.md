@@ -176,12 +176,15 @@ key through the same resolver a dispatch reads, refusing a premature one with
 A task links projects through `POST /workspaces/:ws/blocks/:blockId/projects`, the public
 `/api/v1/tasks/{taskId}/projects` routes, the create-time `projects` field and an initiative item's
 `spawn.projects`. A link is admitted only for a project of the task's account
-(`project_link_invalid`) that has a result to read, meaning at least one outcome
-(`project_has_no_result`), checked by one service for every door.
+(`project_link_invalid`) that has a result to read (`project_has_no_result`), checked by one
+service for every door: at least one outcome, or for a staged project at least one stage with an
+accepted result.
 
 At dispatch, every linked project's current result is rendered by its kind's module
 (`renderContext`) from its decoded outcomes and pinned definition; a kind without one contributes
-the newest outcome of each stream as recorded. Each contributes a summary and a coverage line to
+the newest outcome of each stream as recorded. A staged project contributes each stage's accepted
+result instead, rendered by the handler of the stage's task type, and a project pinned to a
+definition the deployment cannot resolve is stated as such. Each contributes a summary and a coverage line to
 the prompt's linked-context index and the full result as a `project-<name>.md` file in
 `.cat-context/`, scrubbed of secrets. Research contributes its folded findings with coverage of the
 pinned definition. The step records which outcome each linked project contributed

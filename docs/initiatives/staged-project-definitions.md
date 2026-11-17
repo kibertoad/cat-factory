@@ -119,7 +119,9 @@ bucket for every new repository method in the same PR.
       kind does not. The stage rail renders the register (slice 9). PR: [#2528](https://github.com/kibertoad/cat-factory/pull/2528)
 - [x] **6a. Staged linked context.** A task that links a staged project reads each stage's
       accepted result, rendered by its handler, in the definition's order; a stage with none yet
-      is stated. The kind's own project-level rendering stays for an unstaged project. PR:
+      is stated. Such a project is linkable once some stage has an accepted result, only those
+      results' bodies are read, and the step records every accepted stage outcome as the
+      revision. The kind's own project-level rendering stays for an unstaged project. PR:
       [#2529](https://github.com/kibertoad/cat-factory/pull/2529)
 - [ ] **6b. Spawn stage.** A stage that creates a task in each linked service (configurable title,
       task type and brief), links the project so each reads the stages' results, starts their
@@ -167,10 +169,11 @@ bucket for every new repository method in the same PR.
   result accepted at a checkpoint after the downstream task recorded still makes it stale.
 - A definition that declares no stages hashes without the `stages` key, so pins taken before
   definitions carried stages stay valid.
-- The research kind's project view and its linked-project rendering fold only its unstaged
-  `main` stream against the definition's topics. A research stage's findings reach a later stage
-  through `consumes`, rendered against that stage's own questions; a per-stage view on the board
-  comes with the stage rail (slice 9). A staged definition of the research kind still carries the
+- The research kind's project view folds only its unstaged `main` stream against the
+  definition's topics. A staged project reads as linked context through its stages instead, each
+  accepted result rendered by its handler against that stage's own questions, so the kind's
+  project-level rendering never sees a staged project. A per-stage view on the board comes with
+  the stage rail (slice 9). A staged definition of the research kind still carries the
   kind's top-level spec; a kind built for stages declares its own.
 
 - An automatic stage is started by the engine with no person behind it, like an initiative's

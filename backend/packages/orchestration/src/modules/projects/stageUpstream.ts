@@ -7,7 +7,6 @@ import {
 } from '@cat-factory/contracts'
 import {
   type DecodedProjectOutcome,
-  type ProjectContextRendering,
   type ProjectKindModuleRegistry,
   type ProjectOutcomeRow,
   type ProjectUpstreamContext,
@@ -16,7 +15,7 @@ import {
 } from '@cat-factory/kernel'
 import type { ProjectOutcomeStore } from './ProjectOutcomeStore.js'
 import { tryDecodeOutcome } from './outcomeDecoding.js'
-import { renderLatestOutcomes } from './projectContext.js'
+import { renderStageResult } from './stageRendering.js'
 
 // What a staged task reads of the stages its stage consumes. It reads exactly the upstream results
 // its stage task STARTED from (the `basis` recorded when the task was created), so what it read is
@@ -85,14 +84,14 @@ export async function renderStageUpstream(
       return { ...entry, revision: null, summary: note, coverage: 'no accepted result', body: note }
     }
     const outcomes = rows.map((row) => known.get(row.id)!)
-    const handler = deps.modules.handlerOf(task.project.kind, upstream.taskType)
-    const rendering: ProjectContextRendering =
-      handler?.renderContext?.({
-        definition: task.definition,
-        inputs: task.inputs,
-        stage: { id: upstream.id, title: upstream.title, config: upstream.config },
-        outcomes,
-      }) ?? renderLatestOutcomes(outcomes)
+    const rendering = renderStageResult({
+      modules: deps.modules,
+      kind: task.project.kind,
+      definition: task.definition,
+      inputs: task.inputs,
+      stage: upstream,
+      outcomes,
+    })
     return {
       ...entry,
       revision: { id: basis.id, seq: basis.seq },

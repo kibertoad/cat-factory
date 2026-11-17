@@ -90,28 +90,37 @@ export class ProjectOutcomeStore {
     return Promise.all(rows.map(async (row) => ({ row, json: await readJson(row, home) })))
   }
 
+  /** Every outcome envelope of several projects in one read, keyed by project, `seq` ascending. */
+  async envelopesOfProjects(
+    projects: readonly OutcomeProject[],
+  ): Promise<Map<string, ProjectOutcomeRow[]>> {
+    const rows = await this.deps.records.listOutcomesOfProjects(projects.map((p) => p.id))
+    const byProject = new Map<string, ProjectOutcomeRow[]>(projects.map((p) => [p.id, []]))
+    for (const row of rows) byProject.get(row.projectId)?.push(row)
+    for (const own of byProject.values()) own.sort((a, b) => a.seq - b.seq)
+    return byProject
+  }
+
   /**
-   * Every outcome of several projects with its body's JSON, keyed by project and `seq` ascending,
-   * from one outcome read and one root read. Refuses like {@link list} when an offloaded body
+   * The bodies of rows a caller already listed for several projects, keyed by project and in the
+   * given order, with every root read in one go. Refuses like {@link list} when an offloaded body
    * cannot be read, because a run reads what it links through here.
    */
-  async listOfProjects(projects: readonly OutcomeProject[]): Promise<Map<string, StoredOutcome[]>> {
-    const rows = await this.deps.records.listOutcomesOfProjects(projects.map((p) => p.id))
-    const byProject = new Map<string, ProjectOutcomeRow[]>()
-    for (const row of rows)
-      byProject.set(row.projectId, [...(byProject.get(row.projectId) ?? []), row])
+  async bodiesOfProjects(
+    projects: readonly OutcomeProject[],
+    rowsOf: ReadonlyMap<string, readonly ProjectOutcomeRow[]>,
+  ): Promise<Map<string, StoredOutcome[]>> {
     const offloading = projects.filter((p) =>
-      (byProject.get(p.id) ?? []).some((row) => row.body.kind === 'offloaded'),
+      (rowsOf.get(p.id) ?? []).some((row) => row.body.kind === 'offloaded'),
     )
     const homes = await this.homeStores(offloading)
     const result = new Map<string, StoredOutcome[]>()
     for (const project of projects) {
-      const own = (byProject.get(project.id) ?? []).sort((a, b) => a.seq - b.seq)
       const home = homes.get(project.id)
       result.set(
         project.id,
         await Promise.all(
-          own.map(async (row) => ({
+          (rowsOf.get(project.id) ?? []).map(async (row) => ({
             row,
             json: home ? await readJson(row, home) : inlineJson(row),
           })),
