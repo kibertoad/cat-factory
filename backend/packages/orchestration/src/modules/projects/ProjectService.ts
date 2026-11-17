@@ -47,6 +47,8 @@ export interface ProjectServiceDependencies {
   clock: Clock
   events?: ExecutionEventPublisher
   logger?: Logger
+  /** Starts the stages a new project's definition starts on its own. Best-effort. */
+  onCreated?: (workspaceId: string, projectId: string) => Promise<void>
 }
 
 /** A project a board mounts, with its root block and the board that homes it. */
@@ -141,6 +143,17 @@ export class ProjectService {
       throw error
     }
     await this.emitAdded(workspaceId, rootBlock.id)
+    const onCreated = this.deps.onCreated
+    if (onCreated) {
+      // The project exists whatever happens next: a stage that fails to start stays `ready` on
+      // the board for a person to start.
+      await runBestEffort(
+        this.log,
+        'projects.stages.startOnCreate',
+        () => onCreated(workspaceId, project.id),
+        { workspaceId, projectId: project.id },
+      )
+    }
     return { project, rootBlock: applyMountLayout(rootBlock, mount), mount }
   }
 

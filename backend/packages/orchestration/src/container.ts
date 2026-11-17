@@ -41,7 +41,10 @@ import { ProjectService } from './modules/projects/ProjectService.js'
 import type { ProjectDefinitionPublisher } from './modules/projects/ProjectDefinitionPublisher.js'
 import type { ProjectOutcomeReader } from './modules/projects/ProjectOutcomeReader.js'
 import type { ProjectBoardViews } from './modules/projects/ProjectBoardViews.js'
-import type { ProjectStageService } from './modules/projects/ProjectStageService.js'
+import type {
+  ProjectStageService,
+  StageRunStarter,
+} from './modules/projects/ProjectStageService.js'
 import type { OutcomeStoragePolicyService } from './modules/projects/OutcomeStoragePolicyService.js'
 import type { TaskProjectLinkService } from './modules/projects/TaskProjectLinkService.js'
 import { createInlineUseCaseService } from './container/use-case-service.js'
@@ -772,6 +775,8 @@ export interface ProjectsModule {
   views: ProjectBoardViews
   /** The stages of a staged project: where each stands, starting one, clearing its checkpoint. */
   stages: ProjectStageService
+  /** Bind the engine's run start, built after this module, for stages that start on their own. */
+  bindStageRunStarter: (starter: StageRunStarter) => void
   /** The outcome-storage policy tiers. Absent when the facade wires no policy store. */
   storagePolicy?: OutcomeStoragePolicyService
   /** Absent when the facade wires no definition store. */
@@ -980,7 +985,7 @@ export function createCore(injected: CoreDependencies): Core {
     blueprintReconciler,
     platform,
     collaborators,
-    taskProjectLinks: modules.get('projects')?.taskLinks,
+    projects: modules.get('projects'),
   })
 
   // The modules that depend on the assembled engine (they drive `executionService`, or feed the

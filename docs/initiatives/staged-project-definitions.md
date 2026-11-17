@@ -93,8 +93,9 @@ bucket for every new repository method in the same PR.
       one-open-task-per-stage claim; `deriveProjectStageStates` in contracts; the board view's
       `stages`; `POST .../stages/:stageId/tasks` and `POST .../stages/:stageId/checkpoint`. A staged
       task plans from its stage's config and history and writes its stage's stream. PR: [#2523](https://github.com/kibertoad/cat-factory/pull/2523)
-- [ ] **2b. Auto-start.** A stage with `start: 'auto'` creates and starts its task once it is
-      ready: at project creation, after an outcome records, and after a checkpoint clears.
+- [x] **2b. Auto-start.** A stage with `start: 'auto'` creates and starts its task once it is
+      ready: at project creation, after an outcome records, and after a checkpoint clears
+      (`ProjectStageService.advance`, through a late-bound run starter). PR: (this slice)
 - [ ] **3. Upstream context.** A stage's consumed streams rendered by their handlers into
       `.cat-context/`; the read `seq` recorded on the step; a consumed stream that cannot be read
       breaks the run naming it.
@@ -154,6 +155,11 @@ bucket for every new repository method in the same PR.
   definition's topics. A research stage's findings are listed as outcomes but get no folded view
   until handlers render per-stream context (slice 3). A staged definition of the research kind
   still carries the kind's top-level spec; a kind built for stages declares its own spec.
+
+- An automatic stage is started by the engine with no person behind it, like an initiative's
+  spawned task: its task is created under the unattributed editor and its run is started with no
+  initiator. Each trigger is best-effort, so a stage that fails to start stays `ready` for a
+  person rather than undoing the outcome or checkpoint that made it ready.
 
 ## Open questions
 

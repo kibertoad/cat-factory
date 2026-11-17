@@ -13,6 +13,7 @@ import { ProjectOutcomeReader } from '../modules/projects/ProjectOutcomeReader.j
 import { ProjectService } from '../modules/projects/ProjectService.js'
 import {
   ProjectStageService,
+  type StageRunStarter,
   type StageTaskBoard,
 } from '../modules/projects/ProjectStageService.js'
 import { TaskProjectLinkService } from '../modules/projects/TaskProjectLinkService.js'
@@ -48,6 +49,10 @@ export function createProjectsModule(
   ) {
     return undefined
   }
+  // Assigned below: the stages read projects through the service, and a new project starts its
+  // automatic stages through the stages.
+  let stagesRef: ProjectStageService | undefined
+  let runStarter: StageRunStarter | undefined
   const service = new ProjectService({
     projectRepository,
     serviceRepository,
@@ -61,6 +66,9 @@ export function createProjectsModule(
     clock: deps.clock,
     events,
     logger: deps.logger,
+    onCreated: async (workspaceId, projectId) => {
+      await stagesRef?.advance(workspaceId, projectId)
+    },
   })
   const { projectDefinitionRepository, outcomeStoragePolicyRepository, taskProjectLinkRepository } =
     deps
@@ -73,11 +81,17 @@ export function createProjectsModule(
     records: projectRecordRepository,
     definitions: sources.projectDefinitions,
     board,
+    // The engine is built after this module: `bindStageRunStarter` binds it once it exists.
+    runStarter: () => runStarter,
     clock: deps.clock,
     logger: deps.logger,
   })
+  stagesRef = stages
   return {
     stages,
+    bindStageRunStarter: (starter) => {
+      runStarter = starter
+    },
     service,
     records: projectRecordRepository,
     definitions: sources.projectDefinitions,

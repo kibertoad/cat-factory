@@ -72,6 +72,12 @@ export function registerEngineDependentModules(input: EngineDependentModulesInpu
         notifications: notifications?.service,
       })
     : undefined
+  // A project stage that starts on its own starts its run through the engine, built just before.
+  modules
+    .get('projects')
+    ?.bindStageRunStarter((workspaceId, blockId, pipelineId) =>
+      executionService.start(workspaceId, blockId, pipelineId),
+    )
   modules.build('github', () => createGitHubModule(dependencies, caches, externalMergeObserver))
   const runners = modules.build('runners', () => createRunnersModule(dependencies))
   // The deployment-declared runner-pool seeder, the account-keyed sibling of the environment-handler

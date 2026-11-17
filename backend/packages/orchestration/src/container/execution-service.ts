@@ -10,11 +10,10 @@ import { createWorkspaceRiskPolicyLibrary } from '../modules/merge/WorkspaceRisk
 import { BoardScanService } from '../modules/boardScan/BoardScanService.js'
 import { BoardService } from '../modules/board/BoardService.js'
 import type { createEngineCollaborators } from './engine-collaborators.js'
-import type { TaskProjectLinkService } from '../modules/projects/TaskProjectLinkService.js'
 import type { createPlatformModules } from './platform-modules.js'
 import type { createCoreFoundation } from './foundation.js'
 import type { resolveCoreRuntime } from './runtime.js'
-import type { OptionalCoreModules } from '../container.js'
+import type { OptionalCoreModules, ProjectsModule } from '../container.js'
 
 /**
  * Everything `createCore` has resolved by the time the engine is constructed. Grouped so the
@@ -34,8 +33,11 @@ export interface ExecutionServiceWiringInput {
   blueprintReconciler: BoardScanService
   platform: ReturnType<typeof createPlatformModules>
   collaborators: ReturnType<typeof createEngineCollaborators>
-  /** The projects linked to tasks as context. Absent when the projects module is. */
-  taskProjectLinks?: TaskProjectLinkService
+  /**
+   * The projects module: its task links feed linked context, and its stages start what a recorded
+   * outcome made ready. Absent when projects are not wired.
+   */
+  projects?: ProjectsModule
 }
 
 /** Construct the engine from the already-resolved core spine, modules and collaborators. */
@@ -52,8 +54,9 @@ export function buildExecutionService(input: ExecutionServiceWiringInput): Execu
     blueprintReconciler,
     platform,
     collaborators,
-    taskProjectLinks,
+    projects,
   } = input
+  const taskProjectLinks = projects?.taskLinks
   const { llmObservability, environments, foundationalServices, fragmentLibrary, skillLibrary } =
     platform
   const {
@@ -85,6 +88,7 @@ export function buildExecutionService(input: ExecutionServiceWiringInput): Execu
     projectStep: createProjectStepController(dependencies, {
       definitions: runtime.projectDefinitions,
       modules: runtime.projectKindModuleRegistry,
+      ...(projects ? { stages: projects.stages } : {}),
     }),
     gateRegistry: runtime.gateRegistry,
     judgeRegistry: runtime.judgeRegistry,

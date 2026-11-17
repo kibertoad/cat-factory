@@ -1,6 +1,7 @@
 import {
   type BlockEditAuthority,
   deriveProjectStageStates,
+  UNATTRIBUTED_BLOCK_EDIT_AUTHORITY,
   type Project,
   type ProjectDefinition,
   type ProjectStage,
@@ -43,6 +44,13 @@ export interface StageTaskBoard {
   removeTask(homeWorkspaceId: string, blockId: string): Promise<void>
 }
 
+/** Starts a task's run on the pipeline the task pins, with no person behind it. */
+export type StageRunStarter = (
+  workspaceId: string,
+  blockId: string,
+  pipelineId: string,
+) => Promise<unknown>
+
 export interface ProjectStageServiceDeps {
   getMounted: (workspaceId: string, projectId: string) => Promise<MountedProject>
   listTasks: (project: Project) => Promise<Block[]>
@@ -59,6 +67,8 @@ export interface ProjectStageServiceDeps {
   definitions: ProjectDefinitionSource
   /** Late-bound: the board is built after the projects module. */
   board: () => StageTaskBoard | undefined
+  /** Late-bound: starts a task's run; the engine is built after the projects module. */
+  runStarter: () => StageRunStarter | undefined
   clock: Clock
   logger?: Logger
 }
@@ -172,6 +182,58 @@ export class ProjectStageService {
   }
 
   /**
+   * Start every stage whose definition starts it on its own (`start: 'auto'`) and that is ready
+   * now: create its task and start the task's run. Called when a project is created, after an
+   * outcome records and after a checkpoint clears. Idempotent: a stage already running is not
+   * ready, and a concurrent advance that claims the same stage first wins it. A stage that fails
+   * to start is logged and stays `ready` for a person.
+   */
+  async advance(workspaceId: string, projectId: string): Promise<void> {
+    const { project, homeWorkspaceId } = await this.deps.getMounted(workspaceId, projectId)
+    const snapshot = await this.snapshot(project, await this.stagesOf(project))
+    const due = snapshot.stages.filter(
+      (stage, i) => stage.start === 'auto' && snapshot.states[i]!.status === 'ready',
+    )
+    for (const stage of due) {
+      await runBestEffort(
+        this.log,
+        'projects.stages.autoStart',
+        () => this.autoStart(homeWorkspaceId, projectId, stage),
+        { projectId, stageId: stage.id },
+      )
+    }
+  }
+
+  private async autoStart(
+    homeWorkspaceId: string,
+    projectId: string,
+    stage: ProjectStage,
+  ): Promise<void> {
+    let task: Block
+    try {
+      // No person authors an automatic stage's task, so no one's tier narrows its merge policy.
+      task = await this.createTask(
+        homeWorkspaceId,
+        projectId,
+        stage.id,
+        UNATTRIBUTED_BLOCK_EDIT_AUTHORITY,
+        null,
+      )
+    } catch (error) {
+      // Another advance claimed the stage first: it starts the run, so there is nothing to do.
+      if (error instanceof ConflictError && error.details?.reason === 'project_stage_in_progress') {
+        return
+      }
+      throw error
+    }
+    const start = this.deps.runStarter()
+    if (!task.pipelineId || !start) {
+      throw new Error(`Stage '${stage.id}' created task '${task.id}' but cannot start its run`)
+    }
+    await start(homeWorkspaceId, task.id, task.pipelineId)
+  }
+
+  /**
    * Accept a stage's newest result at its checkpoint, so the stages after it count it. Refused
    * unless the stage is awaiting its checkpoint.
    */
@@ -202,6 +264,12 @@ export class ProjectStageService {
         { stageId, status: before.status },
       )
     }
+    await runBestEffort(
+      this.log,
+      'projects.stages.advanceOnCheckpoint',
+      () => this.advance(workspaceId, projectId),
+      { projectId, stageId },
+    )
     return (await this.snapshot(project, stages)).states[index]!
   }
 
