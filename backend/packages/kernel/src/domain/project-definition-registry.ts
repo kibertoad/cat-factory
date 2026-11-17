@@ -87,6 +87,15 @@ function parseStageConfig(
       issues: [`project kind '${module.kind}' offers no task type '${stage.taskType}'`],
     }
   }
+  if (handler.checkpointRevision?.required && !stage.checkpoint) {
+    return {
+      ok: false,
+      issues: [
+        `task type '${stage.taskType}' needs a person to settle its result, so its stage must ` +
+          'declare a checkpoint',
+      ],
+    }
+  }
   if (!handler.parseConfig) {
     return stage.config === undefined
       ? { ok: true, value: stage }

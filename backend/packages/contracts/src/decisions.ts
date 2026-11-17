@@ -12,6 +12,9 @@ import { type DefinitionParseResult, describeValibotIssues } from './project-def
 /** The built-in task type a decision register runs as. */
 export const DECISIONS_TASK_TYPE = 'decisions'
 
+/** The agent kind a decision stage's task dispatches. */
+export const PROJECT_DECIDER_AGENT_KIND = 'project-decider'
+
 /** The body schema version a decision register is written in today. */
 export const DECISION_REGISTER_SCHEMA_VERSION = 1
 
@@ -71,6 +74,11 @@ export const decisionRegisterSchema = v.pipe(
   v.object({
     summary: v.pipe(v.string(), v.trim(), v.maxLength(DECISION_PROSE_MAX)),
     items: v.pipe(v.array(decisionItemSchema), v.minLength(1), v.maxLength(DECISION_ITEMS_MAX)),
+    /**
+     * Questions the stage required that the proposal left out, recorded by the platform so the
+     * person settling the register sees them rather than taking the register as complete.
+     */
+    unanswered: v.optional(v.array(itemId), []),
   }),
   v.check(
     (r) => new Set(r.items.map((i) => i.id)).size === r.items.length,
@@ -92,6 +100,11 @@ export interface DecisionBrief {
   questions: { id: string; question: string }[]
   /** The register an earlier, stopped dispatch of this task proposed, to continue from. */
   checkpoint?: DecisionRegister
+  /**
+   * The register this stage last recorded (the person's settlement when they settled one), for a
+   * rerun to carry forward what the new evidence does not change.
+   */
+  prior?: DecisionRegister
 }
 
 function parsed<T>(schema: v.GenericSchema<unknown, T>, input: unknown): DefinitionParseResult<T> {
@@ -150,6 +163,9 @@ export function settleDecisionRegister(
 export function renderDecisionRegister(title: string, register: DecisionRegister): string {
   const lines = [`# ${title}`, '']
   if (register.summary) lines.push(register.summary, '')
+  if (register.unanswered.length) {
+    lines.push(`Required questions the proposal left out: ${register.unanswered.join(', ')}`, '')
+  }
   for (const item of register.items) {
     lines.push(`## ${item.question}`, '')
     if (item.decision) {

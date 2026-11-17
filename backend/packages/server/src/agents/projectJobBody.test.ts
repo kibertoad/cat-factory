@@ -220,3 +220,46 @@ describe('buildProjectJobBody target access', () => {
     ])
   })
 })
+
+describe('buildProjectJobBody for a kind that reaches no target', () => {
+  it('hands the decider neither the definition targets nor its credentials', async () => {
+    const { body } = await buildProjectJobBody(
+      {
+        agentKind: 'project-decider',
+        block: { id: 'task_1', title: 'Decide', description: 'Decide.' },
+        project: {
+          projectId: 'prj_1',
+          kind: 'research',
+          definition: {
+            ...definition([
+              { key: 'VENDOR_TOKEN', kind: 'api-token', label: 'Token', requiredAtStart: true },
+            ]),
+          },
+          inputs: {},
+          linkedFrameBlockIds: [],
+          upstream: [],
+          writes: false,
+          brief: { brief: 'Decide.', questions: [] },
+        },
+      } as unknown as AgentRunContext,
+      { workspaceId: 'ws_1', executionId: 'exec_1', jobId: 'job_1' },
+      {
+        agentKindRegistry: defaultAgentKindRegistry(),
+        mintInstallationToken: async () => 'token',
+        resolveRepoOrigin: () => {
+          throw new Error('no repo is linked')
+        },
+        resolveModel: async () => ({ model: 'm', provider: 'p' }),
+        resolveAuth: async () => ({ auth: {} }),
+        resolveToolServers: async () => ({
+          toolServers: [],
+          unavailableToolServers: [],
+          mcpServers: [],
+        }),
+      },
+    )
+    // A credential required at start that is not stored would refuse a researcher; the decider
+    // is not handed it, so it dispatches.
+    expect(body.access).toEqual({ targets: [], credentials: [], browser: false })
+  })
+})

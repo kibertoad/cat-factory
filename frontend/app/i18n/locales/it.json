@@ -6631,7 +6631,8 @@
         "project_stage_revision_required": "Il risultato di questa fase va definito al momento di accettarlo: decidi ogni punto proposto, poi accettalo.",
         "project_stage_revision_unsupported": "Il risultato di questa fase viene accettato così come è stato registrato; al suo checkpoint non accetta modifiche.",
         "project_stage_revision_invalid": "Le modifiche non corrispondono al risultato di questa fase. I dettagli indicano quale parte non corrisponde; correggila e accetta di nuovo.",
-        "project_stage_result_unreadable": "Il risultato di questa fase al momento non è leggibile, quindi non può essere definito. Riprova più tardi; se persiste, il risultato salvato va ripristinato."
+        "project_stage_result_unreadable": "Il risultato di questa fase al momento non è leggibile, quindi non può essere definito. Riprova più tardi; se persiste, il risultato salvato va ripristinato.",
+        "project_task_type_needs_stage": "Questo tipo di attività viene eseguito solo come fase di un progetto a fasi, e la definizione di questo progetto non dichiara fasi. Usa una definizione che lo esegua come fase."
       }
     },
     "action": {

@@ -242,8 +242,14 @@ export function taskTypeAttachesPullRequest(taskType: string | null | undefined)
  * to answer and nowhere for it to write.
  */
 export function taskTypeRequiresProject(taskType: string | null | undefined): boolean {
-  return taskType === 'research' || taskType === 'decisions'
+  return taskType !== null && taskType !== undefined && PROJECT_TASK_TYPES.includes(taskType)
 }
+
+/**
+ * The built-in task types that run only under a project, each with a pinned definition or stage as
+ * its brief rather than the task's description. Every rule about them reads this one list.
+ */
+export const PROJECT_TASK_TYPES: readonly string[] = ['research', 'decisions']
 
 /** The most ad-hoc questions one research task may add beside its definition's. */
 export const MAX_RESEARCH_ADHOC_QUESTIONS = 20

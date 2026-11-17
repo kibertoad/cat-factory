@@ -1,4 +1,4 @@
-import type { DecisionBrief } from '@cat-factory/contracts'
+import { type DecisionBrief, PROJECT_DECIDER_AGENT_KIND } from '@cat-factory/contracts'
 import type { AgentRunContext } from '@cat-factory/kernel'
 import type { AgentKindDefinition, AgentKindRegistry } from './registry.js'
 
@@ -10,7 +10,7 @@ import type { AgentKindDefinition, AgentKindRegistry } from './registry.js'
 // the agent decides nothing itself. Design: `docs/initiatives/staged-project-definitions.md`.
 // ---------------------------------------------------------------------------
 
-export const PROJECT_DECIDER_KIND = 'project-decider'
+export const PROJECT_DECIDER_KIND = PROJECT_DECIDER_AGENT_KIND
 
 /** The reply's shape, as the harness's structured-output repair reads it. */
 export const DECISION_REGISTER_SHAPE_HINT =
@@ -38,6 +38,17 @@ const PROJECT_DECIDER_SYSTEM_PROMPT = [
   `Reply with ONLY a JSON object of this shape: ${DECISION_REGISTER_SHAPE_HINT}`,
 ].join('\n')
 
+/**
+ * Model-authored JSON inside a fence one backtick longer than its longest backtick run, so a code
+ * fence quoted in a rationale cannot close the block and spill into the prompt.
+ */
+function fencedJson(value: unknown): string[] {
+  const json = JSON.stringify(value, null, 2)
+  const longest = Math.max(0, ...(json.match(/`+/g) ?? []).map((run) => run.length))
+  const fence = '`'.repeat(Math.max(3, longest + 1))
+  return [`${fence}json`, json, fence]
+}
+
 /** The user prompt: the stage's brief, the questions it requires, and any earlier proposal. */
 export function projectDeciderUserPrompt(context: AgentRunContext): string {
   const project = context.project
@@ -52,14 +63,21 @@ export function projectDeciderUserPrompt(context: AgentRunContext): string {
       ...brief.questions.map((q) => `- \`${q.id}\`: ${q.question}`),
     )
   }
+  if (brief.prior) {
+    lines.push(
+      '',
+      'This stage recorded a register before. Carry each settled decision forward unless the new',
+      'findings change it, and say in the rationale when they do:',
+      '',
+      ...fencedJson(brief.prior),
+    )
+  }
   if (brief.checkpoint) {
     lines.push(
       '',
       'This run resumed an earlier one that stopped. Its proposal so far, to continue from:',
       '',
-      '```json',
-      JSON.stringify(brief.checkpoint, null, 2),
-      '```',
+      ...fencedJson(brief.checkpoint),
     )
   }
   const steering = project.definition?.promptAdditions[PROJECT_DECIDER_KIND]
@@ -74,9 +92,11 @@ export const PROJECT_DECIDER_AGENT_KINDS: AgentKindDefinition[] = [
     userPrompt: (context) => projectDeciderUserPrompt(context),
     // Its product is a register of decisions for a person, steered by its stage's config.
     standardsDelivery: 'none',
-    // A repo-less project container; it reads context files and answers, with no browser.
+    // A repo-less project container that reads context files and answers. It reaches no project
+    // target, so its job carries none of the definition's targets or credentials, and no browser.
     agent: {
       surface: 'container-project',
+      projectTargets: 'none',
       output: { kind: 'structured', shapeHint: DECISION_REGISTER_SHAPE_HINT },
     },
     presentation: {

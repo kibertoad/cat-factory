@@ -166,6 +166,12 @@ export interface AgentStepSpec {
   /** Container surfaces only: what to clone. */
   clone?: AgentCloneSpec
   /**
+   * `container-project` only: `none` when the kind reaches no project target. Its job is then given
+   * none of the pinned definition's targets or credentials, and no browser, so a kind that only
+   * reads context files neither holds vendor credentials nor waits on one a run never uses.
+   */
+  projectTargets?: 'none'
+  /**
    * Stand the service's declared TEST DEPENDENCIES up around this run (the tester family). The
    * concrete spec is DERIVED per run from the frame's capability profile plus whatever the run
    * actually provisioned — a kind declares only that it needs one — and the step's resolved test

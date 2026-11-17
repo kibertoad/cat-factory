@@ -1229,7 +1229,7 @@ export {
   type ProjectViewInput,
   type ProjectContextRendering,
 } from './domain/project-kind-module.js'
-export { PROJECT_DECIDER_AGENT_KIND, decisionTaskHandler } from './domain/decision-handler.js'
+export { decisionTaskHandler } from './domain/decision-handler.js'
 export {
   PROJECT_RESEARCHER_AGENT_KIND,
   RESEARCH_PROJECT_KIND,

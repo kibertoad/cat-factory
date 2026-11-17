@@ -8,6 +8,7 @@ import {
 
 const register: DecisionRegister = {
   summary: 'Two things to settle.',
+  unanswered: [],
   items: [
     {
       id: 'overwrite',

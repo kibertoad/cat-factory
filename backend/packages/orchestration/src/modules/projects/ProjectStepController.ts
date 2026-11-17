@@ -5,6 +5,7 @@ import {
   type ProjectStage,
   type ProjectStageTask,
   type ProjectStepState,
+  REVISION_INTENT,
 } from '@cat-factory/contracts'
 import {
   CapabilityCredentialMissingError,
@@ -309,7 +310,8 @@ export class ProjectStepController {
       inputs: task.inputs,
       stage: task.staged ? { id: task.staged.stage.id, config: task.staged.stage.config } : null,
       outcomes: outcomesOf(task.handler, task.outcomes).filter(
-        (o) => !task.staged || o.stream === task.staged.stage.produces,
+        (o) =>
+          !task.staged || (o.stream === task.staged.stage.produces && countsFor(task.staged, o)),
       ),
     }
   }
@@ -416,6 +418,15 @@ export class ProjectStepController {
     if (value === undefined || value === null) return undefined
     return handler.parseOutcome(handler.outcomeSchemaVersion, value)
   }
+}
+
+/** Whether an outcome counts as its stage's result: a revision only once an acceptance named it. */
+function countsFor(
+  staged: { records: readonly ProjectStageTask[] },
+  outcome: { id: string; intent: string },
+): boolean {
+  if (outcome.intent !== REVISION_INTENT) return true
+  return staged.records.some((r) => r.acceptedOutcomeId === outcome.id)
 }
 
 function requireState(step: PipelineStep): ProjectStepState {
