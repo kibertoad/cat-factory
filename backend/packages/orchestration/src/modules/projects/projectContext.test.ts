@@ -130,6 +130,7 @@ function contributor() {
         },
       ],
       projectsWithOutcomes: async (ids) => ids.filter((id) => stored.has(id)),
+      listStageTasksOfProjects: async () => [],
     },
     outcomes: { listOfProjects: async () => stored },
     definitions: {

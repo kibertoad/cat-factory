@@ -117,9 +117,14 @@ bucket for every new repository method in the same PR.
       evidence) from the stages it reads, and its handler requires every item settled at the
       checkpoint. Any kind lists the shipped `decisionTaskHandler` beside its own; the research
       kind does not. The stage rail renders the register (slice 9). PR: [#2528](https://github.com/kibertoad/cat-factory/pull/2528)
-- [ ] **6. Spawn stage.** Extract the initiative spawn and reconcile logic into a shared service;
-      a spawn stage creates tasks in the linked services it names, links the project, runs their
-      normal pipelines, and completes when they settle.
+- [x] **6a. Staged linked context.** A task that links a staged project reads each stage's
+      accepted result, rendered by its handler, in the definition's order; a stage with none yet
+      is stated. The kind's own project-level rendering stays for an unstaged project. PR: (this
+      slice)
+- [ ] **6b. Spawn stage.** A stage that creates a task in each linked service (configurable title,
+      task type and brief), links the project so each reads the stages' results, starts their
+      runs, and records what it spawned; its checkpoint refuses acceptance until every spawned
+      task has settled. Reuses the initiative spawn and reconcile logic where it fits.
 - [ ] **7. Exit criteria.** Stage `acceptance` criteria judged through `JudgeRegistry` against the
       outcome and its evidence; each criterion reported met, unmet or unverified at the checkpoint.
 - [ ] **8. Document stage.** A handler that composes upstream streams and their artifacts into one

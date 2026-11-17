@@ -124,19 +124,32 @@ function readableRows(
   const basisId = task.record.basis[upstream.id] ?? null
   const basis = basisId ? (envelopes.get(basisId) ?? null) : null
   if (!basis) return { basisId, basis: null, rows: [] }
-  const writers = new Set(
-    task.records.filter((r) => r.stageId === upstream.id).map((r) => r.taskId),
-  )
-  // A revision counts only once an acceptance named it; one written by a losing acceptance is not
-  // the stage's result and never reaches a later stage.
-  const accepted = new Set(task.records.flatMap((r) => r.acceptedOutcomeId ?? []))
-  const rows = [...envelopes.values()].filter(
+  return {
+    basisId,
+    basis,
+    rows: stageResultRows(upstream, task.records, envelopes.values(), basis),
+  }
+}
+
+/**
+ * The outcomes that make up `stage`'s result up to and including `until`: its stream, written by
+ * its own tasks, with a revision counted only once an acceptance named it, so one written by a
+ * losing acceptance never reaches a reader.
+ */
+export function stageResultRows(
+  stage: ProjectStage,
+  records: readonly ProjectStageTask[],
+  envelopes: Iterable<ProjectOutcomeRow>,
+  until: { seq: number },
+): ProjectOutcomeRow[] {
+  const writers = new Set(records.filter((r) => r.stageId === stage.id).map((r) => r.taskId))
+  const accepted = new Set(records.flatMap((r) => r.acceptedOutcomeId ?? []))
+  return [...envelopes].filter(
     (row) =>
-      row.stream === upstream.produces &&
+      row.stream === stage.produces &&
       row.taskId !== null &&
       writers.has(row.taskId) &&
-      row.seq <= basis.seq &&
+      row.seq <= until.seq &&
       (row.intent !== REVISION_INTENT || accepted.has(row.id)),
   )
-  return { basisId, basis, rows }
 }

@@ -9,6 +9,7 @@ import {
 } from '@cat-factory/kernel'
 import type { ProjectOutcomeStore } from './ProjectOutcomeStore.js'
 import { decodeOutcome } from './outcomeDecoding.js'
+import { renderStagedProject } from './stagedProjectContext.js'
 
 /** A project's current result, rendered for an agent that reads it as linked context. */
 export interface ProjectContextEntry extends ProjectContextRendering {
@@ -25,7 +26,10 @@ export interface ProjectContextContributor {
 }
 
 export interface ProjectContextDeps {
-  records: Pick<ProjectRecordRepository, 'listPins' | 'projectsWithOutcomes'>
+  records: Pick<
+    ProjectRecordRepository,
+    'listPins' | 'projectsWithOutcomes' | 'listStageTasksOfProjects'
+  >
   outcomes: Pick<ProjectOutcomeStore, 'listOfProjects'>
   definitions: ProjectDefinitionSource
   modules: ProjectKindModuleRegistry
@@ -45,9 +49,11 @@ export function projectContextContributor(deps: ProjectContextDeps): ProjectCont
       return new Set(await deps.records.projectsWithOutcomes(projects.map((p) => p.id)))
     },
     async render(projects) {
-      const [pins, stored] = await Promise.all([
-        deps.records.listPins(projects.map((p) => p.id)),
+      const ids = projects.map((p) => p.id)
+      const [pins, stored, stageTasks] = await Promise.all([
+        deps.records.listPins(ids),
         deps.outcomes.listOfProjects(projects),
+        deps.records.listStageTasksOfProjects(ids),
       ])
       const pinOf = new Map(pins.map((pin) => [pin.projectId, pin] as const))
       const definitions = await definitionsOf(deps.definitions, projects, pinOf)
@@ -57,13 +63,24 @@ export function projectContextContributor(deps: ProjectContextDeps): ProjectCont
         const outcomes = (stored.get(project.id) ?? []).map((o) =>
           decodeOutcome(deps.modules, project.kind, o),
         )
-        const input = {
-          definition: definitions.get(project.id) ?? null,
-          inputs: pinOf.get(project.id)?.inputs ?? {},
-          outcomes,
-        }
-        const rendering = module?.renderContext?.(input) ?? renderLatestOutcomes(outcomes)
-        const latest = outcomes.at(-1)
+        const definition = definitions.get(project.id) ?? null
+        const input = { definition, inputs: pinOf.get(project.id)?.inputs ?? {}, outcomes }
+        // A staged project's result is its stages' accepted results; any other project's is
+        // what its kind renders.
+        const staged = definition?.stages.length
+          ? renderStagedProject({
+              modules: deps.modules,
+              kind: project.kind,
+              definition,
+              inputs: input.inputs,
+              records: stageTasks.filter((t) => t.projectId === project.id),
+              envelopes: (stored.get(project.id) ?? []).map((o) => o.row),
+              decoded: new Map(outcomes.map((o) => [o.id, o] as const)),
+            })
+          : null
+        const rendering =
+          staged?.rendering ?? module?.renderContext?.(input) ?? renderLatestOutcomes(outcomes)
+        const latest = staged ? staged.revision : outcomes.at(-1)
         rendered.set(project.id, {
           summary: redactSecrets(rendering.summary) ?? '',
           coverage: redactSecrets(rendering.coverage) ?? '',

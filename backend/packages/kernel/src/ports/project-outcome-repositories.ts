@@ -89,6 +89,8 @@ export interface ProjectRecordRepository {
   insertStageTask(row: ProjectStageTask): Promise<boolean>
   /** The project's stage-task records, oldest first. */
   listStageTasks(projectId: string): Promise<ProjectStageTask[]>
+  /** The stage-task records of several projects in one (chunked) read, each project's oldest first. */
+  listStageTasksOfProjects(projectIds: string[]): Promise<ProjectStageTask[]>
   /** Note that the task recorded its outcome, freeing its stage. A repeated call changes nothing. */
   markStageTaskRecorded(projectId: string, taskId: string, recordedAt: number): Promise<void>
   /**

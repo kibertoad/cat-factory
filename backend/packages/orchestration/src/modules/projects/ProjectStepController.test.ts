@@ -204,6 +204,7 @@ function harness(opts: {
       return true
     },
     listStageTasks: async () => stageTasks,
+    listStageTasksOfProjects: async () => stageTasks,
     markStageTaskRecorded: async (_projectId: string, taskId: string, recordedAt: number) => {
       const found = stageTasks.find((t) => t.taskId === taskId)
       if (found && found.recordedAt === null) found.recordedAt = recordedAt
