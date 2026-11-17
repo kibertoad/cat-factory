@@ -102,7 +102,7 @@ bucket for every new repository method in the same PR.
       scrubbed of secrets. The renderings ride the linked-project path (`.cat-context/` files and
       the prompt index, which the researcher prompt now includes); the step records what it read
       in `step.project.upstream`, and a consumed stage with no accepted result is stated, never
-      dropped. PR: (this slice)
+      dropped. PR: [#2525](https://github.com/kibertoad/cat-factory/pull/2525)
 - [ ] **4. Controlled vendor writes.** `targets[].access: 'read' | 'write'` and optional path
       scoping; the harness refuses non-GET/HEAD on a read target and anything outside the scope; a
       write stage parks for approval of its write plan through `buildStepApproval`. Bumps the
