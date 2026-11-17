@@ -17,6 +17,7 @@ import org.jspecify.annotations.Nullable;
  * @param kind the {@code kind} field.
  * @param promptAdditions the {@code promptAdditions} field.
  * @param spec the {@code spec} field.
+ * @param stages the {@code stages} field.
  * @param targets the {@code targets} field.
  * @param title Length 1..200.
  * @param version Range 1..unbounded.
@@ -34,6 +35,8 @@ public record PublicProjectDefinitionDefinition(
     @JsonProperty("promptAdditions") Map<String, String> promptAdditions,
 
     @JsonProperty("spec") Object spec,
+
+    @JsonProperty("stages") List<PublicProjectDefinitionDefinitionStage> stages,
 
     @JsonProperty("targets") List<PublicProjectDefinitionDefinitionTarget> targets,
 
@@ -62,6 +65,7 @@ public record PublicProjectDefinitionDefinition(
         private @Nullable String kind;
         private @Nullable Map<String, String> promptAdditions;
         private @Nullable Object spec;
+        private @Nullable List<PublicProjectDefinitionDefinitionStage> stages;
         private @Nullable List<PublicProjectDefinitionDefinitionTarget> targets;
         private @Nullable String title;
         private @Nullable Integer version;
@@ -102,6 +106,12 @@ public record PublicProjectDefinitionDefinition(
             return this;
         }
 
+        /** Set {@code stages}. */
+        public Builder stages(@Nullable List<PublicProjectDefinitionDefinitionStage> stages) {
+            this.stages = stages;
+            return this;
+        }
+
         /** Set {@code targets}. */
         public Builder targets(@Nullable List<PublicProjectDefinitionDefinitionTarget> targets) {
             this.targets = targets;
@@ -122,7 +132,7 @@ public record PublicProjectDefinitionDefinition(
 
         /** Build the {@link PublicProjectDefinitionDefinition}. */
         public PublicProjectDefinitionDefinition build() {
-            return new PublicProjectDefinitionDefinition(credentials, inputs, key, kind, promptAdditions, spec, targets, title, version);
+            return new PublicProjectDefinitionDefinition(credentials, inputs, key, kind, promptAdditions, spec, stages, targets, title, version);
         }
     }
 }
