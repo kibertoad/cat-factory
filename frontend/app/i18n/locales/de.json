@@ -6628,7 +6628,8 @@
         "project_stage_upstream_unreadable": "Ein Ergebnis einer früheren Phase, von dem diese Aufgabe ausging, kann gerade nicht gelesen werden. Der Lauf wurde deshalb angehalten, statt ohne es weiterzumachen. Versuche es später erneut; bleibt es so, muss das gespeicherte Ergebnis wiederhergestellt werden.",
         "project_stage_revision_required": "Das Ergebnis dieser Phase muss beim Annehmen festgelegt werden: Entscheide jeden vorgeschlagenen Punkt und nimm es dann an.",
         "project_stage_revision_unsupported": "Das Ergebnis dieser Phase wird so angenommen, wie es festgehalten wurde; am Kontrollpunkt nimmt es keine Änderungen an.",
-        "project_stage_revision_invalid": "Die Änderungen passen nicht zum Ergebnis dieser Phase. Die Details nennen den unpassenden Teil; korrigiere ihn und nimm erneut an."
+        "project_stage_revision_invalid": "Die Änderungen passen nicht zum Ergebnis dieser Phase. Die Details nennen den unpassenden Teil; korrigiere ihn und nimm erneut an.",
+        "project_stage_result_unreadable": "Das Ergebnis dieser Phase kann gerade nicht gelesen werden und lässt sich daher nicht festlegen. Versuche es später erneut; bleibt es so, muss das gespeicherte Ergebnis wiederhergestellt werden."
       }
     },
     "action": {

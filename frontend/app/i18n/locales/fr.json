@@ -738,7 +738,8 @@
         "project_stage_upstream_unreadable": "Un résultat d'une étape précédente, dont cette tâche est partie, ne peut pas être lu pour l'instant : l'exécution s'est arrêtée plutôt que de continuer sans lui. Réessayez plus tard ; si cela persiste, le résultat stocké doit être restauré.",
         "project_stage_revision_required": "Le résultat de cette étape doit être tranché au moment de l'accepter : décidez chaque point proposé, puis acceptez-le.",
         "project_stage_revision_unsupported": "Le résultat de cette étape est accepté tel qu'il a été enregistré ; il n'admet aucune modification à son point de contrôle.",
-        "project_stage_revision_invalid": "Les modifications ne correspondent pas au résultat de cette étape. Les détails indiquent la partie concernée ; corrigez-la et acceptez à nouveau."
+        "project_stage_revision_invalid": "Les modifications ne correspondent pas au résultat de cette étape. Les détails indiquent la partie concernée ; corrigez-la et acceptez à nouveau.",
+        "project_stage_result_unreadable": "Le résultat de cette étape ne peut pas être lu pour l'instant, il ne peut donc pas être tranché. Réessayez plus tard ; si cela persiste, le résultat stocké doit être restauré."
       }
     },
     "action": {

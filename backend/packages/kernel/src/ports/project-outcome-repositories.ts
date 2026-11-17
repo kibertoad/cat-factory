@@ -92,14 +92,17 @@ export interface ProjectRecordRepository {
   /** Note that the task recorded its outcome, freeing its stage. A repeated call changes nothing. */
   markStageTaskRecorded(projectId: string, taskId: string, recordedAt: number): Promise<void>
   /**
-   * Accept the task's result at its stage's checkpoint. Returns false, changing nothing, when the
-   * task has no record, has recorded no outcome, or was already accepted.
+   * Accept the task's result at its stage's checkpoint, naming the outcome accepted (a settled
+   * revision, or null for the result as recorded). The claim two concurrent acceptances race on:
+   * returns false, changing nothing, when the task has no record, has recorded no outcome, or was
+   * already accepted.
    */
   clearStageCheckpoint(
     projectId: string,
     taskId: string,
     clearedAt: number,
     clearedBy: string | null,
+    acceptedOutcomeId: string | null,
   ): Promise<boolean>
   /** Drop stage-task records, for tasks that no longer exist, freeing their stages. */
   deleteStageTasks(projectId: string, taskIds: string[]): Promise<void>

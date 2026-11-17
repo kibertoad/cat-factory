@@ -109,8 +109,9 @@ bucket for every new repository method in the same PR.
 - [x] **5a. Checkpoint revision.** A handler may declare `checkpointRevision`: a person settles
       its result while accepting it at a stage checkpoint (`POST .../checkpoint` with a
       `revision`), optionally required. The platform writes the settled body as a new outcome on
-      the stage's stream (intent `revise`, beside the model's proposal) before clearing the
-      checkpoint, so later stages read what the person accepted. PR: [#2527](https://github.com/kibertoad/cat-factory/pull/2527)
+      the stage's stream (intent `revise`, beside the model's proposal), and the checkpoint's
+      atomic claim names it (`acceptedOutcomeId`): a revision no acceptance names counts for
+      nothing, so a losing concurrent acceptance changes no result. PR: [#2527](https://github.com/kibertoad/cat-factory/pull/2527)
 - [ ] **5b. Decision stage.** The built-in `decisions` task type: its agent proposes items
       (question, options, recommended default, trade-off, evidence) from the stages it reads, and
       its handler requires every item settled at the checkpoint. Reuses the clarification-item

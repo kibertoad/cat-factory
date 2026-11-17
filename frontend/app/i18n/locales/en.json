@@ -813,7 +813,8 @@
         "project_stage_upstream_unreadable": "A result an earlier stage recorded, which this task started from, cannot be read now, so the run stopped rather than continue without it. Try again later; if it persists, the stored result needs restoring.",
         "project_stage_revision_required": "This stage's result has to be settled as it is accepted: decide each item it proposes, then accept it.",
         "project_stage_revision_unsupported": "This stage's result is accepted as it was recorded; it takes no changes at its checkpoint.",
-        "project_stage_revision_invalid": "The changes do not fit this stage's result. The details say which part did not fit; correct it and accept again."
+        "project_stage_revision_invalid": "The changes do not fit this stage's result. The details say which part did not fit; correct it and accept again.",
+        "project_stage_result_unreadable": "This stage's result cannot be read right now, so it cannot be settled. Try again later; if it persists, the stored result needs restoring."
       }
     },
     "action": {

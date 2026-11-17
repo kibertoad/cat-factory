@@ -8,6 +8,7 @@ import {
   type ProjectStageState,
   type ProjectStageTask,
   type ProjectStageView,
+  type StageOutcomeFact,
   upstreamOf,
 } from '@cat-factory/contracts'
 import {
@@ -23,7 +24,7 @@ import {
 } from '@cat-factory/kernel'
 import type { MountedProject } from './ProjectService.js'
 import { resolvePinnedDefinition } from './pinnedDefinition.js'
-import { type StageRevisionDeps, recordStageRevision } from './stageRevision.js'
+import { type StageRevisionDeps, settleStageRevision } from './stageRevision.js'
 
 // ---------------------------------------------------------------------------
 // The stages of a project whose pinned definition declares them: where each stands, starting a
@@ -84,12 +85,7 @@ export interface ProjectStageServiceDeps {
 }
 
 /** The outcome facts a stage's state reads. */
-type OutcomeFacts = ReadonlyArray<{
-  id: string
-  seq: number
-  stream: string
-  taskId: string | null
-}>
+type OutcomeFacts = ReadonlyArray<StageOutcomeFact>
 
 /** Everything a stage write reads before it decides. */
 interface StageSnapshot {
@@ -245,6 +241,7 @@ export class ProjectStageService {
       recordedAt: null,
       clearedAt: null,
       clearedBy: null,
+      acceptedOutcomeId: null,
     }
     const claimed =
       (await this.deps.records.insertStageTask(record)) ||
@@ -277,20 +274,23 @@ export class ProjectStageService {
     userId: string | null,
     revision?: unknown,
   ): Promise<ProjectStageState> {
-    const { project } = await this.deps.getMounted(workspaceId, projectId)
+    const { project, homeWorkspaceId } = await this.deps.getMounted(workspaceId, projectId)
     const stages = await this.stagesOf(project)
     const index = stages.findIndex((s) => s.id === stageId)
     if (index < 0) throw new NotFoundError('ProjectStage', stageId)
-    const before = (await this.snapshot(project, stages)).states[index]!
+    const envelopes = await this.deps.records.listOutcomes(project.id)
+    const before = (await this.snapshot(project, stages, envelopes)).states[index]!
     const latest = before.status === 'awaiting-checkpoint' ? before.latest : null
     let cleared = false
     if (latest) {
-      // A revision the person sends becomes the result they accept, recorded beside the proposal.
-      await recordStageRevision(this.deps, {
-        workspaceId,
+      // The person's settlement, written as a revision that counts only once the claim below
+      // names it: an acceptance that loses the claim leaves the accepted result untouched.
+      const acceptedOutcomeId = await settleStageRevision(this.deps, {
+        homeWorkspaceId,
         project,
         stage: stages[index]!,
         state: before,
+        envelopes,
         revision,
         decidedBy: userId,
       })
@@ -298,7 +298,13 @@ export class ProjectStageService {
       // freed its stage never landed and the acceptance below would find nothing to accept.
       const now = this.deps.clock.now()
       await this.deps.records.markStageTaskRecorded(projectId, latest.taskId, now)
-      cleared = await this.deps.records.clearStageCheckpoint(projectId, latest.taskId, now, userId)
+      cleared = await this.deps.records.clearStageCheckpoint(
+        projectId,
+        latest.taskId,
+        now,
+        userId,
+        acceptedOutcomeId,
+      )
     }
     if (!cleared) {
       throw new ConflictError(

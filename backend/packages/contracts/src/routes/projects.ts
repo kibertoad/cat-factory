@@ -91,7 +91,7 @@ export const clearProjectStageCheckpointContract = defineApiContract({
   method: 'post',
   requestPathParamsSchema: projectStageParams,
   pathResolver: ({ projectId, stageId }) => `/projects/${projectId}/stages/${stageId}/checkpoint`,
-  requestBodySchema: v.object({ revision: v.optional(v.unknown()) }),
+  requestBodySchema: v.optional(v.object({ revision: v.optional(v.unknown()) })),
   responsesByStatusCode: { 200: projectStageStateSchema, ...errorResponses },
 })
 

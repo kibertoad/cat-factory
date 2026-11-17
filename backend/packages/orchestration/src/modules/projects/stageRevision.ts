@@ -1,7 +1,13 @@
-import type { Project, ProjectStage, ProjectStageState } from '@cat-factory/contracts'
+import {
+  type Project,
+  type ProjectStage,
+  type ProjectStageState,
+  REVISION_INTENT,
+} from '@cat-factory/contracts'
 import {
   type Clock,
   type ProjectKindModuleRegistry,
+  type ProjectOutcomeRow,
   type ProjectRecordRepository,
   ValidationError,
 } from '@cat-factory/kernel'
@@ -11,44 +17,46 @@ import { tryDecodeOutcome } from './outcomeDecoding.js'
 
 // A person's revision of a stage's result as they accept it at the stage's checkpoint: the model
 // proposed, the person settles. The handler of the stage's task type says whether it takes a
-// revision (and whether it requires one) and applies it; the platform writes the revised body as a
-// NEW outcome on the stage's stream, so the model's proposal stays on record beside what the person
-// accepted. Design: `docs/initiatives/staged-project-definitions.md`.
+// revision (and whether it requires one) and applies it; the platform writes the settled body as a
+// NEW outcome on the stage's stream, so the model's proposal stays on record. A revision counts
+// only once the checkpoint's acceptance NAMES it (`acceptedOutcomeId`), so a revision written by
+// an acceptance that then loses the claim changes nothing. Design:
+// `docs/initiatives/staged-project-definitions.md`.
 
 export interface StageRevisionDeps {
-  records: Pick<ProjectRecordRepository, 'listOutcomes' | 'getPin' | 'reserveSeq'>
-  outcomes: Pick<ProjectOutcomeStore, 'bodiesOf' | 'write'>
+  records: Pick<ProjectRecordRepository, 'getPin' | 'reserveSeq'>
+  outcomes: Pick<ProjectOutcomeStore, 'bodiesOf' | 'get' | 'write'>
   modules: ProjectKindModuleRegistry
   clock: Clock
 }
 
 export interface StageRevisionInput {
-  /** The board the person accepts on, whose outcome-storage policy places the revised body. */
-  workspaceId: string
+  /** The board that homes the project, whose outcome-storage policy places the settled body. */
+  homeWorkspaceId: string
   project: Project
   stage: ProjectStage
   /** The stage's state, awaiting its checkpoint. */
   state: ProjectStageState
-  /** What the person sent; undefined when they sent no revision. */
+  /** Every outcome envelope of the project, as the acceptance already listed them. */
+  envelopes: readonly ProjectOutcomeRow[]
+  /** What the person sent; undefined or null when they sent no revision. */
   revision: unknown
   decidedBy: string | null
 }
 
-/** The outcome id of a task's revised result: one per task, so a retried acceptance writes once. */
-export function revisedOutcomeIdFor(taskId: string): string {
-  return `${outcomeIdFor(taskId)}_revised`
-}
-
 /**
- * Apply the person's revision, when the stage's handler takes one, and record the revised result.
- * Refuses a revision the handler does not take, a missing one it requires, and one it rejects. A
- * retried acceptance finds the revision already written and keeps it (first write wins).
+ * Settle the result awaiting the checkpoint with the person's revision, when the stage's handler
+ * takes one, and record the settled body. Answers the id of the outcome the acceptance must name,
+ * or null to accept the result as recorded. Refuses a revision the handler does not take, a missing
+ * one it requires, and one it rejects, before writing anything. A retried acceptance that settles
+ * the same body reuses the revision it already wrote rather than writing another.
  */
-export async function recordStageRevision(
+export async function settleStageRevision(
   deps: StageRevisionDeps,
   input: StageRevisionInput,
-): Promise<void> {
-  const { project, stage, state, revision } = input
+): Promise<string | null> {
+  const { project, stage, state } = input
+  const revision = input.revision ?? undefined
   const handler = deps.modules.handlerOf(project.kind, stage.taskType)
   const accepts = handler?.checkpointRevision
   if (revision === undefined) {
@@ -58,7 +66,7 @@ export async function recordStageRevision(
         stageId: stage.id,
       })
     }
-    return
+    return null
   }
   if (!handler || !accepts) {
     throw new ValidationError(`Stage '${stage.id}' takes no revision of its result`, {
@@ -66,50 +74,57 @@ export async function recordStageRevision(
       stageId: stage.id,
     })
   }
-  const latest = state.latest!
-  const envelopes = await deps.records.listOutcomes(project.id)
-  const row = envelopes.find((r) => r.id === latest.id)
-  const [stored] = row ? await deps.outcomes.bodiesOf(project, [row]) : []
+  const proposal = state.latest!
+  const stored = await deps.outcomes.get(project, proposal.id)
   const decoded = stored ? tryDecodeOutcome(deps.modules, project.kind, stored) : undefined
   if (!decoded) {
-    throw new ValidationError(`The result of stage '${stage.id}' cannot be read to revise it`, {
-      reason: 'project_stage_upstream_unreadable',
+    throw new ValidationError(`The result of stage '${stage.id}' cannot be read to settle it`, {
+      reason: 'project_stage_result_unreadable',
       stageId: stage.id,
-      outcomeId: latest.id,
+      outcomeId: proposal.id,
     })
   }
-  const revised = accepts.revise({
+  const settled = accepts.revise({
     stage: { id: stage.id, title: stage.title, config: stage.config },
     body: decoded.body,
     revision,
     decidedBy: input.decidedBy,
     decidedAt: deps.clock.now(),
   })
-  if (!revised.ok) {
-    throw new ValidationError(`The revision of stage '${stage.id}' does not fit its result`, {
-      reason: 'project_stage_revision_invalid',
-      stageId: stage.id,
-      problems: revised.issues,
-    })
+  if (!settled.ok) {
+    throw new ValidationError(
+      `The revision of stage '${stage.id}' does not fit its result: ${settled.issues.join('; ')}`,
+      { reason: 'project_stage_revision_invalid', stageId: stage.id, problems: settled.issues },
+    )
   }
+  const json = JSON.stringify(settled.value)
+  const earlier = input.envelopes.filter(
+    (row) => row.taskId === proposal.taskId && row.intent === REVISION_INTENT,
+  )
+  for (const written of await deps.outcomes.bodiesOf(project, earlier)) {
+    if (written.json === json) return written.row.id
+  }
+  const seq = await deps.records.reserveSeq(project.id)
+  const id = `${outcomeIdFor(proposal.taskId)}_rev${seq}`
   const pin = await deps.records.getPin(project.id)
   await deps.outcomes.write({
-    runWorkspaceId: input.workspaceId,
+    runWorkspaceId: input.homeWorkspaceId,
     project,
     row: {
-      id: revisedOutcomeIdFor(latest.taskId),
+      id,
       projectId: project.id,
       stream: stage.produces,
-      seq: await deps.records.reserveSeq(project.id),
-      intent: 'revise',
+      seq,
+      intent: REVISION_INTENT,
       schemaVersion: handler.outcomeSchemaVersion,
-      taskId: latest.taskId,
+      taskId: proposal.taskId,
       taskType: handler.taskType,
       definitionKey: pin?.definitionKey ?? null,
       definitionVersion: pin?.definitionVersion ?? null,
-      artifactRefs: handler.artifactRefs(revised.value),
+      artifactRefs: handler.artifactRefs(settled.value),
       createdAt: deps.clock.now(),
     },
-    json: JSON.stringify(revised.value),
+    json,
   })
+  return id
 }

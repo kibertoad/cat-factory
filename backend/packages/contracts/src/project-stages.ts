@@ -169,6 +169,12 @@ export const projectStageTaskSchema = v.object({
   /** Who accepted it, or null for an acceptance with no attributable person. */
   clearedBy: v.nullable(v.string()),
   /**
+   * The outcome the acceptance accepted: a revision the person settled at the checkpoint, or null
+   * when they accepted the task's result as recorded. A revision no acceptance names counts for
+   * nothing.
+   */
+  acceptedOutcomeId: v.nullable(v.string()),
+  /**
    * The accepted result of each upstream stage (`after` and `consumes`) when the task was created,
    * by stage id: the outcome id, or null for a stage with none. What `stale` compares against.
    */
@@ -222,8 +228,21 @@ export interface ProjectStageStateInput {
    */
   liveTaskIds: ReadonlySet<string>
   /** The project's outcomes, any order. */
-  outcomes: ReadonlyArray<{ id: string; seq: number; stream: string; taskId: string | null }>
+  outcomes: ReadonlyArray<StageOutcomeFact>
 }
+
+/** What a stage's state reads of an outcome. */
+export interface StageOutcomeFact {
+  id: string
+  seq: number
+  stream: string
+  taskId: string | null
+  /** `revise` marks a person's settlement, which counts only once an acceptance names it. */
+  intent: string
+}
+
+/** The intent of an outcome recording a person's settlement of a result at a checkpoint. */
+export const REVISION_INTENT = 'revise'
 
 /** Each stage's state, in the definition's order. */
 export function deriveProjectStageStates(input: ProjectStageStateInput): ProjectStageState[] {
@@ -275,6 +294,13 @@ export function upstreamOf(stage: ProjectStage): string[] {
   return [...new Set([...stage.after, ...stage.consumes.map((c) => c.stage)])]
 }
 
+/**
+ * A stage's newest result, its newest accepted one, and the task still working. Each task's result
+ * is its newest proposal (an outcome the task's run recorded); once a person accepts it, the result
+ * is the outcome the acceptance names, a revision or the proposal itself. The stage's results order
+ * by when the task's proposal was recorded, so a revision written at acceptance never jumps a later
+ * task's result.
+ */
 function resolveStage(
   stage: ProjectStage,
   tasks: readonly ProjectStageTask[],
@@ -282,19 +308,34 @@ function resolveStage(
   liveTaskIds: ReadonlySet<string>,
 ) {
   const byTask = new Map(tasks.map((t) => [t.taskId, t] as const))
-  const results = outcomes
-    .filter((o) => o.stream === stage.produces && o.taskId !== null && byTask.has(o.taskId))
+  const own = outcomes.filter(
+    (o) => o.stream === stage.produces && o.taskId !== null && byTask.has(o.taskId),
+  )
+  const byId = new Map(own.map((o) => [o.id, o] as const))
+  const proposals = new Map<string, StageOutcomeFact>()
+  for (const o of own) {
+    if (o.intent === REVISION_INTENT) continue
+    const current = proposals.get(o.taskId!)
+    if (!current || o.seq > current.seq) proposals.set(o.taskId!, o)
+  }
+  const results = [...proposals.values()]
     .sort((a, b) => a.seq - b.seq)
-    .map((o) => ({ id: o.id, seq: o.seq, taskId: o.taskId! }))
-  const isAccepted = (r: { taskId: string }) =>
-    !stage.checkpoint || byTask.get(r.taskId)?.clearedAt !== null
-  const recorded = new Set(results.map((r) => r.taskId))
+    .map((proposal) => {
+      const task = byTask.get(proposal.taskId!)!
+      const cleared = task.clearedAt !== null
+      const named = task.acceptedOutcomeId ? byId.get(task.acceptedOutcomeId) : undefined
+      const shown = cleared && named ? named : proposal
+      return {
+        ref: { id: shown.id, seq: shown.seq, taskId: proposal.taskId! },
+        accepted: !stage.checkpoint || cleared,
+      }
+    })
   const active = [...tasks]
-    .filter((t) => !recorded.has(t.taskId) && liveTaskIds.has(t.taskId))
+    .filter((t) => !proposals.has(t.taskId) && liveTaskIds.has(t.taskId))
     .sort((a, b) => b.createdAt - a.createdAt)[0]
-  const accepted = results.filter(isAccepted).at(-1) ?? null
+  const accepted = results.filter((r) => r.accepted).at(-1)?.ref ?? null
   return {
-    latest: results.at(-1) ?? null,
+    latest: results.at(-1)?.ref ?? null,
     accepted,
     acceptedBasis: accepted ? (byTask.get(accepted.taskId)?.basis ?? {}) : null,
     activeTaskId: active?.taskId ?? null,

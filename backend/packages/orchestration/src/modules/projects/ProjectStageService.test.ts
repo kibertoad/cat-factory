@@ -87,7 +87,11 @@ function harness(opts: { stages: ProjectStage[]; vendor?: string; startFails?: b
     }),
     listTasks: vi.fn(async () => tasks),
     records,
-    outcomes: { bodiesOf: async () => [], write: async () => ({ written: true, json: '{}' }) },
+    outcomes: {
+      get: async () => null,
+      bodiesOf: async () => [],
+      write: async () => ({ written: true, json: '{}' }),
+    },
     modules: new ProjectKindModuleRegistry(),
     definitions: {
       get: async () => ({ definition, contentHash: 'h1', origin: 'registered' as const }),

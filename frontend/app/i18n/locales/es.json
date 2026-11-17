@@ -738,7 +738,8 @@
         "project_stage_upstream_unreadable": "Un resultado de una etapa anterior, del que partió esta tarea, no se puede leer ahora, así que la ejecución se detuvo en lugar de continuar sin él. Inténtalo más tarde; si persiste, hay que restaurar el resultado guardado.",
         "project_stage_revision_required": "El resultado de esta etapa debe resolverse al aceptarlo: decide cada punto que propone y luego acéptalo.",
         "project_stage_revision_unsupported": "El resultado de esta etapa se acepta tal como se registró; no admite cambios en su punto de control.",
-        "project_stage_revision_invalid": "Los cambios no encajan con el resultado de esta etapa. Los detalles indican qué parte no encaja; corrígela y vuelve a aceptar."
+        "project_stage_revision_invalid": "Los cambios no encajan con el resultado de esta etapa. Los detalles indican qué parte no encaja; corrígela y vuelve a aceptar.",
+        "project_stage_result_unreadable": "El resultado de esta etapa no se puede leer ahora, así que no se puede resolver. Inténtalo más tarde; si persiste, hay que restaurar el resultado guardado."
       }
     },
     "action": {
