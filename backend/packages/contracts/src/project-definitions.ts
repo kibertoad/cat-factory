@@ -83,7 +83,12 @@ export const projectCredentialSchema = v.object({
 })
 export type ProjectCredential = v.InferOutput<typeof projectCredentialSchema>
 
-/** An external system a project's runs reach. A credential is only ever sent to one of these. */
+/**
+ * An external system a project's runs reach. A credential is only ever sent to one of these. A
+ * run's API requests to a target are read-only (GET, HEAD, OPTIONS) unless the target allows
+ * writes AND the run is a stage that writes; both fields are left out rather than defaulted, so a
+ * definition that names neither hashes as it always did.
+ */
 export const projectTargetSchema = v.object({
   baseUrl: v.pipe(
     v.string(),
@@ -91,7 +96,42 @@ export const projectTargetSchema = v.object({
     v.check((url) => url.startsWith('https://'), 'a target must be https'),
   ),
   surface: v.picklist(['ui', 'api']),
+  /** `write`: a stage that writes may send any method here. Absent: read-only for every run. */
+  access: v.optional(v.picklist(['read', 'write'])),
+  /**
+   * When set, API requests reach only paths at or under it on the target's origin. Two targets on
+   * one origin must differ here, so which one a request falls under never depends on their order.
+   */
+  pathPrefix: v.optional(
+    v.pipe(
+      v.string(),
+      v.check(
+        isNormalizedPathPrefix,
+        'must be a normalized path starting with /, with no query, dot segment or trailing slash',
+      ),
+    ),
+  ),
 })
+
+/**
+ * A path prefix the harness compares literally: `/`, or `/`-separated segments with no empty,
+ * `.` or `..` segment, no encoded slash, backslash or dot, and no `;` or query, so what it names is
+ * what a request's resolved path is compared against.
+ */
+function isNormalizedPathPrefix(path: string): boolean {
+  if (path === '/') return true
+  if (!path.startsWith('/') || path.endsWith('/') || /[?#;]|%2f|%5c|%2e/i.test(path)) return false
+  return path
+    .slice(1)
+    .split('/')
+    .every((segment) => segment !== '' && segment !== '.' && segment !== '..')
+}
+
+/** The origin of a target's base URL (scheme and host, default port dropped), lowercased. */
+function originOf(baseUrl: string): string {
+  const origin = /^[a-z][a-z0-9+.-]*:\/\/[^/?#]+/i.exec(baseUrl)?.[0] ?? baseUrl
+  return origin.toLowerCase().replace(/^https:\/\/(.+):443$/, 'https://$1')
+}
 export type ProjectTarget = v.InferOutput<typeof projectTargetSchema>
 
 export function duplicateValues(values: readonly string[]): string[] {
@@ -134,6 +174,7 @@ interface EnvelopeLists {
   credentials: ReadonlyArray<{ key: string }>
   inputs: ReadonlyArray<{ key: string }>
   stages: readonly ProjectStage[]
+  targets: ReadonlyArray<{ baseUrl: string; access?: 'read' | 'write'; pathPrefix?: string }>
 }
 
 /** The envelope's own rules, typed for the schema they are piped after. */
@@ -150,6 +191,18 @@ export function projectDefinitionChecks<T extends EnvelopeLists>() {
     v.rawCheck<T>(({ dataset, addIssue }) => {
       if (!dataset.typed) return
       for (const message of projectStageIssues(dataset.value.stages)) addIssue({ message })
+      const scopes = dataset.value.targets.map((t) => `${originOf(t.baseUrl)}${t.pathPrefix ?? ''}`)
+      for (const repeated of duplicateValues(scopes)) {
+        addIssue({
+          message: `two targets reach ${repeated}; give targets on one origin distinct pathPrefix values`,
+        })
+      }
+      const writable = dataset.value.targets.some((t) => t.access === 'write')
+      for (const stage of dataset.value.stages) {
+        if (stage.writes === true && !writable) {
+          addIssue({ message: `stage '${stage.id}' writes, but no target allows writes` })
+        }
+      }
     }),
   ] as const
 }

@@ -18,7 +18,10 @@ import {
   loginFields,
   oauthClient,
   scrub,
+  describeTarget,
+  targetFor,
   targetOrigins,
+  READ_METHODS,
   type AuthScheme,
   type AccessCredential,
   type AccessTarget,
@@ -97,7 +100,8 @@ const ACCESS_TOOLS: McpTool[] = [
     description:
       'Send an HTTP request to a project target, optionally with a stored credential attached, ' +
       'and get the scrubbed response. Each exchange is recorded as evidence under its ref. ' +
-      'Redirects are not followed: a redirect comes back with its location, which you may request.',
+      'Redirects are not followed: a redirect comes back with its location, which you may request. ' +
+      'A target that is read-only for this run admits only GET, HEAD and OPTIONS.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -140,7 +144,6 @@ const ACCESS_TOOLS: McpTool[] = [
 ]
 
 export function accessTools(config: AccessToolsConfig): AccessTools {
-  const origins = targetOrigins(config.targets)
   const uiOrigins = targetOrigins(config.targets.filter((t) => t.surface === 'ui'))
   const secrets = credentialSecrets(config.credentials)
   const tokens = new Map<string, string>()
@@ -232,8 +235,14 @@ export function accessTools(config: AccessToolsConfig): AccessTools {
   async function httpRequest(args: Record<string, unknown>): Promise<McpToolResult> {
     const method = typeof args.method === 'string' ? args.method.toUpperCase() : 'GET'
     const rawUrl = typeof args.url === 'string' ? args.url : ''
-    if (!isTargetOrigin(rawUrl, origins)) {
+    const target = targetFor(rawUrl, config.targets)
+    if (!target) {
       return refuse(`${rawUrl || 'That URL'} is not on one of the targets, so it was not sent.`)
+    }
+    if (target.access !== 'write' && !READ_METHODS.has(method)) {
+      return refuse(
+        `${describeTarget(target)} is read-only for this run, so the ${method} ` + 'was not sent.',
+      )
     }
     let url = rawUrl
     let headers: Record<string, string> = {}

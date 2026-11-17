@@ -1024,6 +1024,11 @@ export interface ProjectRunContext {
    * task. Delivered beside linked projects, as `.cat-context/` files and an index line each.
    */
   upstream: ProjectUpstreamContext[]
+  /**
+   * Whether this run may write to the targets that allow writes: a stage that `writes`. Every
+   * other run reaches every target read-only.
+   */
+  writes: boolean
 }
 
 /** One upstream stage's result as a staged task reads it. */

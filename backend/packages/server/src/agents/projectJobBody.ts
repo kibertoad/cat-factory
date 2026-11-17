@@ -63,8 +63,14 @@ export async function buildProjectJobBody(
   deps: ProjectJobBodyDeps,
 ): Promise<ProjectJobBody> {
   const project = requireProject(context)
-  // A kind that pins no definition reaches no target and holds no credential.
-  const targets = project.definition?.targets ?? []
+  // A kind that pins no definition reaches no target and holds no credential. A target admits
+  // writes only for a run of a stage that writes; the harness refuses anything else.
+  const targets = (project.definition?.targets ?? []).map((t) => ({
+    baseUrl: t.baseUrl,
+    surface: t.surface,
+    access: t.access === 'write' && project.writes ? ('write' as const) : ('read' as const),
+    ...(t.pathPrefix ? { pathPrefix: t.pathPrefix } : {}),
+  }))
   const credentials = project.definition
     ? await resolveProjectCredentials(project.definition, {
         workspaceId: ids.workspaceId,
@@ -101,7 +107,7 @@ export async function buildProjectJobBody(
     model: model.model,
     ...authResult.auth,
     systemPrompt: toolSection ? `${role}\n\n${toolSection}` : role,
-    userPrompt: `${userPrompt}${known}${linked.section ? `\n\n${linked.section}` : ''}`,
+    userPrompt: `${userPrompt}${known}${targetAccessSection(targets)}${linked.section ? `\n\n${linked.section}` : ''}`,
     ...(contextFiles.length ? { contextFiles } : {}),
     ...(output ? { output } : {}),
     ...(ghToken ? { ghToken } : {}),
@@ -123,6 +129,23 @@ export async function buildProjectJobBody(
       : {}),
     toolServers: tools,
   }
+}
+
+/**
+ * What this run may do at each target, stated so the agent plans within it rather than learning it
+ * from refusals: read-only, or writable (within a path prefix where one is set).
+ */
+function targetAccessSection(
+  targets: readonly { baseUrl: string; access: 'read' | 'write'; pathPrefix?: string }[],
+): string {
+  if (targets.length === 0) return ''
+  const lines = targets.map((t) => {
+    const scope = t.pathPrefix ? ` under ${t.pathPrefix}` : ''
+    return t.access === 'write'
+      ? `- ${t.baseUrl}: this run may write${scope} (any method)`
+      : `- ${t.baseUrl}: read-only for this run (GET, HEAD and OPTIONS${scope})`
+  })
+  return `\n\n## What this run may do at each target\n${lines.join('\n')}`
 }
 
 function requireProject(context: AgentRunContext): ProjectRunContext {
