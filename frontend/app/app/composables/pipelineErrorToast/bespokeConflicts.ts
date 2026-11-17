@@ -1,11 +1,12 @@
 import type { ParsedConflict } from '~/composables/usePipelineErrorToast'
-import {
-  gateSetupFix,
-  type SetupConflictDeps,
-} from '~/composables/pipelineErrorToast/setupConflictGate'
 import { BESPOKE_CONFLICT_FIXES } from '~/utils/conflictCopy'
 import { BOARD_MEMBER_SETUP_OWNER, SETUP_REMEDY_KEYS, canActOnSetup } from '~/utils/setupAudience'
-import { ENVIRONMENTS_FIX, type SetupFix } from '~/utils/setupFixes'
+import {
+  ENVIRONMENTS_FIX,
+  gateSetupFix,
+  type SetupConflictDeps,
+  type SetupFix,
+} from '~/utils/setupFixes'
 
 /** One bespoke conflict toast, before the audience decides whether it carries the fix. */
 interface SetupConflictToast {

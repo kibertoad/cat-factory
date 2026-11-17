@@ -12,6 +12,8 @@
 // The compact variant (board card, queue card) shows the title and the action only.
 import type { AgentRunSummary } from '~/stores/agentRuns'
 import { isLocalDeployRunnerUnwired, presentFailure } from '~/utils/failureCause'
+import { SETUP_REMEDY_KEYS } from '~/utils/setupAudience'
+import { gateSetupFix } from '~/utils/setupFixes'
 import FailureNotes from '~/components/board/FailureNotes.vue'
 import BootstrapRunSteps from '~/components/bootstrap/BootstrapRunSteps.vue'
 
@@ -29,6 +31,7 @@ const remedies = useSetupRemedies()
 const { actor } = useSetupActor()
 const auth = useAuthStore()
 const board = useBoardStore()
+const workspace = useWorkspaceStore()
 
 const compact = computed(() => props.variant === 'compact')
 const failure = computed(() => props.run.failure)
@@ -116,14 +119,29 @@ async function startNewRun() {
 }
 
 // The setting that fixes the cause: the block's action for `fix`, a second button beside Retry
-// for `retry` (an environment failure, which is most often temporary but can be a setting). It
-// opens through the setup remedies, the same screen the toast's fix opens.
+// for `retry` (an environment failure, which is most often temporary but can be a setting). It is
+// gated like the toast's fix (`gateSetupFix`): only a caller who can save the setting gets the
+// button, and it opens the same screen the toast's fix opens.
+const gated = computed(() => {
+  const f = presented.value?.fix
+  if (!f) return null
+  return gateSetupFix(
+    f.fix,
+    { actor: actor.value, owners: workspace.infraSetupOwners },
+    { remedies: () => remedies },
+  )
+})
 const fix = computed(() => {
   const f = presented.value?.fix
-  return f
-    ? { label: t(f.labelKey), icon: f.icon, run: () => f.fix.open(remedies, actor.value) }
-    : null
+  const g = gated.value
+  return f && g?.remedy === null ? { label: t(f.labelKey), icon: f.icon, run: g.run } : null
 })
+// A caller who cannot save the setting gets the line that names who can, in place of the button.
+// Only where the setting IS the action: beside Retry the setting is a guess, and naming an owner
+// there would read as a diagnosis.
+const remedyLine = computed(() =>
+  action.value === 'fix' && gated.value?.remedy ? t(SETUP_REMEDY_KEYS[gated.value.remedy]) : null,
+)
 const newRunDenied = computed(() => action.value === 'newRun' && !access.canExecuteRuns.value)
 
 const detailsOpen = ref(false)
@@ -207,6 +225,13 @@ async function retry() {
         >
           {{ fix.label }}
         </UButton>
+        <span
+          v-else-if="remedyLine"
+          class="text-2xs leading-snug text-app-error-200/90"
+          data-testid="agent-failure-setup-remedy"
+        >
+          {{ remedyLine }}
+        </span>
         <UButton
           v-else-if="action === 'newRun'"
           color="error"
