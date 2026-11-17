@@ -1,7 +1,7 @@
 import type { Project, ProjectDefinition } from '@cat-factory/contracts'
 import {
-  type ProjectKindModule,
   ProjectKindModuleRegistry,
+  eraseTaskHandler,
   type ProjectOutcomeRow,
   researchKindModule,
 } from '@cat-factory/kernel'
@@ -56,6 +56,7 @@ function row(projectId: string, id: string, seq: number, body: unknown, stream =
     intent: 'initial',
     schemaVersion: 1,
     taskId: null,
+    taskType: projectId === research.id ? 'research' : 'notes',
     definitionKey: projectId === research.id ? 'acme:vendor' : null,
     definitionVersion: projectId === research.id ? 1 : null,
     artifactRefs: [],
@@ -66,19 +67,24 @@ function row(projectId: string, id: string, seq: number, body: unknown, stream =
   return { row: outcome, json }
 }
 
-const notesModule: ProjectKindModule<unknown> = {
+const notesModule = {
   kind: 'notes',
-  agentKind: 'note-taker',
-  outcomeSchemaVersion: 1,
-  parseSpec: (d) => ({ ok: true, value: d.spec }),
-  parseOutcome: (_v, value) => value,
-  planTask: () => ({ intent: 'draft', stream: 'main', plan: {} }),
-  brief: () => ({}),
-  mergeCheckpoint: (_a, b) => b,
-  finish: ({ reply }) => ({ body: reply, output: '' }),
-  describe: () => '',
-  artifactRefs: () => [],
-  definitionSummary: (d) => d.title,
+  parseSpec: (d: ProjectDefinition) => ({ ok: true as const, value: d.spec }),
+  definitionSummary: (d: ProjectDefinition) => d.title,
+  handlers: [
+    eraseTaskHandler({
+      taskType: 'notes',
+      agentKind: 'note-taker',
+      outcomeSchemaVersion: 1,
+      parseOutcome: (_v: number, value: unknown) => value,
+      planTask: () => ({ intent: 'draft', stream: 'main', plan: {} }),
+      brief: () => ({}),
+      mergeCheckpoint: (_a: unknown, b: unknown) => b,
+      finish: ({ reply }: { reply: unknown }) => ({ body: reply, output: '' }),
+      describe: () => '',
+      artifactRefs: () => [],
+    }),
+  ],
 }
 
 function contributor() {

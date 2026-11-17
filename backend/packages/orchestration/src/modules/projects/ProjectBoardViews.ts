@@ -3,21 +3,20 @@ import type {
   ProjectBoardView,
   ProjectCredentialReadiness,
   ProjectDefinition,
-  ProjectOutcome,
   ProjectOutcomeDetail,
   ProjectOutcomeEntry,
-  ProjectOutcomeMeta,
 } from '@cat-factory/contracts'
 import {
+  type DecodedProjectOutcome,
   NotFoundError,
   type ProjectDefinitionSource,
-  type ProjectKindModule,
   type ProjectKindModuleRegistry,
   type ProjectRecordRepository,
   UnavailableError,
 } from '@cat-factory/kernel'
 import type { ProjectOutcomeStore, ReadOutcome } from './ProjectOutcomeStore.js'
 import type { MountedProject } from './ProjectService.js'
+import { decodeOutcomeBody, outcomeMetaOf } from './outcomeDecoding.js'
 
 export interface ProjectBoardViewsDeps {
   getMounted: (workspaceId: string, projectId: string) => Promise<MountedProject>
@@ -62,9 +61,11 @@ export class ProjectBoardViews {
         : null,
       this.deps.outcomes.readAll(project),
     ])
-    const decoded = read.map((outcome) => ({ outcome, body: decode(module, outcome) }))
-    const readable: ProjectOutcome[] = decoded.flatMap(({ outcome, body }) =>
-      body === undefined ? [] : [{ ...metaOf(outcome), body }],
+    const decoded = read.map((outcome) => ({ outcome, body: this.decode(outcome) }))
+    const readable: DecodedProjectOutcome[] = decoded.flatMap(({ outcome, body }) =>
+      body === undefined
+        ? []
+        : [{ ...outcomeMetaOf(outcome.row), taskType: outcome.row.taskType, body }],
     )
     const definition = resolved?.definition ?? null
     return {
@@ -96,7 +97,7 @@ export class ProjectBoardViews {
     const { project } = await this.deps.getMounted(workspaceId, projectId)
     const read = await this.deps.outcomes.readOne(project, outcomeId)
     if (!read) throw new NotFoundError('ProjectOutcome', outcomeId)
-    const body = decode(this.deps.modules.get(project.kind), read)
+    const body = this.decode(read)
     if (body === undefined) {
       throw new UnavailableError(
         'A project outcome body is stored in the blob store, which cannot serve it now',
@@ -106,33 +107,21 @@ export class ProjectBoardViews {
     }
     return { ...entryOf(read, true), body }
   }
-}
 
-function metaOf({ row }: ReadOutcome): ProjectOutcomeMeta {
-  const { body: _ref, bodyBytes: _bytes, ...meta } = row
-  return meta
+  /** A body as its handler decodes it, or undefined when it cannot be read or does not parse. */
+  private decode({ row, json }: ReadOutcome): unknown {
+    if (json === null) return undefined
+    let raw: unknown
+    try {
+      raw = JSON.parse(json)
+    } catch {
+      return undefined
+    }
+    return decodeOutcomeBody(this.deps.modules, row, raw)
+  }
 }
 
 function entryOf(read: ReadOutcome, readable: boolean): ProjectOutcomeEntry {
   const storage = { placement: read.row.body.kind, bytes: read.row.bodyBytes, readable }
-  return { ...metaOf(read), storage }
-}
-
-/**
- * A body as its kind decodes it, or undefined when it cannot be read or does not parse. Without a
- * module in this process the stored JSON is served as it is, since showing it needs no
- * understanding of it.
- */
-function decode(
-  module: ProjectKindModule<unknown> | undefined,
-  { row, json }: ReadOutcome,
-): unknown {
-  if (json === null) return undefined
-  let raw: unknown
-  try {
-    raw = JSON.parse(json)
-  } catch {
-    return undefined
-  }
-  return module ? module.parseOutcome(row.schemaVersion, raw) : raw
+  return { ...outcomeMetaOf(read.row), storage }
 }

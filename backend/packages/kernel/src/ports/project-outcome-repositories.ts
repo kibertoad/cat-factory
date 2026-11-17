@@ -41,6 +41,11 @@ export type ProjectOutcomeBodyRef =
   | { kind: 'offloaded'; artifactId: string }
 
 export interface ProjectOutcomeRow extends ProjectOutcomeMeta {
+  /**
+   * The task type whose handler wrote the body and decodes it. Null for an outcome no handler
+   * is recorded for, whose body is served as stored.
+   */
+  taskType: string | null
   body: ProjectOutcomeBodyRef
   /** The body's size in bytes, whichever way it is stored. */
   bodyBytes: number

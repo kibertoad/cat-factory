@@ -1,11 +1,13 @@
 import {
   type FindingsRevisionBody,
+  type ProjectDefinition,
+  type ProjectOutcome,
   type QuestionFinding,
   type ResearchProjectView,
   parseResearchDefinition,
   researchProjectView,
 } from '@cat-factory/contracts'
-import type { ProjectContextRendering, ProjectViewInput } from './project-kind-module.js'
+import type { ProjectContextRendering } from './project-kind-module.js'
 
 // The research kind's linked context: what a task that links a research project reads of it. The
 // folded findings, one summary line and one coverage line for the prompt's index, and the full
@@ -13,11 +15,12 @@ import type { ProjectContextRendering, ProjectViewInput } from './project-kind-m
 
 /** A research project's findings rendered for an agent that reads them as linked context. */
 export function renderResearchContext(
-  input: ProjectViewInput<FindingsRevisionBody>,
+  pinned: ProjectDefinition | null,
+  outcomes: ReadonlyArray<ProjectOutcome<FindingsRevisionBody>>,
 ): ProjectContextRendering {
-  const parsed = input.definition ? parseResearchDefinition(input.definition) : undefined
+  const parsed = pinned ? parseResearchDefinition(pinned) : undefined
   const definition = parsed?.ok ? parsed.value : null
-  const view = researchProjectView(definition?.spec.topics ?? [], input.outcomes)
+  const view = researchProjectView(definition?.spec.topics ?? [], outcomes)
   const { total } = view.coverage
   const count = total.answered + total.partial + total.blocked + total.unanswered
   const coverage =

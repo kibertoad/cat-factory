@@ -65,15 +65,19 @@ Worker:
   mothership mode a node reads the descriptors over `GET /internal/project-kinds`, and a failed
   read refuses with `project_kinds_unreachable`;
 - its **module**, on the `ProjectKindModuleRegistry`: the code that understands the kind's content.
-  It validates a definition's `spec`, decodes an outcome body, plans a task and writes its agent's
-  brief, finishes a task into an outcome body, names the artifacts a body references, summarizes a
-  definition for a picker, and optionally computes the project's `view`, renders it as linked
-  context (`renderContext`) and declares the schemas of its spec, body and view.
+  It validates a definition's `spec`, summarizes a definition for a picker, names the **task
+  handlers** its projects run, and optionally computes the project's `view`, renders it as linked
+  context (`renderContext`) and declares the schemas of its spec and view. A task handler belongs
+  to one task type and owns that type's agent kind and outcome body: it decodes a body, plans a
+  task and writes its agent's brief, finishes a task into an outcome body, names the artifacts a
+  body references and declares the body's schema. Several kinds may offer one handler, and a task
+  type or an agent kind names exactly one handler. Each outcome records the task type that wrote
+  it, so a reader decodes it with that type's handler whatever the project's kind.
 
 The engine owns everything else about a project task's run: the pin and its hash check, the task's
 sequence claim, the state fixed on the step, the outcome write and its storage placement, and the
-credential park. It calls a module only where content matters. The platform registers one kind,
-`research`, and a deployment registers its own the same way.
+credential park. It calls a handler or a module only where content matters. The platform registers
+one kind, `research`, and a deployment registers its own the same way.
 
 ### Definitions are an envelope with an opaque spec
 
@@ -159,7 +163,7 @@ deployment's environment), and reserved environment keys are refused.
 
 A `requiredAtStart` credential that does not resolve parks the step before any container starts; a
 mid-run `request_credential` checkpoints the partial result on the step (merged later by the
-kind's module) and parks it with the same `CapabilityCredentialMissingError`.
+task type's handler) and parks it with the same `CapabilityCredentialMissingError`.
 `CredentialWaitController` records the wait as a union on `subject`: `personal` (the existing
 subscription lease), `capability` (key, declaring subject, label, onboarding, reason, observed) and
 `unrecorded` (a wait persisted before waits named their subject, which cannot be resumed). A
@@ -214,9 +218,9 @@ pinned definition. The step records which outcome each linked project contribute
 - **The kind knows its content; the platform does not.** Storage, ordering, placement, retention,
   credentials, the public API and linking are the same for every kind, so they are written once
   against an envelope and an opaque body. What differs (validating a spec, folding outcomes,
-  briefing an agent, rendering context) is a module method, so a second kind adds a module and a
-  reader component rather than a branch on a kind id in the engine, the stores, the SDKs or the
-  SPA.
+  briefing an agent, rendering context) is a handler or module method, so a second kind adds a
+  module, any handler it does not share and a reader component rather than a branch on a kind id
+  in the engine, the stores, the SDKs or the SPA.
 - **Not an initiative.** An initiative ([ADR 0013](./0013-initiatives-feature.md)) is a
   plan-then-execute machine anchored in one service frame, stored as one rev-guarded blob and
   mirrored into the service's repository. A project is repo-less, has no plan or phases, and stores
@@ -252,7 +256,7 @@ pinned definition. The step records which outcome each linked project contribute
 - The harness writes every context file flat into `.cat-context/`, so a linked project's file is
   named `project-<name>.md` rather than living under a subdirectory, which would need a runner
   image change.
-- `PipelineStep.project.plan` and `.checkpoint` are stored untyped and parsed by the kind's module
+- `PipelineStep.project.plan` and `.checkpoint` are stored untyped and parsed by the task's handler
   on read: typing them per kind made the workspace snapshot type too deep for the compiler.
 - The Postgres blob backend refuses bodies over 16 MiB and D1 has no blob backend, so a Cloudflare
   account with content storage off holds only inline outcomes, under the D1 row cap.

@@ -105,6 +105,7 @@ interface OutcomeRow {
   intent: string
   schema_version: number
   task_id: string | null
+  task_type: string | null
   definition_key: string | null
   definition_version: number | null
   artifact_refs: string
@@ -130,6 +131,7 @@ function rowToOutcome(row: OutcomeRow): ProjectOutcomeRow {
     intent: row.intent,
     schemaVersion: row.schema_version,
     taskId: row.task_id,
+    taskType: row.task_type,
     definitionKey: row.definition_key,
     definitionVersion: row.definition_version,
     artifactRefs: JSON.parse(row.artifact_refs) as string[],
@@ -257,10 +259,10 @@ export class D1ProjectRecordRepository implements ProjectRecordRepository {
     const result = await this.deps.db
       .prepare(
         `INSERT INTO project_outcomes
-           (id, project_id, stream, seq, intent, schema_version, task_id, definition_key,
-            definition_version, artifact_refs, created_at, body_inline, body_artifact_id,
-            body_bytes)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           (id, project_id, stream, seq, intent, schema_version, task_id, task_type,
+            definition_key, definition_version, artifact_refs, created_at, body_inline,
+            body_artifact_id, body_bytes)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT (id) DO NOTHING`,
       )
       .bind(
@@ -271,6 +273,7 @@ export class D1ProjectRecordRepository implements ProjectRecordRepository {
         row.intent,
         row.schemaVersion,
         row.taskId,
+        row.taskType,
         row.definitionKey,
         row.definitionVersion,
         JSON.stringify(row.artifactRefs),

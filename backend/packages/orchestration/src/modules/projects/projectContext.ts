@@ -1,13 +1,14 @@
-import type { Project, ProjectDefinition, ProjectOutcome } from '@cat-factory/contracts'
+import type { Project, ProjectDefinition } from '@cat-factory/contracts'
 import {
+  type DecodedProjectOutcome,
   type ProjectContextRendering,
   type ProjectDefinitionSource,
-  type ProjectKindModule,
   type ProjectKindModuleRegistry,
   type ProjectRecordRepository,
   redactSecrets,
 } from '@cat-factory/kernel'
-import type { ProjectOutcomeStore, StoredOutcome } from './ProjectOutcomeStore.js'
+import type { ProjectOutcomeStore } from './ProjectOutcomeStore.js'
+import { decodeOutcome } from './outcomeDecoding.js'
 
 /** A project's current result, rendered for an agent that reads it as linked context. */
 export interface ProjectContextEntry extends ProjectContextRendering {
@@ -32,7 +33,7 @@ export interface ProjectContextDeps {
 
 /**
  * Linked context for every project kind. A project has a result once it holds one outcome. Its
- * kind's module renders it (`renderContext`) from the decoded outcomes and the pinned definition;
+ * kind's module renders it (`renderContext`) from the outcomes its handlers decoded and the pinned definition;
  * a kind without one, or with no module in this process, contributes the newest outcome of each
  * stream as recorded. An offloaded body that cannot be read throws `outcome_body_unavailable` out
  * of the store, which breaks the run naming the project. Everything rendered is scrubbed of
@@ -53,7 +54,7 @@ export function projectContextContributor(deps: ProjectContextDeps): ProjectCont
       const rendered = new Map<string, ProjectContextEntry>()
       for (const project of projects) {
         const module = deps.modules.get(project.kind)
-        const outcomes = (stored.get(project.id) ?? []).map((o) => decode(module, o))
+        const outcomes = (stored.get(project.id) ?? []).map((o) => decodeOutcome(deps.modules, o))
         const input = {
           definition: definitions.get(project.id) ?? null,
           inputs: pinOf.get(project.id)?.inputs ?? {},
@@ -102,17 +103,9 @@ async function definitionsOf(
   return result
 }
 
-function decode(module: ProjectKindModule<unknown> | undefined, { row, json }: StoredOutcome) {
-  const raw = JSON.parse(json) as unknown
-  const body = module ? module.parseOutcome(row.schemaVersion, raw) : raw
-  if (body === undefined) throw new Error(`Outcome '${row.id}' holds an unreadable body`)
-  const { body: _ref, bodyBytes: _bytes, ...meta } = row
-  return { ...meta, body } satisfies ProjectOutcome
-}
-
 /** The newest outcome of each stream as recorded, for a kind that renders no context itself. */
-function renderLatest(outcomes: readonly ProjectOutcome[]): ProjectContextRendering {
-  const latest = new Map<string, ProjectOutcome>()
+function renderLatest(outcomes: readonly DecodedProjectOutcome[]): ProjectContextRendering {
+  const latest = new Map<string, DecodedProjectOutcome>()
   for (const outcome of outcomes) latest.set(outcome.stream, outcome)
   const lines: string[] = []
   for (const [stream, outcome] of latest) {

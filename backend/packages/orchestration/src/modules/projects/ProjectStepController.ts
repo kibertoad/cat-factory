@@ -2,7 +2,6 @@ import {
   projectDefinitionSubjectId,
   type Project,
   type ProjectDefinition,
-  type ProjectOutcome,
   type ProjectStepState,
 } from '@cat-factory/contracts'
 import {
@@ -13,23 +12,26 @@ import {
   type Block,
   type BlockRepository,
   type Clock,
+  type DecodedProjectOutcome,
+  type ErasedProjectTaskHandler,
   type PipelineStep,
   type ProjectDefinitionSource,
-  type ProjectKindModule,
   type ProjectKindModuleRegistry,
   type ProjectRecordRepository,
   type ProjectRepository,
   type ProjectRunContext,
   type ProjectTaskInput,
   type ServiceRepository,
+  outcomesOf,
 } from '@cat-factory/kernel'
-import type { ProjectOutcomeStore, StoredOutcome } from './ProjectOutcomeStore.js'
+import type { ProjectOutcomeStore } from './ProjectOutcomeStore.js'
+import { decodeOutcome } from './outcomeDecoding.js'
 
 // ---------------------------------------------------------------------------
 // The engine half of a project task's run, for every project kind: what its step is asked when it
 // starts, what it checkpoints when it stops for a credential, and the outcome it records when it
-// completes. The kind's module is called only where the content matters (planning the task,
-// briefing the agent, folding a checkpoint, finishing the body). Design:
+// completes. The handler of the task's type is called only where the content matters (planning
+// the task, briefing the agent, folding a checkpoint, finishing the body). Design:
 // `backend/docs/adr/0069-projects-and-research-projects.md`.
 // ---------------------------------------------------------------------------
 
@@ -47,13 +49,13 @@ export interface ProjectStepControllerDeps {
 
 const REQUEST_TEXT_MAX = 2000
 
-/** What a task's step resolved: its project, kind module, pinned definition and outcomes. */
+/** What a task's step resolved: its project, task handler, pinned definition and outcomes. */
 interface ResolvedTask {
   project: Project
-  module: ProjectKindModule<unknown>
+  handler: ErasedProjectTaskHandler
   definition: ProjectDefinition | null
   inputs: Record<string, unknown>
-  outcomes: ProjectOutcome<unknown>[]
+  outcomes: DecodedProjectOutcome[]
 }
 
 /** The outcome id a task writes: one per task, so a replayed write is a no-op. */
@@ -64,12 +66,13 @@ export function outcomeIdFor(taskId: string): string {
 export class ProjectStepController {
   constructor(private readonly deps: ProjectStepControllerDeps) {}
 
-  /** The agent kinds whose steps are project tasks' runs, one per registered kind module. */
+  /** The agent kinds whose steps are project tasks' runs, one per registered task handler. */
   agentKinds(): string[] {
-    return this.deps.modules.all().map((m) => m.agentKind)
+    const kinds = this.deps.modules.all().flatMap((m) => m.handlers.map((h) => h.agentKind))
+    return [...new Set(kinds)]
   }
 
-  /** Whether a step of `agentKind` is a project task's run that a module plans. */
+  /** Whether a step of `agentKind` is a project task's run that a task handler plans. */
   handles(agentKind: string): boolean {
     return this.deps.modules.forAgentKind(agentKind) !== undefined
   }
@@ -88,11 +91,11 @@ export class ProjectStepController {
     }
     const input = this.taskInput(task, block)
     if (!step.project) {
-      const planned = task.module.planTask(input)
+      const planned = task.handler.planTask(input)
       const seq = await this.deps.records.reserveTaskSeq(task.project.id, block.id)
       step.project = {
         projectId: task.project.id,
-        kind: task.module.kind,
+        kind: task.project.kind,
         seq,
         stream: planned.stream,
         intent: planned.intent,
@@ -102,17 +105,17 @@ export class ProjectStepController {
       }
     }
     const state = step.project
-    const checkpoint = this.parse(task.module, state.checkpoint)
+    const checkpoint = this.parse(task.handler, state.checkpoint)
     const services = task.project.serviceIds.length
       ? ((await this.deps.serviceRepository?.listByIds(task.project.serviceIds)) ?? [])
       : []
     return {
       projectId: task.project.id,
-      kind: task.module.kind,
+      kind: task.project.kind,
       definition: task.definition,
       inputs: task.inputs,
       linkedFrameBlockIds: services.map((s) => s.frameBlockId).filter((id): id is string => !!id),
-      brief: task.module.brief({
+      brief: task.handler.brief({
         ...input,
         plan: state.plan,
         ...(checkpoint !== undefined ? { checkpoint } : {}),
@@ -130,14 +133,14 @@ export class ProjectStepController {
     result: AgentRunResult,
   ): Promise<CapabilityCredentialMissingError> {
     const state = requireState(step)
-    const module = this.moduleOf(state)
+    const handler = this.handlerOf(step)
     const request = result.credentialRequest!
-    const partial = this.parse(module, result.custom)
+    const partial = this.parse(handler, result.custom)
     if (partial !== undefined) {
-      const prior = this.parse(module, state.checkpoint)
+      const prior = this.parse(handler, state.checkpoint)
       step.project = {
         ...state,
-        checkpoint: prior !== undefined ? module.mergeCheckpoint(prior, partial) : partial,
+        checkpoint: prior !== undefined ? handler.mergeCheckpoint(prior, partial) : partial,
       }
     }
     const definition = await this.definitionOf(state)
@@ -166,13 +169,13 @@ export class ProjectStepController {
     result: AgentRunResult,
   ): Promise<{ output: string; outputIsRendered: true }> {
     const state = requireState(step)
-    const module = this.moduleOf(state)
-    const reply = this.parse(module, result.custom)
+    const handler = this.handlerOf(step)
+    const reply = this.parse(handler, result.custom)
     if (reply === undefined) {
       throw new Error('The run returned no readable outcome (malformed or empty JSON)')
     }
-    const checkpoint = this.parse(module, state.checkpoint)
-    const finished = module.finish({
+    const checkpoint = this.parse(handler, state.checkpoint)
+    const finished = handler.finish({
       plan: state.plan,
       seq: state.seq,
       reply,
@@ -190,11 +193,12 @@ export class ProjectStepController {
         stream: state.stream,
         seq: state.seq,
         intent: state.intent,
-        schemaVersion: module.outcomeSchemaVersion,
+        schemaVersion: handler.outcomeSchemaVersion,
         taskId,
+        taskType: handler.taskType,
         definitionKey: state.definitionKey,
         definitionVersion: state.definitionVersion,
-        artifactRefs: module.artifactRefs(finished.body),
+        artifactRefs: handler.artifactRefs(finished.body),
         createdAt: this.deps.clock.now(),
       },
       json: JSON.stringify(finished.body),
@@ -203,10 +207,10 @@ export class ProjectStepController {
     if (recorded.written) return { output: finished.output, outputIsRendered: true }
     // A replayed completion lost to the write that landed first: describe the outcome on record,
     // not the replay's reply, which may differ from it.
-    const body = module.parseOutcome(module.outcomeSchemaVersion, JSON.parse(recorded.json))
+    const body = handler.parseOutcome(handler.outcomeSchemaVersion, JSON.parse(recorded.json))
     if (body === undefined) throw new Error(`Outcome '${id}' holds an unreadable body`)
     return {
-      output: module.describe({ plan: state.plan, seq: state.seq, body }),
+      output: handler.describe({ plan: state.plan, seq: state.seq, body }),
       outputIsRendered: true,
     }
   }
@@ -216,15 +220,17 @@ export class ProjectStepController {
       task: block,
       definition: task.definition,
       inputs: task.inputs,
-      outcomes: task.outcomes,
+      outcomes: outcomesOf(task.handler, task.outcomes),
     }
   }
 
   private async resolveTask(block: Block, agentKind: string): Promise<ResolvedTask> {
     const found = await this.deps.blockRepository.findById(block.id)
     const project = found?.ownerId ? await this.deps.projectRepository.get(found.ownerId) : null
-    const module = project ? this.deps.modules.get(project.kind) : undefined
-    if (!project || !module || module.agentKind !== agentKind) {
+    const taskType = found?.block.taskType
+    const handler =
+      project && taskType ? this.deps.modules.handlerOf(project.kind, taskType) : undefined
+    if (!project || !handler || handler.agentKind !== agentKind) {
       throw new ValidationError(`A '${agentKind}' step must run under a project of its kind`, {
         reason: 'task_type_requires_project',
       })
@@ -234,10 +240,10 @@ export class ProjectStepController {
     const stored = await this.deps.outcomes.list(project)
     return {
       project,
-      module,
+      handler,
       definition,
       inputs: pin?.inputs ?? {},
-      outcomes: stored.map((outcome) => this.decode(module, outcome)),
+      outcomes: stored.map((outcome) => decodeOutcome(this.deps.modules, outcome)),
     }
   }
 
@@ -281,24 +287,18 @@ export class ProjectStepController {
     return resolved?.definition
   }
 
-  private moduleOf(state: ProjectStepState): ProjectKindModule<unknown> {
-    const module = this.deps.modules.get(state.kind)
-    if (!module) {
-      throw new Error(`No module is registered for project kind '${state.kind}'`)
+  /** The handler whose agent kind the step dispatches: a task type names exactly one. */
+  private handlerOf(step: PipelineStep): ErasedProjectTaskHandler {
+    const handler = this.deps.modules.forAgentKind(step.agentKind)
+    if (!handler) {
+      throw new Error(`No project task handler is registered for agent kind '${step.agentKind}'`)
     }
-    return module
+    return handler
   }
 
-  private parse(module: ProjectKindModule<unknown>, value: unknown): unknown {
+  private parse(handler: ErasedProjectTaskHandler, value: unknown): unknown {
     if (value === undefined || value === null) return undefined
-    return module.parseOutcome(module.outcomeSchemaVersion, value)
-  }
-
-  private decode(module: ProjectKindModule<unknown>, { row, json }: StoredOutcome): ProjectOutcome {
-    const body = module.parseOutcome(row.schemaVersion, JSON.parse(json))
-    if (body === undefined) throw new Error(`Outcome '${row.id}' holds an unreadable body`)
-    const { body: _ref, bodyBytes: _bytes, ...meta } = row
-    return { ...meta, body }
+    return handler.parseOutcome(handler.outcomeSchemaVersion, value)
   }
 }
 

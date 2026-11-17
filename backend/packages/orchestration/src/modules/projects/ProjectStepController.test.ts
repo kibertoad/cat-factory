@@ -11,8 +11,9 @@ import {
   type AgentRunResult,
   type Block,
   type PipelineStep,
-  type ProjectKindModule,
   type ProjectOutcomeRow,
+  type ProjectTaskHandler,
+  eraseTaskHandler,
   type ProjectRecordRepository,
   type ResolvedProjectDefinition,
 } from '@cat-factory/kernel'
@@ -45,12 +46,11 @@ const definition: ProjectDefinition = {
   promptAdditions: {},
 }
 
-/** A second kind with no definition and a body of a different shape: one note per task. */
-const notesModule: ProjectKindModule<{ note: string }> = {
-  kind: 'notes',
+/** A second kind's handler, for a body of a different shape: one note per task. */
+const notesHandler: ProjectTaskHandler<{ note: string }> = {
+  taskType: 'notes',
   agentKind: 'note-taker',
   outcomeSchemaVersion: 1,
-  parseSpec: (d) => ({ ok: true, value: d.spec }),
   parseOutcome: (_v, value) =>
     typeof (value as { note?: unknown })?.note === 'string'
       ? (value as { note: string })
@@ -66,7 +66,14 @@ const notesModule: ProjectKindModule<{ note: string }> = {
   finish: ({ reply }) => ({ body: reply, output: `noted: ${reply.note}` }),
   describe: ({ body }) => `noted: ${body.note}`,
   artifactRefs: () => [],
-  definitionSummary: (definition) => definition.title,
+}
+
+/** A second kind with no definition. */
+const notesModule = {
+  kind: 'notes',
+  handlers: [eraseTaskHandler(notesHandler)],
+  parseSpec: (d: ProjectDefinition) => ({ ok: true as const, value: d.spec }),
+  definitionSummary: (d: ProjectDefinition) => d.title,
 }
 
 function body(statuses: Record<string, 'answered' | 'partial' | 'blocked'>): FindingsRevisionBody {
@@ -101,6 +108,7 @@ function outcomeRow(
     intent: 'initial',
     schemaVersion: 1,
     taskId,
+    taskType: stream === 'notes' ? 'notes' : 'research',
     definitionKey: null,
     definitionVersion: null,
     artifactRefs: [],
@@ -110,8 +118,16 @@ function outcomeRow(
   }
 }
 
+/** A kind offering both task types, so one project holds outcomes of two bodies. */
+const mixedModule = {
+  ...notesModule,
+  kind: 'mixed',
+  handlers: [...researchKindModule.handlers, ...notesModule.handlers],
+}
+
 function harness(opts: {
   kind: string
+  taskType?: string
   pin?: Partial<ProjectPin> | null
   rows?: ProjectOutcomeRow[]
 }) {
@@ -123,7 +139,11 @@ function harness(opts: {
     serviceIds: [],
     createdAt: 0,
   }
-  const task = { id: 'task_2', taskTypeFields: {} } as unknown as Block
+  const task = {
+    id: 'task_2',
+    taskType: opts.taskType ?? (opts.kind === 'notes' ? 'notes' : 'research'),
+    taskTypeFields: {},
+  } as unknown as Block
   const rows = [...(opts.rows ?? [])]
   const resolved: ResolvedProjectDefinition = {
     definition,
@@ -134,6 +154,7 @@ function harness(opts: {
   const modules = new ProjectKindModuleRegistry()
   modules.register(researchKindModule)
   modules.register(notesModule)
+  modules.register(mixedModule)
   const pin: ProjectPin | null =
     opts.pin === null
       ? null
@@ -301,7 +322,33 @@ describe('ProjectStepController with a pinless kind', () => {
     expect(step.project).toMatchObject({ stream: 'notes', intent: 'write', definitionKey: null })
     const recorded = await ctrl.record('ws_1', step, task.id, reply({ note: 'use webhooks' }))
     expect(recorded.output).toBe('noted: use webhooks')
-    expect(rows[0]).toMatchObject({ stream: 'notes', definitionKey: null, definitionVersion: null })
+    expect(rows[0]).toMatchObject({
+      stream: 'notes',
+      taskType: 'notes',
+      definitionKey: null,
+      definitionVersion: null,
+    })
+  })
+
+  it("plans a task from its own handler's outcomes only, in a kind offering two", async () => {
+    const { ctrl, task } = harness({
+      kind: 'mixed',
+      taskType: 'notes',
+      pin: null,
+      rows: [
+        outcomeRow('r', 1, body({ scheme: 'answered' })),
+        outcomeRow('a', 2, { note: 'x' }, 'notes'),
+      ],
+    })
+    const run = await ctrl.prepare({ ...noting }, task)
+    expect(run.brief).toEqual({ nth: 2 })
+  })
+
+  it('refuses a task type its project kind does not offer', async () => {
+    const { ctrl, task } = harness({ kind: 'notes', taskType: 'research', pin: null })
+    await expect(
+      ctrl.prepare({ agentKind: 'project-researcher' } as PipelineStep, task),
+    ).rejects.toMatchObject({ details: { reason: 'task_type_requires_project' } })
   })
 
   it("refuses a step under a project of another kind, and the kind's own refusal", async () => {

@@ -85,6 +85,7 @@ describe('researchKindModule.view', () => {
     spec,
   }
   const outcome = (id: string, seq: number, findings: FindingsRevisionBody) => ({
+    taskType: 'research',
     id,
     projectId: 'p1',
     stream: 'main',
@@ -111,6 +112,19 @@ describe('researchKindModule.view', () => {
     expect(view.latestRevisionId).toBe('r2')
     expect(view.coverage.total).toEqual({ answered: 1, partial: 1, unanswered: 1, blocked: 0 })
     expect(view.findings.find((f) => f.finding.questionId === 'scopes')?.notes).toHaveLength(1)
+  })
+
+  it("reads only the research handler's outcomes, whatever else the project recorded", () => {
+    const view = researchKindModule.view!({
+      definition,
+      inputs: {},
+      outcomes: [
+        outcome('r1', 1, body({ scheme: 'answered' })),
+        { ...outcome('n2', 2, body({ scopes: 'answered' })), taskType: 'notes' },
+      ],
+    }) as ResearchProjectView
+    expect(view.latestRevisionId).toBe('r1')
+    expect(view.findings.map((f) => f.finding.questionId)).toEqual(['scheme'])
   })
 
   it('still folds the revisions of a project whose definition is gone, with no topic to cover', () => {

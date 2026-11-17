@@ -23,15 +23,22 @@ import {
   researchSpecValidator,
 } from '@cat-factory/contracts'
 import { ValidationError } from './errors.js'
-import type { ProjectKindModule, ProjectTaskInput } from './project-kind-module.js'
+import {
+  type ProjectKindModule,
+  type ProjectTaskHandler,
+  type ProjectTaskInput,
+  type ProjectViewInput,
+  eraseTaskHandler,
+  outcomesOf,
+} from './project-kind-module.js'
 import { renderResearchContext } from './research-context.js'
 
 // ---------------------------------------------------------------------------
-// The RESEARCH project kind the platform ships: its descriptor and its module. A research
-// project pins a research definition (topics of questions about a vendor), and each `research`
-// task answers some of those questions and records one findings revision on the project's
-// `main` stream. Everything here is the kind's own; the engine reaches it only through the
-// `ProjectKindModule` interface. Design: `backend/docs/adr/0069-projects-and-research-projects.md`.
+// The RESEARCH project kind the platform ships: its descriptor, the handler of its `research`
+// task type, and its module. A research project pins a research definition (topics of questions
+// about a vendor), and each `research` task answers some of those questions and records one
+// findings revision on the project's `main` stream. Everything here is the kind's own; the engine
+// reaches it only through the `ProjectTaskHandler` and `ProjectKindModule` interfaces. Design: `backend/docs/adr/0069-projects-and-research-projects.md`.
 // ---------------------------------------------------------------------------
 
 /** The agent kind a research task dispatches. */
@@ -155,11 +162,10 @@ function renderRevision(
   return lines.join('\n')
 }
 
-export const researchKindModule: ProjectKindModule<FindingsRevisionBody> = {
-  kind: RESEARCH_KIND,
+export const researchTaskHandler: ProjectTaskHandler<FindingsRevisionBody> = {
+  taskType: 'research',
   agentKind: PROJECT_RESEARCHER_AGENT_KIND,
   outcomeSchemaVersion: RESEARCH_OUTCOME_SCHEMA_VERSION,
-  parseSpec: researchSpecValidator.parseSpec,
 
   parseOutcome: (schemaVersion, value) =>
     schemaVersion === RESEARCH_OUTCOME_SCHEMA_VERSION
@@ -254,21 +260,33 @@ export const researchKindModule: ProjectKindModule<FindingsRevisionBody> = {
 
   artifactRefs: findingsArtifactRefs,
 
+  schemas: { outcome: findingsRevisionBodySchema },
+}
+
+/** The research findings a view or a linked-context rendering reads. */
+export function researchOutcomesOf(input: ProjectViewInput) {
+  return outcomesOf(researchTaskHandler, input.outcomes)
+}
+
+export const researchKindModule: ProjectKindModule = {
+  kind: RESEARCH_KIND,
+  handlers: [eraseTaskHandler(researchTaskHandler)],
+  parseSpec: researchSpecValidator.parseSpec,
+
   definitionSummary: (definition) => {
     const parsed = parseResearchDefinition(definition)
     return parsed.ok ? parsed.value.spec.brief : definition.title
   },
 
-  view: ({ definition, outcomes }) => {
-    const parsed = definition ? parseResearchDefinition(definition) : undefined
-    return researchProjectView(parsed?.ok ? parsed.value.spec.topics : [], outcomes)
+  view: (input) => {
+    const parsed = input.definition ? parseResearchDefinition(input.definition) : undefined
+    return researchProjectView(
+      parsed?.ok ? parsed.value.spec.topics : [],
+      researchOutcomesOf(input),
+    )
   },
 
-  renderContext: renderResearchContext,
+  renderContext: (input) => renderResearchContext(input.definition, researchOutcomesOf(input)),
 
-  schemas: {
-    spec: researchSpecSchema,
-    outcome: findingsRevisionBodySchema,
-    view: researchProjectViewSchema,
-  },
+  schemas: { spec: researchSpecSchema, view: researchProjectViewSchema },
 }

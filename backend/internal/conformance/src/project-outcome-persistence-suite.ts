@@ -86,6 +86,7 @@ export function defineProjectOutcomePersistenceSuite(
       intent: 'initial',
       schemaVersion: 1,
       taskId: `task-${id}`,
+      taskType: 'research',
       definitionKey: 'acme:vendor',
       definitionVersion: 1,
       artifactRefs: [],
@@ -253,6 +254,7 @@ export function defineProjectOutcomePersistenceSuite(
           intent: 'edit',
           schemaVersion: 3,
           taskId: null,
+          taskType: null,
           definitionKey: null,
           definitionVersion: null,
           artifactRefs: ['art_a', 'art_b'],
@@ -260,6 +262,24 @@ export function defineProjectOutcomePersistenceSuite(
       )
       await repos.records.insertOutcome(row)
       expect(await repos.records.getOutcome(projectId, id)).toEqual(row)
+    })
+
+    it('records the task type whose handler decodes each outcome, on every read', async () => {
+      const repos = makeRepos()
+      const projectId = unique('prj')
+      await repos.records.insertOutcome(outcome(projectId, unique('out'), 1, {}))
+      await repos.records.insertOutcome(
+        outcome(projectId, unique('out'), 2, {}, { taskType: 'acme:decisions' }),
+      )
+      const types = (rows: ProjectOutcomeRow[]) => rows.map((row) => row.taskType)
+      expect(types(await repos.records.listOutcomes(projectId))).toEqual([
+        'research',
+        'acme:decisions',
+      ])
+      expect(types(await repos.records.listOutcomesOfProjects([projectId]))).toEqual([
+        'research',
+        'acme:decisions',
+      ])
     })
 
     it('filters outcomes by stream', async () => {

@@ -7,6 +7,7 @@ import {
   SIMPLE_PIPELINE_ID,
   projectDefinitionContentHash,
   type ProjectKindModule,
+  eraseTaskHandler,
 } from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
 import type { ConformanceHarness } from '../harness.js'
@@ -65,18 +66,23 @@ function vendorDefinition(version: number) {
 
 // The kind's own spec is opaque here: the platform pins whatever the kind's module accepts, and
 // lists a definition by the summary the module writes. Its tasks never run in this suite.
-const vendorStudyModule: ProjectKindModule<unknown> = {
+const vendorStudyModule: ProjectKindModule = {
   kind: 'vendor-study',
-  agentKind: 'vendor-studier',
-  outcomeSchemaVersion: 1,
+  handlers: [
+    eraseTaskHandler<unknown>({
+      taskType: 'acme:vendor-study',
+      agentKind: 'vendor-studier',
+      outcomeSchemaVersion: 1,
+      parseOutcome: (_version, value) => value,
+      planTask: () => ({ intent: 'study', stream: 'main', plan: {} }),
+      brief: () => ({}),
+      mergeCheckpoint: (_earlier, later) => later,
+      finish: ({ reply }) => ({ body: reply, output: '' }),
+      describe: () => '',
+      artifactRefs: () => [],
+    }),
+  ],
   parseSpec: (definition) => ({ ok: true, value: definition.spec }),
-  parseOutcome: (_version, value) => value,
-  planTask: () => ({ intent: 'study', stream: 'main', plan: {} }),
-  brief: () => ({}),
-  mergeCheckpoint: (_earlier, later) => later,
-  finish: ({ reply }) => ({ body: reply, output: '' }),
-  describe: () => '',
-  artifactRefs: () => [],
   definitionSummary: (definition) => (definition.spec as { brief: string }).brief,
 }
 

@@ -18,6 +18,7 @@ const meta = {
   intent: 'initial',
   schemaVersion: 1,
   taskId: 'task_1',
+  taskType: 'research',
   definitionKey: null,
   definitionVersion: null,
   artifactRefs: [],
