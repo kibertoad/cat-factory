@@ -1,9 +1,11 @@
 import type { Meta, StoryObj } from '@storybook/vue3'
 import { listProvisioningLogsContract, type ProvisioningLogEntry } from '@cat-factory/contracts'
-import { screen, userEvent } from 'storybook/test'
+import { expect, screen, userEvent, within } from 'storybook/test'
 import { apiResponse } from '~/stories/api'
 import { STORY_WORKSPACE_ID, storyWorkspacePrefix } from '~/stories/workspace'
 import {
+  accountRunnerPool,
+  inheritedRunnerConnection,
   kubernetesEnvironmentDescriptor,
   kubernetesRunnerConnection,
   kubernetesRunnerDescriptor,
@@ -11,7 +13,8 @@ import {
   runnerPoolConnection,
 } from '~/stories/providers.stories.mocks'
 import { environmentConnectionApi, runnerPoolConnectionApi } from '~/stories/setupApi'
-import { seedWorkspace, withSeed } from '~/stories/withStores'
+import { seedUiMode, seedWorkspace, withSeed } from '~/stories/withStores'
+import { useWorkspaceSettingsStore } from '~/stores/workspaceSettings'
 import ProviderConnectionTab from './ProviderConnectionTab.vue'
 
 // The connect surface for one infrastructure provider: the runner pool that runs agent
@@ -63,6 +66,93 @@ export const ManifestDriven: Story = {
       descriptor: manifestRunnerDescriptor,
       connection: runnerPoolConnection,
     }),
+  },
+}
+
+/** How the Kubernetes backend describes the account's shared cluster, which the board inherits. */
+const inheritedDescriptor = {
+  ...kubernetesRunnerDescriptor(true),
+  label: inheritedRunnerConnection.label,
+  values: {
+    label: 'Acme shared cluster',
+    apiServerUrl: 'https://k8s.shared.acme.dev:6443',
+    namespace: 'cat-factory-shared',
+    image: 'ghcr.io/kibertoad/cat-factory-executor:1.163.4',
+  },
+}
+
+/**
+ * The board has no pool of its own and uses its account's, the Acme shared cluster: the summary
+ * says so and has no remove button, and the form offers a pool of the board's own instead. In
+ * basic mode the opt-out is not offered, because it overrides the account's default.
+ */
+export const InheritedFromAccount: Story = {
+  parameters: {
+    api: runnerPoolConnectionApi({
+      descriptor: inheritedDescriptor,
+      connection: inheritedRunnerConnection,
+      accountPool: accountRunnerPool,
+    }),
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement)
+    await canvas.findByText('Account pool')
+    await expect(canvas.queryByRole('button', { name: 'Stop using the account pool' })).toBeNull()
+  },
+}
+
+/** The same inherited pool in advanced mode: the board can stop using the account's pool. */
+export const InheritedAdvanced: Story = {
+  ...InheritedFromAccount,
+  decorators: [
+    withSeed(() => {
+      seedWorkspace()
+      seedUiMode('advanced')
+    }),
+  ],
+  play: async ({ canvasElement }) => {
+    await within(canvasElement).findByRole('button', { name: 'Stop using the account pool' })
+  },
+}
+
+/**
+ * The board's own cluster, with the account's pool beside it: before removing its own, the admin
+ * chooses whether the board then uses the account's pool. Unticked, it uses none.
+ */
+export const OwnPoolBesideAccount: Story = {
+  parameters: {
+    api: runnerPoolConnectionApi({
+      descriptor: kubernetesRunnerDescriptor(true),
+      connection: kubernetesRunnerConnection,
+      accountPool: accountRunnerPool,
+    }),
+  },
+  play: async ({ canvasElement }) => {
+    await within(canvasElement).findByRole('checkbox', {
+      name: "When I remove this board's pool, use the account pool",
+    })
+  },
+}
+
+/**
+ * The board opted out of its account's pool and has none of its own: it names the account's pool
+ * and offers to use it again, in every mode.
+ */
+export const OptedOutOfAccount: Story = {
+  decorators: [
+    withSeed(() => {
+      seedWorkspace()
+      useWorkspaceSettingsStore().settings.inheritAccountRunnerPool = false
+    }),
+  ],
+  parameters: {
+    api: runnerPoolConnectionApi({
+      descriptor: kubernetesRunnerDescriptor(false),
+      accountPool: accountRunnerPool,
+    }),
+  },
+  play: async ({ canvasElement }) => {
+    await within(canvasElement).findByRole('button', { name: 'Use the account pool' })
   },
 }
 

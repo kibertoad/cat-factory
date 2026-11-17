@@ -32,8 +32,12 @@ export function runnerPoolController(): Hono<AppEnv> {
 
   buildHonoRoute(app, getRunnerPoolConnectionContract, async (c) => {
     const runners = requireRunners(c)
-    const connection = await runners.connectionService.getConnection(param(c, 'workspaceId'))
-    return c.json({ connection }, 200)
+    const workspaceId = param(c, 'workspaceId')
+    const [connection, accountPool] = await Promise.all([
+      runners.connectionService.getConnection(workspaceId),
+      runners.connectionService.getAccountPool(workspaceId),
+    ])
+    return c.json({ connection, accountPool }, 200)
   })
 
   buildHonoRoute(app, registerRunnerPoolContract, async (c) => {
@@ -59,14 +63,14 @@ export function runnerPoolController(): Hono<AppEnv> {
     const runners = requireRunners(c)
     const workspaceId = param(c, 'workspaceId')
     await runners.connectionService.unregister(workspaceId)
-    // The explicit "none" marker: without it the board would fall straight through to its account's
-    // pool. Written through the settings service so the shared settings cache is invalidated. With
-    // no settings module the account tier is not wired either (it reads the same marker).
-    if (!c.req.valid('query').fallBackToAccount) {
-      await c
-        .get('container')
-        .settings?.service.update(workspaceId, { inheritAccountRunnerPool: false })
-    }
+    // The admin's answer to "what runs this board now", written either way: `false` is the explicit
+    // "none" marker, without which the board would fall straight through to its account's pool, and
+    // `true` makes a fall-back hold even for a board that had opted out before it registered its
+    // own pool. Written through the settings service so the shared settings cache is invalidated.
+    // With no settings module the account tier is not wired either (it reads the same marker).
+    await c.get('container').settings?.service.update(workspaceId, {
+      inheritAccountRunnerPool: c.req.valid('query').fallBackToAccount === true,
+    })
     return c.body(null, 204)
   })
 

@@ -2,6 +2,7 @@ import { defineApiContract, noBodyResponse } from '@toad-contracts/valibot'
 import * as v from 'valibot'
 import { connectionTestResultSchema, providerDescriptorSchema } from '../provider-config.js'
 import {
+  accountRunnerPoolSummarySchema,
   registerRunnerPoolSchema,
   runnerPoolConnectionSchema,
   testRunnerPoolConnectionSchema,
@@ -18,6 +19,8 @@ import { errorResponses } from './_shared.js'
 // Response wrapper that exists only inline in the controller today.
 const runnerPoolConnectionViewSchema = v.object({
   connection: v.nullable(runnerPoolConnectionSchema),
+  /** The account's pool, in use or not; null for a board with no account or an account with none. */
+  accountPool: v.nullable(accountRunnerPoolSummarySchema),
 })
 
 export const getRunnerPoolConnectionContract = defineApiContract({
@@ -44,8 +47,9 @@ export const unregisterRunnerPoolContract = defineApiContract({
   method: 'delete',
   pathResolver: () => '/runner-pool/connection',
   // Removing a board's own pool stops the board inheriting its account's pool, unless the admin
-  // asks to fall back (`fallBackToAccount=true`): a deletion must never silently re-route a
-  // board's work to a pool it did not choose. Omitted ⇒ `false`.
+  // asks to fall back (`fallBackToAccount=true`), which turns inheriting back on even for a board
+  // that had opted out: a deletion must never silently re-route a board's work to a pool it did
+  // not choose, nor leave it on none when the admin chose the account's. Omitted ⇒ `false`.
   requestQuerySchema: v.object({ fallBackToAccount: v.optional(booleanQuerySchema) }),
   responsesByStatusCode: { 204: noBodyResponse(), ...errorResponses },
 })

@@ -9,6 +9,7 @@
 // frontend-only below.
 
 export type {
+  AccountRunnerPoolSummary,
   ProviderConfigField,
   ProviderDescriptor,
   ConnectionTestResult,
@@ -58,6 +59,12 @@ export interface ProviderConnection {
    * `RunnerBackendConfig` ({ kind: 'manifest' | 'kubernetes', … }); kept opaque here.
    */
   config?: Record<string, unknown>
+  /**
+   * Runner pool only: whether the pool is the board's own registration or its account's pool,
+   * which the board inherits while it has none of its own. An inherited pool is not the board's to
+   * edit or remove. Absent on an environment connection, which has no account tier.
+   */
+  source?: 'workspace' | 'account'
 }
 
 // The connect form builds the manifest dynamically from a server-provided scaffold

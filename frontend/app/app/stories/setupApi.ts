@@ -15,6 +15,7 @@ import {
   testEnvironmentHandlerContract,
 } from '@cat-factory/contracts'
 import type {
+  AccountRunnerPoolSummary,
   ConnectionTestResult,
   CustomManifestType,
   EnvironmentConnection,
@@ -49,19 +50,20 @@ export function providerProbeApi({
 
 /**
  * The runner pool's two reads: how its backend describes itself and the board's stored
- * connection, or none. The describe answer is the same for every backend kind the panel asks
- * about.
+ * connection, or none, with its account's pool, or none. The describe answer is the same for every
+ * backend kind the panel asks about.
  */
 export function runnerPoolConnectionApi(seed: {
   descriptor: ProviderDescriptor
   connection?: RunnerPoolConnection | null
+  accountPool?: AccountRunnerPoolSummary | null
 }): HttpHandler[] {
   const pathPrefix = storyWorkspacePrefix
   return [
     apiResponse(describeRunnerPoolProviderContract, { pathPrefix, body: seed.descriptor }),
     apiResponse(getRunnerPoolConnectionContract, {
       pathPrefix,
-      body: { connection: seed.connection ?? null },
+      body: { connection: seed.connection ?? null, accountPool: seed.accountPool ?? null },
     }),
   ]
 }

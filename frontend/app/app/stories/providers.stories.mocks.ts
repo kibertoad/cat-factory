@@ -3,6 +3,7 @@
 // overrides for the variant it shows (an expired subscription, a blocked runner URL, an
 // exceeded budget).
 import type {
+  AccountRunnerPoolSummary,
   ApiKey,
   ConnectionTestResult,
   EnvironmentConnection,
@@ -38,6 +39,7 @@ export const runnerPoolConnection: RunnerPoolConnection = {
   baseUrl: 'https://runners.acme.dev',
   connectedAt: Date.UTC(2026, 8, 14),
   secretKeys: ['apiToken'],
+  source: 'workspace',
 }
 
 /**
@@ -336,6 +338,35 @@ export const kubernetesRunnerConnection: RunnerPoolConnection = {
       image: 'ghcr.io/kibertoad/cat-factory-executor:1.163.4',
     },
   },
+  source: 'workspace',
+}
+
+/**
+ * The pool the deployment declared for the board's account: the Acme shared cluster. Every board
+ * of the account with no pool of its own uses it, unless the board opted out.
+ */
+export const accountRunnerPool: AccountRunnerPoolSummary = {
+  kind: 'kubernetes',
+  providerId: 'kubernetes',
+  label: 'Acme shared cluster',
+  baseUrl: 'https://k8s.shared.acme.dev:6443',
+}
+
+/** The account's pool as a board with none of its own reads it: inherited. */
+export const inheritedRunnerConnection: RunnerPoolConnection = {
+  ...accountRunnerPool,
+  connectedAt: Date.UTC(2026, 9, 16),
+  secretKeys: ['apiToken'],
+  config: {
+    kind: 'kubernetes',
+    kubernetes: {
+      label: 'Acme shared cluster',
+      apiServerUrl: 'https://k8s.shared.acme.dev:6443',
+      namespace: 'cat-factory-shared',
+      image: 'ghcr.io/kibertoad/cat-factory-executor:1.163.4',
+    },
+  },
+  source: 'account',
 }
 
 /**
