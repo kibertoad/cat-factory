@@ -33,14 +33,6 @@ export type BoardActivity = {
   subscribe: (onPulse: () => void) => () => void
   /** Fire the pulse from a signal the observers above cannot see. */
   pulse: () => void
-  /**
-   * Where the pointer last was over the canvas (viewport coordinates), or null once it left.
-   *
-   * Owned here because the pulse already listens for the same gestures: a driver that wants the
-   * position registered a SECOND `pointermove` listener on the same element to learn what this
-   * one had just seen. Read inside a measurement pass, never subscribed to.
-   */
-  pointer: () => { x: number; y: number } | null
 }
 
 const boardActivityKey: InjectionKey<BoardActivity> = Symbol('boardActivity')
@@ -66,35 +58,12 @@ export function provideBoardActivity(container: Ref<HTMLElement | null>): BoardA
     },
   })
 
-  let pointer: { x: number; y: number } | null = null
-
-  /**
-   * Track the pointer and pulse, in that order, off the SAME listener.
-   *
-   * `pointerleave` does not bubble, but a CAPTURE-phase listener sees one fired at any element
-   * below it, and the pointer moving from a card onto the canvas around it is exactly that
-   * event. So only the canvas's OWN leave clears the position; treating a descendant's as "the
-   * pointer is gone" would collapse the hovered card the moment the pointer crossed one of its
-   * inner elements. That check is on the TARGET, so it reads the same from the window as it did
-   * from the canvas.
-   */
-  const onGesture = (event: Event) => {
-    if (event.type === 'pointerleave') {
-      if (event.target === container.value) pointer = null
-    } else if (event.type === 'pointermove' || event.type === 'pointerdown') {
-      const { clientX, clientY } = event as PointerEvent
-      pointer = { x: clientX, y: clientY }
-    }
-    pulse()
-  }
-
   const activity: BoardActivity = {
     subscribe(onPulse) {
       subscribers.add(onPulse)
       return () => subscribers.delete(onPulse)
     },
     pulse,
-    pointer: () => pointer,
   }
   provide(boardActivityKey, activity)
 
@@ -133,7 +102,7 @@ export function provideBoardActivity(container: Ref<HTMLElement | null>): BoardA
       attributeFilter: ['style', 'class'],
     })
     resizes.observe(el)
-    for (const type of gestures) window.addEventListener(type, onGesture, gestureOptions)
+    for (const type of gestures) window.addEventListener(type, pulse, gestureOptions)
     window.addEventListener('resize', pulse)
   })
 
@@ -141,7 +110,7 @@ export function provideBoardActivity(container: Ref<HTMLElement | null>): BoardA
     mutations.disconnect()
     resizes.disconnect()
     renderWakes.cancel()
-    for (const type of gestures) window.removeEventListener(type, onGesture, gestureOptions)
+    for (const type of gestures) window.removeEventListener(type, pulse, gestureOptions)
     window.removeEventListener('resize', pulse)
     subscribers.clear()
   })

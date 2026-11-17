@@ -14,11 +14,11 @@ import { prReviewPhase } from '~/utils/prReviewProgress'
 import PrReviewPhaseBadge from '~/components/prReview/PrReviewPhaseBadge.vue'
 import SectionLabel from '~/components/common/SectionLabel.vue'
 
-// Drill-down inside a task card: the task's build-pipeline steps appear on hover (at any
-// zoom level) or once the `steps` zoom band is reached, and one band deeper (`subtasks`)
-// each step's live todo breakdown expands — done / in-progress / pending — exactly the way
-// a zoomed-in bootstrap card reads. Renders nothing until the task has a run and the card
-// is expanded, so it's safe to mount on every task card.
+// Drill-down inside a task card: the task's build-pipeline steps appear once the `steps` zoom
+// band is reached, and one band deeper (`subtasks`) each step's live todo breakdown expands —
+// done / in-progress / pending — exactly the way a zoomed-in bootstrap card reads. Renders
+// nothing until the task has a run and the card is expanded, so it's safe to mount on every
+// task card. Shallower than that, the card shows the step a run is on (`TaskProgressRow`).
 const props = defineProps<{ taskId: string }>()
 
 const execution = useExecutionStore()
@@ -42,9 +42,9 @@ const runFailed = computed(() => instance.value?.status === 'failed')
 // (spinning "Running") rather than a frozen subtask list.
 const companionByStep = computed(() => steps.value.map((s) => gateCompanionFor(s, runFailed.value)))
 
-// Expand the pipeline list when the board driver says so: this card is hovered (at any
-// zoom level), or the deep zoom bands granted it — on-screen, and the centre-most of any
-// cards that would otherwise overlap. See stores/taskExpansion.ts.
+// Expand the pipeline list when the board driver says so: the deep zoom bands granted it —
+// on-screen, and the centre-most of any cards that would otherwise overlap. See
+// stores/taskExpansion.ts.
 const showSteps = computed(() => steps.value.length > 0 && expansion.isExpanded(props.taskId))
 const showItems = computed(() => lodAtLeast(lod.value, 'subtasks'))
 
@@ -101,7 +101,11 @@ const ITEM_ICON: Record<string, string> = {
 </script>
 
 <template>
-  <div v-if="showSteps" class="mt-2 space-y-1 border-t border-default pt-2">
+  <div
+    v-if="showSteps"
+    class="mt-2 space-y-1 border-t border-default pt-2"
+    data-testid="task-pipeline-mini"
+  >
     <SectionLabel class="flex items-center gap-1">
       <UIcon name="i-lucide-workflow" class="h-2.5 w-2.5" />
       {{ t('board.task.buildSteps') }}

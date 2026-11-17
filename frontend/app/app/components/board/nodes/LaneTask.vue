@@ -26,8 +26,9 @@ const { draggingId, startDrag } = useBlockDrag()
 const task = computed(() => board.getBlock(props.taskId))
 const dragging = computed(() => draggingId.value === props.taskId)
 
-// An expanded pipeline overlays its neighbours, so it must stack above the compact cards
-// around it. Reads the same predicate the pipeline itself renders on.
+// A card is an in-flow item in its lane, so an expanded pipeline pushes the cards below it down
+// rather than overlaying them. The raised z-index only lifts what the expanded card paints past
+// its own box (its focus ring, the drag handle). Reads the same predicate the pipeline renders on.
 const expanded = computed(() => expansion.isExpanded(props.taskId))
 
 function onHandle(e: PointerEvent) {

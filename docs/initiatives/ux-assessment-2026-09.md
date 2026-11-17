@@ -189,11 +189,10 @@ seen on screen; line numbers were not pinned because #2246 will move most of the
   below it). Expanding pushes the row down by the step list's height; when that happens between
   `pointerdown` and `pointerup`, the two land on different elements and the browser fires `click`
   on their common ancestor, the card root, whose handler is `selectTask`. So the first click
-  selects the task; the second, on a now-stable card, acts. Fix: render the mini BELOW the action
-  row (or overlay it) so the row's position is invariant; the narrow alternative is to freeze
-  `setHovered` while a pointer gesture is in flight. Pin with a component test that moves the
-  pointer onto a compact card's button and clicks once, asserting the handler fired and the card
-  was not merely selected.
+  selects the task; the second, on a now-stable card, acts. **Fix (#2312):** hovering expands
+  nothing. Each in-flight card shows an always-on progress row (the current step, its position, a
+  segment per step) in place of the bar, and the step list appears only past the `steps` zoom band.
+  Pinned by `card-action-geometry.spec.ts`. See decision 4 for the two fixes that were withdrawn.
 - **UXA-02. The fixed toast and tutorial-nudge region covers the inspector footer.** At 1440×900
   with the inspector open, "New walkthrough available" sits over Run / Focus / Delete task. The
   browser refused the click because another element covered the point. Nielsen #7 (efficiency) and
@@ -469,7 +468,13 @@ Answered by the maintainer in the review of PR #2254 (2026-09-20, follow-ups 202
    them. Timing: today's layout stays and a hover delay (about 250 ms) precedes the expansion; a
    quick click lands, but a person who pauses on the card still sees the row jump before they click,
    and the zoom-band expansion gets the same lag. Geometry removes the race; timing narrows it.
-   The maintainer picked geometry.
+   The maintainer picked geometry. **Redirected in #2312:** the first geometry fix (the steps below
+   the row, then a freeze on expansion changes while a pointer is pressed) left the sibling case: a
+   lane card is in flow, so moving from an expanded card onto the next collapses the first and lifts
+   the second as the pointer arrives, before any press. An overlay, a hover popover and a click to
+   expand were prototyped, and each kept a hover or lost the at-a-glance step. The maintainer picked
+   the always-on progress row and asked to cut information hard, adding back only what proves to be
+   missing. Do not re-propose a hover expansion or a press freeze.
 5. **Full-audit passes (axe, keyboard-only, RTL and pseudo-locale): own tracker**, after
    UXA-01..06 land.
 
@@ -479,7 +484,7 @@ Confidence: **high** means the screenshot shows it and the mechanism was traced 
 
 | Id                                                       | Severity | Confidence                | Status                         | PR                                                          |
 | -------------------------------------------------------- | -------- | ------------------------- | ------------------------------ | ----------------------------------------------------------- |
-| UXA-01 lost first click on card actions                  | Major    | high: seen, code-traced   | todo (geometry, #2254)         |                                                             |
+| UXA-01 lost first click on card actions                  | Major    | high: seen, code-traced   | in review                      | [#2312](https://github.com/kibertoad/cat-factory/pull/2312) |
 | UXA-02 toast region covers inspector footer              | Major    | high: seen, code-traced   | todo                           |                                                             |
 | UXA-03 startup advisories for every role                 | Major    | medium: seen once         | todo (fix agreed, #2254)       |                                                             |
 | UXA-04 agent-config descriptors in basic tier and intake | Major    | high: seen, code-traced   | todo                           |                                                             |
