@@ -169,6 +169,7 @@ export const BUILTIN_TASK_TYPES = [
   'ralph',
   'media',
   'research',
+  'decisions',
   'recurring',
 ] as const
 /**
@@ -187,6 +188,7 @@ export const BUILTIN_CREATE_TASK_TYPES = [
   'ralph',
   'media',
   'research',
+  'decisions',
 ] as const
 
 /**
@@ -235,11 +237,12 @@ export function taskTypeAttachesPullRequest(taskType: string | null | undefined)
 
 /**
  * Whether a task of this type belongs under a PROJECT and is refused under a service. A `research`
- * task answers a project's pinned research definition and writes the project's findings, so a
- * service has nothing for it to answer and nowhere for it to write.
+ * task answers a project's pinned research definition and writes the project's findings, and a
+ * `decisions` task settles a decision register on the project, so a service has nothing for either
+ * to answer and nowhere for it to write.
  */
 export function taskTypeRequiresProject(taskType: string | null | undefined): boolean {
-  return taskType === 'research'
+  return taskType === 'research' || taskType === 'decisions'
 }
 
 /** The most ad-hoc questions one research task may add beside its definition's. */

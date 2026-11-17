@@ -13,7 +13,7 @@ import type {
 } from '@cat-factory/kernel'
 import type { AgentExecutor } from '@cat-factory/kernel'
 import { CapabilityCredentialMissingError } from '@cat-factory/kernel'
-import type { ResearchBrief } from '@cat-factory/contracts'
+import type { DecisionBrief, ResearchBrief } from '@cat-factory/contracts'
 import {
   type AgentKindRegistry,
   defaultAgentKindRegistry,
@@ -431,6 +431,31 @@ export class FakeAgentExecutor implements AgentExecutor {
     }
   }
 
+  /**
+   * A decision stage's register: one item per question its stage requires, each recommending its
+   * first of two options, plus a note of how many upstream results the run was handed.
+   */
+  private runDecider(context: AgentRunContext): AgentRunResult {
+    // The decisions handler built this brief for its agent kind.
+    const brief = context.project?.brief as DecisionBrief | undefined
+    const upstream = context.project?.upstream.length ?? 0
+    return {
+      output: '[project-decider] proposed',
+      model: 'fake',
+      custom: {
+        summary: `Proposed from ${upstream} upstream result(s).`,
+        items: (brief?.questions ?? []).map((q) => ({
+          id: q.id,
+          question: q.question,
+          options: ['yes', 'no'],
+          recommendation: 'yes',
+          rationale: '[fake] the findings point this way',
+          evidence: [],
+        })),
+      },
+    }
+  }
+
   // Matches the `model: 'fake'` every result carries, so the engine's up-front
   // model preview (shown on the first "spinning up container" / querying emit)
   // resolves to the same value the result later confirms.
@@ -684,6 +709,7 @@ export class FakeAgentExecutor implements AgentExecutor {
     }
 
     if (context.agentKind === 'project-researcher') return this.runResearcher(context)
+    if (context.agentKind === 'project-decider') return this.runDecider(context)
 
     // The `task-estimator` step emits a JSON triage the engine parses + persists onto
     // `block.estimate` (the new column on both stores). Deterministic so the conformance

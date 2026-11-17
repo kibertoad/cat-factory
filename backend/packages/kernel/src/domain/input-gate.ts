@@ -242,9 +242,10 @@ const CODEBASE_INPUT_TASK_TYPES = new Set(['bug-fishing'])
 /**
  * Task types whose brief is a PINNED DEFINITION rather than the task's description. A research
  * task answers its project's research definition: the questions, the targets and the vendor's
- * name all live there, and the task adds at most a mode and a few questions of its own.
+ * name all live there, and the task adds at most a mode and a few questions of its own. A
+ * decisions task's brief is its stage's config.
  */
-const DEFINITION_INPUT_TASK_TYPES = new Set(['research'])
+const DEFINITION_INPUT_TASK_TYPES = new Set(['research', 'decisions'])
 
 /**
  * Whether this block's description is the authored statement of work the gate is entitled to

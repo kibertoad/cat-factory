@@ -1075,6 +1075,12 @@ export const TASK_TYPE_META: Record<string, TaskTypeMeta> = {
     color: 'var(--app-hue-violet)',
     labelKey: 'board.addTask.types.research',
   },
+  decisions: {
+    taskType: 'decisions',
+    icon: 'i-lucide-list-checks',
+    color: 'var(--app-hue-cyan)',
+    labelKey: 'board.addTask.types.decisions',
+  },
   recurring: {
     taskType: 'recurring',
     icon: 'i-lucide-repeat',

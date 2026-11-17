@@ -3181,7 +3181,8 @@
         "ralph": "Ciclo Ralph",
         "bugFishing": "Pesca di bug",
         "resolveConflicts": "Risolvi conflitti",
-        "research": "Ricerca"
+        "research": "Ricerca",
+        "decisions": "Decisioni"
       },
       "recurringWithFrame": "Un'attività ricorrente esegue una pipeline a cadenza regolare. Continua per impostare la pianificazione e il prompt.",
       "recurringNoFrame": "Un'attività ricorrente deve risiedere su un servizio. Aggiungila da un frame di servizio (o da un modulo al suo interno).",
@@ -4941,7 +4942,8 @@
         "planning": "Pianificazione",
         "media": "Media",
         "maintenance": "Manutenzione PR",
-        "projectResearch": "Ricerca di progetto"
+        "projectResearch": "Ricerca di progetto",
+        "projectDecisions": "Decisioni del progetto"
       },
       "strategyOption": {
         "specialist-panel": "Panel di specialisti",

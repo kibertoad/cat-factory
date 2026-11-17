@@ -273,7 +273,8 @@
         "ralph": "Ralph loop",
         "bugFishing": "Bug fishing",
         "resolveConflicts": "Resolve conflicts",
-        "research": "Research"
+        "research": "Research",
+        "decisions": "Decisions"
       },
       "recurringWithFrame": "A recurring task runs a pipeline on a cadence. Continue to set the schedule + prompt.",
       "recurringNoFrame": "A recurring task must live on a service. Add it from a service frame (or a module inside one).",
@@ -5746,7 +5747,8 @@
         "planning": "Planning",
         "media": "Media",
         "maintenance": "PR maintenance",
-        "projectResearch": "Project research"
+        "projectResearch": "Project research",
+        "projectDecisions": "Project decisions"
       },
       "strategyOption": {
         "specialist-panel": "Specialist panel",

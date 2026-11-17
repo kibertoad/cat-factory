@@ -237,7 +237,8 @@
         "ralph": "Ralph döngüsü",
         "bugFishing": "Hata avı",
         "resolveConflicts": "Çakışmaları çöz",
-        "research": "Araştırma"
+        "research": "Araştırma",
+        "decisions": "Kararlar"
       },
       "recurringWithFrame": "Yinelenen bir görev, bir işlem hattını belirli bir aralıkta çalıştırır. Programı ve istemi ayarlamak için devam edin.",
       "recurringNoFrame": "Yinelenen bir görev bir serviste bulunmalıdır. Bir servis çerçevesinden (veya içindeki bir modülden) ekleyin.",
@@ -5546,7 +5547,8 @@
         "planning": "Planlama",
         "media": "Medya",
         "maintenance": "PR bakımı",
-        "projectResearch": "Proje araştırması"
+        "projectResearch": "Proje araştırması",
+        "projectDecisions": "Proje kararları"
       },
       "strategyOption": {
         "specialist-panel": "Uzman paneli",

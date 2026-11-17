@@ -622,6 +622,18 @@ function buildOtherDeliveryPipelines(): Pipeline[] {
         "Answer a research project's questions against the vendor it describes, through a browser and the vendor's API, and record the findings on the project.",
       steps: ['project-researcher'],
     }),
+    // The DECISION-REGISTER run: one `project-decider` step that proposes a project stage's
+    // decisions from what earlier stages found, for a person to settle at the stage's checkpoint.
+    // No repository to write to, so no tail.
+    definePipeline({
+      id: 'pl_decisions',
+      name: 'Project decisions',
+      purpose: 'project-decisions',
+      version: 1,
+      description:
+        'Propose the decisions a project stage asks for, each with options, a recommended default and the evidence behind it, for a person to settle.',
+      steps: ['project-decider'],
+    }),
     // The "Ralph loop": a single persistent, retry-until-done coding step. Each iteration is
     // a fresh-context container run that works the task spec, after which the harness runs the
     // task's configured programmatic validation command (exit 0 = done) and the engine loops
@@ -1341,7 +1353,7 @@ export const MEDIA_PIPELINE_ID = 'pl_media'
 /**
  * The pipeline a task of the given task type should default to when the creator pins none.
  * `document` → `pl_document`, `spike` → `pl_spike`, `review` → `pl_review`, `media` →
- * `pl_media`, `bug-fishing` → `pl_bug_fishing`, `research` → `pl_research` and `resolve-conflicts` → `pl_resolve_conflicts`
+ * `pl_media`, `bug-fishing` → `pl_bug_fishing`, `research` → `pl_research`, `decisions` → `pl_decisions` and `resolve-conflicts` → `pl_resolve_conflicts`
  * (the full-build `pl_full` is wrong for all six: a document has no code, a spike has no code, a
  * review opens no PR, a media task's deliverable is a stored binary, an expedition changes
  * nothing at all, and a conflict resolution works on a pull request somebody else opened); every
@@ -1362,6 +1374,7 @@ export function defaultPipelineIdForTaskType(
   if (taskType === 'media') return MEDIA_PIPELINE_ID
   if (taskType === 'bug-fishing') return BUG_FISHING_PIPELINE_ID
   if (taskType === 'research') return RESEARCH_PIPELINE_ID
+  if (taskType === 'decisions') return DECISIONS_PIPELINE_ID
   if (taskType && taskTypeRegistry) return taskTypeRegistry.defaultPipelineId(taskType)
   return undefined
 }
@@ -1400,6 +1413,9 @@ export const TEST_VERIFIED_BUGFIX_PIPELINE_ID = 'pl_bugfix_tested'
 export const BUG_FISHING_PIPELINE_ID = 'pl_bug_fishing'
 /** Pipeline id of the research-project run (one `project-researcher` step). */
 export const RESEARCH_PIPELINE_ID = 'pl_research'
+
+/** Pipeline id of a decision stage's run (one `project-decider` step). */
+export const DECISIONS_PIPELINE_ID = 'pl_decisions'
 
 // ---- The build ladder's rungs ---------------------------------------------------------------
 // The axis is how much design a task gets. `pl_build` is the DEFAULT and must stay first in

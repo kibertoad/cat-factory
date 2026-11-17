@@ -59,6 +59,11 @@ export function useTaskTypeOffer(container: Ref<Block | undefined>, taskType: Re
       { value: 'ralph', label: t('board.addTask.types.ralph'), icon: 'i-lucide-infinity' },
       { value: 'media', label: t('board.addTask.types.media'), icon: 'i-lucide-image-plus' },
       { value: 'research', label: t('board.addTask.types.research'), icon: 'i-lucide-telescope' },
+      {
+        value: 'decisions',
+        label: t('board.addTask.types.decisions'),
+        icon: 'i-lucide-list-checks',
+      },
       { value: 'recurring', label: t('board.addTask.types.recurring'), icon: 'i-lucide-repeat' },
     ]
     const set = offered.value

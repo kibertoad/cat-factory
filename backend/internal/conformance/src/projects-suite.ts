@@ -2,6 +2,7 @@ import type { ConformanceHarness } from './harness.js'
 import { defineCoreProjectsConformance } from './suites/core-projects.js'
 import { defineCoreResearchRunsConformance } from './suites/core-research-runs.js'
 import { defineCoreProjectStagesConformance } from './suites/core-project-stages.js'
+import { defineCoreProjectDecisionsConformance } from './suites/core-project-decisions.js'
 import { defineCoreProjectViewsConformance } from './suites/core-project-views.js'
 import { defineCoreTaskProjectLinksConformance } from './suites/core-task-project-links.js'
 
@@ -16,6 +17,7 @@ export function defineProjectsSuite(harness: ConformanceHarness): void {
   defineCoreProjectsConformance(harness)
   defineCoreResearchRunsConformance(harness)
   defineCoreProjectStagesConformance(harness)
+  defineCoreProjectDecisionsConformance(harness)
   defineCoreProjectViewsConformance(harness)
   defineCoreTaskProjectLinksConformance(harness)
 }
