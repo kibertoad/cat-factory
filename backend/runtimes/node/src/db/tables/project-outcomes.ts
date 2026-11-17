@@ -80,6 +80,8 @@ export const projectStageTasks = pgTable(
     project_id: text('project_id').notNull(),
     stage_id: text('stage_id').notNull(),
     created_at: bigint('created_at', { mode: 'number' }).notNull(),
+    /** JSON: the accepted result of each upstream stage when the task was created. */
+    basis: text('basis').notNull(),
     recorded_at: bigint('recorded_at', { mode: 'number' }),
     cleared_at: bigint('cleared_at', { mode: 'number' }),
     cleared_by: text('cleared_by'),

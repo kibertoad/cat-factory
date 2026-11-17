@@ -19,7 +19,10 @@ import type { ProjectKindModule } from './project-kind-module.js'
  * refuses rather than running a definition the project never agreed to.
  */
 export function projectDefinitionContentHash(definition: ProjectDefinition): Promise<string> {
-  return sha256HexOfString(canonicalJson(definition))
+  // A definition that declares no stages hashes without the key, so declaring none is the same
+  // content as a definition whose envelope has no `stages` at all.
+  const { stages, ...rest } = definition
+  return sha256HexOfString(canonicalJson(stages.length ? definition : rest))
 }
 
 /** JSON with object keys sorted at every depth, so equal content always hashes equal. */

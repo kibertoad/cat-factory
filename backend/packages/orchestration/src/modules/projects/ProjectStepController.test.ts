@@ -466,6 +466,7 @@ describe('ProjectStepController with a staged project', () => {
     projectId: 'prj_1',
     stageId,
     createdAt: 1,
+    basis: {},
     recordedAt: null,
     clearedAt: null,
     clearedBy: null,
@@ -494,6 +495,19 @@ describe('ProjectStepController with a staged project', () => {
     await expect(ctrl.prepare({ ...researching }, task)).rejects.toMatchObject({
       details: { reason: 'project_task_has_no_stage' },
     })
+  })
+
+  it('frees its stage when a redispatch finds the outcome landed but the stage was never told', async () => {
+    const { ctrl, task, stageTasks } = harness({
+      kind: 'research',
+      stages,
+      stageTasks: [bound('discover')],
+      rows: [outcomeRow('task_2', 1, body({ scheme: 'answered' }), 'discovery')],
+    })
+    await expect(ctrl.prepare({ ...researching }, task)).rejects.toMatchObject({
+      details: { reason: 'project_task_already_recorded' },
+    })
+    expect(stageTasks[0]!.recordedAt).toBe(5)
   })
 
   it("frees its stage once the outcome is recorded, on the stage's stream", async () => {

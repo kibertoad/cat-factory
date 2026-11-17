@@ -77,6 +77,7 @@ describe('deriveProjectStageStates', () => {
     projectId: 'p1',
     stageId,
     createdAt: 1,
+    basis: {},
     recordedAt: null,
     clearedAt: null,
     clearedBy: null,
@@ -137,7 +138,7 @@ describe('deriveProjectStageStates', () => {
     ])
   })
 
-  it('ignores a deleted task and an outcome written to the stream by no stage task', () => {
+  it('ignores a deleted task with no result and an outcome no stage task wrote', () => {
     const states = deriveProjectStageStates({
       stages,
       stageTasks: [task('gone', 'discover')],
@@ -147,25 +148,43 @@ describe('deriveProjectStageStates', () => {
     expect(states[0]).toMatchObject({ status: 'ready', activeTaskId: null, latest: null })
   })
 
-  it('marks a downstream result stale once an upstream result newer than it is accepted', () => {
-    const stageTasks = [
-      task('t1', 'discover', { clearedAt: 2, clearedBy: null }),
-      task('t2', 'decide'),
-      task('t3', 'discover', { createdAt: 3, clearedAt: 4, clearedBy: null }),
+  it('marks a downstream result stale once its upstream accepts a result it did not start from', () => {
+    const outcomes = [
+      outcome('a', 5, 'discover'),
+      outcome('b', 6, 'discover'),
+      outcome('d', 7, 'decide'),
     ]
+    const live = new Set(['a', 'b', 'd'])
+    const stageTasks = (bAccepted: boolean) => [
+      task('a', 'discover', { clearedAt: 1 }),
+      task('b', 'discover', { createdAt: 2, clearedAt: bAccepted ? 9 : null }),
+      // Started while `a` was discover's accepted result, recorded after `b` was.
+      task('d', 'decide', { createdAt: 3, basis: { discover: 'pout_a' } }),
+    ]
+    const decide = (bAccepted: boolean) =>
+      deriveProjectStageStates({
+        stages,
+        stageTasks: stageTasks(bAccepted),
+        liveTaskIds: live,
+        outcomes,
+      })[1]!
+    expect(decide(false)).toMatchObject({ status: 'done', stale: false })
+    expect(decide(true)).toMatchObject({ status: 'done', stale: true })
+  })
+
+  it("still counts a deleted task's recorded result, and only stops counting it as running", () => {
     const states = deriveProjectStageStates({
       stages,
-      stageTasks,
-      liveTaskIds: new Set(['t1', 't2', 't3']),
-      outcomes: [
-        outcome('t1', 1, 'discover'),
-        outcome('t2', 2, 'decide'),
-        outcome('t3', 3, 'discover'),
+      stageTasks: [
+        task('t1', 'discover', { clearedAt: 2 }),
+        task('t2', 'discover', { createdAt: 3 }),
       ],
+      liveTaskIds: new Set(),
+      outcomes: [outcome('t1', 1, 'discover')],
     })
-    expect(states.map((s) => [s.stageId, s.status, s.stale, s.accepted?.seq])).toEqual([
-      ['discover', 'done', false, 3],
-      ['decide', 'done', true, 2],
+    expect(states.map((s) => [s.stageId, s.status, s.activeTaskId, s.accepted?.seq])).toEqual([
+      ['discover', 'done', null, 1],
+      ['decide', 'ready', null, undefined],
     ])
   })
 

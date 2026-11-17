@@ -6,6 +6,7 @@ import {
 } from './project-definition-registry.js'
 import { type ProjectKindModule, eraseTaskHandler } from './project-kind-module.js'
 import { researchKindModule } from './research-kind.js'
+import { sha256HexOfString } from '../shared/sha256.logic.js'
 
 function research(version: number, question = 'Which auth scheme?'): ResearchDefinitionInput {
   return {
@@ -159,5 +160,27 @@ describe('projectDefinitionContentHash', () => {
     expect(await projectDefinitionContentHash(other.get('research', 'acme:vendor', 1)!)).not.toBe(
       await projectDefinitionContentHash(stored),
     )
+  })
+
+  it('hashes a definition with no stages as the same content as one with no stages key', async () => {
+    const defs = registry()
+    defs.register(research(1))
+    const stored = defs.get('research', 'acme:vendor', 1)!
+    const { stages: _stages, ...withoutStages } = stored
+    const sorted = (value: unknown): unknown =>
+      Array.isArray(value)
+        ? value.map(sorted)
+        : value && typeof value === 'object'
+          ? Object.fromEntries(
+              Object.keys(value)
+                .sort()
+                .map((k) => [k, sorted((value as Record<string, unknown>)[k])]),
+            )
+          : value
+    // The hash a pin taken before definitions carried stages recorded.
+    const earlier = await sha256HexOfString(JSON.stringify(sorted(withoutStages)))
+    expect(await projectDefinitionContentHash(stored)).toBe(earlier)
+    const staged = { ...stored, stages: [{ ...stored.stages[0], id: 'a' }] } as typeof stored
+    expect(await projectDefinitionContentHash(staged)).not.toBe(earlier)
   })
 })

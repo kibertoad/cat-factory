@@ -27,6 +27,7 @@ import {
 } from '@cat-factory/kernel'
 import type { ProjectOutcomeStore } from './ProjectOutcomeStore.js'
 import { decodeOutcome, outcomeTaskType } from './outcomeDecoding.js'
+import { resolvePinnedDefinition } from './pinnedDefinition.js'
 
 // ---------------------------------------------------------------------------
 // The engine half of a project task's run, for every project kind: what its step is asked when it
@@ -94,6 +95,15 @@ export class ProjectStepController {
       })
     }
     if (task.outcomes.some((o) => o.taskId === block.id)) {
+      // The outcome landed but the stage was never told (the process died between the two
+      // writes): free the stage now, or its slot stays held by a task that already finished.
+      if (task.stage) {
+        await this.deps.records.markStageTaskRecorded(
+          task.project.id,
+          block.id,
+          this.deps.clock.now(),
+        )
+      }
       throw new ValidationError('This task already recorded its outcome on the project', {
         reason: 'project_task_already_recorded',
       })
@@ -290,7 +300,9 @@ export class ProjectStepController {
       )
     }
     const pin = await this.deps.records.getPin(project.id)
-    const definition = pin ? await this.pinnedDefinition(project, pin) : null
+    const definition = pin
+      ? await resolvePinnedDefinition(this.deps.definitions, project, pin)
+      : null
     // Only this handler's outcomes are read and decoded: another task type's body is never read,
     // so one that is unreadable just now cannot stop this task.
     const stored = await this.deps.outcomes.list(
@@ -305,34 +317,6 @@ export class ProjectStepController {
       inputs: pin?.inputs ?? {},
       outcomes: stored.map((outcome) => decodeOutcome(this.deps.modules, project.kind, outcome)),
     }
-  }
-
-  /** The definition a pin names, refused when it is gone or a registered one changed. */
-  private async pinnedDefinition(
-    project: Project,
-    pin: NonNullable<Awaited<ReturnType<ProjectRecordRepository['getPin']>>>,
-  ): Promise<ProjectDefinition> {
-    const resolved = await this.deps.definitions.get(
-      project.accountId ?? '',
-      project.kind,
-      pin.definitionKey,
-      pin.definitionVersion,
-    )
-    if (!resolved) {
-      throw new ValidationError('The pinned definition no longer exists', {
-        reason: 'project_definition_not_found',
-        kind: project.kind,
-        definitionKey: pin.definitionKey,
-        definitionVersion: pin.definitionVersion,
-      })
-    }
-    if (resolved.contentHash !== pin.definitionHash) {
-      throw new ValidationError('The registered definition changed since the project pinned it', {
-        reason: 'project_definition_changed',
-        definitionKey: pin.definitionKey,
-      })
-    }
-    return resolved.definition
   }
 
   private async definitionOf(state: ProjectStepState): Promise<ProjectDefinition | undefined> {

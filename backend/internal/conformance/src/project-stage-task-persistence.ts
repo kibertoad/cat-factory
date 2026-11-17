@@ -13,6 +13,7 @@ export function stageTaskRecord(projectId: string, taskId: string, stageId: stri
     projectId,
     stageId,
     createdAt,
+    basis: {},
     recordedAt: null,
     clearedAt: null,
     clearedBy: null,
@@ -61,7 +62,11 @@ export function defineStageTaskPersistence(
     const repos = makeRepos()
     const projectId = unique('prj')
     const [recorded, open] = [unique('task'), unique('task')]
-    await repos.records.insertStageTask(stageTaskRecord(projectId, recorded, 'discover'))
+    const basis = { scout: 'pout_scout', map: null }
+    await repos.records.insertStageTask({
+      ...stageTaskRecord(projectId, recorded, 'discover'),
+      basis,
+    })
     await repos.records.markStageTaskRecorded(projectId, recorded, 5)
     await repos.records.insertStageTask(stageTaskRecord(projectId, open, 'discover', 2))
     expect(await repos.records.clearStageCheckpoint(projectId, open, 7, 'usr_1')).toBe(false)
@@ -70,6 +75,7 @@ export function defineStageTaskPersistence(
     expect(await repos.records.clearStageCheckpoint(projectId, recorded, 8, null)).toBe(false)
     expect((await repos.records.listStageTasks(projectId))[0]).toEqual({
       ...stageTaskRecord(projectId, recorded, 'discover'),
+      basis,
       recordedAt: 5,
       clearedAt: 7,
       clearedBy: 'usr_1',

@@ -1,7 +1,7 @@
 {
   "version": "8",
   "dialect": "postgres",
-  "id": "8fa2d62f-38ff-4129-b26e-790330743a3c",
+  "id": "cbab1260-bc7e-495c-8251-a54f31cda671",
   "prevIds": [
     "48c35132-f83a-4f94-beec-f4f377c1a94c"
   ],
@@ -12424,6 +12424,19 @@
       "generated": null,
       "identity": null,
       "name": "created_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "project_stage_tasks"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "basis",
       "entityType": "columns",
       "schema": "public",
       "table": "project_stage_tasks"

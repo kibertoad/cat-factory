@@ -142,8 +142,18 @@ bucket for every new repository method in the same PR.
   created under a staged project any other way is refused at dispatch with
   `project_task_has_no_stage`, so until the stage rail lands (slice 9) the stage routes are the
   only way to start one.
-- A stage holds one task with no recorded outcome at a time. A task deleted before it recorded
-  one would hold that slot forever, so every stage read drops such records first.
+- A stage holds one task with no recorded outcome at a time (a partial unique index). A claim
+  that loses frees the slot only when its holder can no longer finish: its task was deleted, or
+  its outcome landed and the write freeing the stage did not. A read never writes.
+- `stale` compares the upstream results a stage's accepted task STARTED from (`basis`, recorded
+  when the stage task is created) with the upstream results accepted now, not outcome order: a
+  result accepted at a checkpoint after the downstream task recorded still makes it stale.
+- A definition that declares no stages hashes without the `stages` key, so pins taken before
+  definitions carried stages stay valid.
+- The research kind's view and linked context fold only its unstaged `main` stream against the
+  definition's topics. A research stage's findings are listed as outcomes but get no folded view
+  until handlers render per-stream context (slice 3). A staged definition of the research kind
+  still carries the kind's top-level spec; a kind built for stages declares its own spec.
 
 ## Open questions
 

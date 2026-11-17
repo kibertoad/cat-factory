@@ -147,6 +147,7 @@ interface StageTaskRow {
   project_id: string
   stage_id: string
   created_at: number
+  basis: string
   recorded_at: number | null
   cleared_at: number | null
   cleared_by: string | null
@@ -158,6 +159,7 @@ function rowToStageTask(row: StageTaskRow): ProjectStageTask {
     projectId: row.project_id,
     stageId: row.stage_id,
     createdAt: row.created_at,
+    basis: JSON.parse(row.basis) as ProjectStageTask['basis'],
     recordedAt: row.recorded_at,
     clearedAt: row.cleared_at,
     clearedBy: row.cleared_by,
@@ -370,8 +372,9 @@ export class D1ProjectRecordRepository implements ProjectRecordRepository {
     const result = await this.deps.db
       .prepare(
         `INSERT INTO project_stage_tasks
-           (task_id, project_id, stage_id, created_at, recorded_at, cleared_at, cleared_by)
-         VALUES (?, ?, ?, ?, ?, ?, ?)
+           (task_id, project_id, stage_id, created_at, basis, recorded_at, cleared_at,
+            cleared_by)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT DO NOTHING`,
       )
       .bind(
@@ -379,6 +382,7 @@ export class D1ProjectRecordRepository implements ProjectRecordRepository {
         row.projectId,
         row.stageId,
         row.createdAt,
+        JSON.stringify(row.basis),
         row.recordedAt,
         row.clearedAt,
         row.clearedBy,

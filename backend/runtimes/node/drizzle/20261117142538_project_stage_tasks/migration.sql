@@ -3,6 +3,7 @@ CREATE TABLE "project_stage_tasks" (
 	"project_id" text NOT NULL,
 	"stage_id" text NOT NULL,
 	"created_at" bigint NOT NULL,
+	"basis" text NOT NULL,
 	"recorded_at" bigint,
 	"cleared_at" bigint,
 	"cleared_by" text

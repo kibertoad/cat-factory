@@ -4,7 +4,7 @@ import { taskTypeSchema } from './primitives.js'
 // ---------------------------------------------------------------------------
 // Project stages: the ordered steps a project definition may declare, each running one task type
 // and writing one outcome stream, with earlier stages feeding later ones. A definition without
-// stages runs its tasks in any order, as before. A stage's state is DERIVED from the project's
+// stages runs its tasks in any order. A stage's state is DERIVED from the project's
 // outcomes and the stage-task records (which task belongs to which stage, and when a person
 // cleared its checkpoint); nothing else about a stage is stored. Design:
 // `docs/initiatives/staged-project-definitions.md`.
@@ -143,6 +143,11 @@ export const projectStageTaskSchema = v.object({
   clearedAt: v.nullable(v.number()),
   /** Who accepted it, or null for an acceptance with no attributable person. */
   clearedBy: v.nullable(v.string()),
+  /**
+   * The accepted result of each upstream stage (`after` and `consumes`) when the task was created,
+   * by stage id: the outcome id, or null for a stage with none. What `stale` compares against.
+   */
+  basis: v.record(v.string(), v.nullable(v.string())),
 })
 export type ProjectStageTask = v.InferOutput<typeof projectStageTaskSchema>
 
@@ -166,8 +171,8 @@ export const projectStageStateSchema = v.object({
   stageId: projectStageIdSchema,
   status: projectStageStatusSchema,
   /**
-   * An upstream stage accepted a newer result than the one this stage's accepted result was
-   * started after, so this result may be out of date. Stated, never acted on.
+   * An upstream stage's accepted result is no longer the one this stage's accepted result was
+   * started from, so this result may be out of date. Stated, never acted on.
    */
   stale: v.boolean(),
   /** The stages it runs after that have no accepted result, for a `blocked` stage. */
@@ -186,7 +191,10 @@ export interface ProjectStageStateInput {
   stages: readonly ProjectStage[]
   /** The project's stage-task records. */
   stageTasks: readonly ProjectStageTask[]
-  /** The ids of the project's tasks that still exist; a record of a deleted task is ignored. */
+  /**
+   * The ids of the project's tasks that still exist. A deleted task with no result is no longer
+   * running; a deleted task's recorded result still counts.
+   */
   liveTaskIds: ReadonlySet<string>
   /** The project's outcomes, any order. */
   outcomes: ReadonlyArray<{ id: string; seq: number; stream: string; taskId: string | null }>
@@ -196,22 +204,26 @@ export interface ProjectStageStateInput {
 export function deriveProjectStageStates(input: ProjectStageStateInput): ProjectStageState[] {
   const tasksOf = new Map<string, ProjectStageTask[]>()
   for (const task of input.stageTasks) {
-    if (!input.liveTaskIds.has(task.taskId)) continue
     tasksOf.set(task.stageId, [...(tasksOf.get(task.stageId) ?? []), task])
   }
   const resolved = new Map(
     input.stages.map(
       (stage) =>
-        [stage.id, resolveStage(stage, tasksOf.get(stage.id) ?? [], input.outcomes)] as const,
+        [
+          stage.id,
+          resolveStage(stage, tasksOf.get(stage.id) ?? [], input.outcomes, input.liveTaskIds),
+        ] as const,
     ),
   )
   return input.stages.map((stage) => {
     const own = resolved.get(stage.id)!
     const waitingOn = stage.after.filter((id) => !resolved.get(id)?.accepted)
-    const upstream = new Set([...stage.after, ...stage.consumes.map((c) => c.stage)])
+    const basis = own.acceptedBasis
     const stale =
-      own.accepted !== null &&
-      [...upstream].some((id) => (resolved.get(id)?.accepted?.seq ?? 0) > own.accepted!.seq)
+      basis !== null &&
+      upstreamOf(stage).some(
+        (id) => (resolved.get(id)?.accepted?.id ?? null) !== (basis[id] ?? null),
+      )
     const status: ProjectStageStatus = own.activeTaskId
       ? 'in-progress'
       : own.latest && own.latest.id !== own.accepted?.id
@@ -233,10 +245,16 @@ export function deriveProjectStageStates(input: ProjectStageStateInput): Project
   })
 }
 
+/** The stages whose accepted result a stage's task starts from: what it runs after and reads. */
+export function upstreamOf(stage: ProjectStage): string[] {
+  return [...new Set([...stage.after, ...stage.consumes.map((c) => c.stage)])]
+}
+
 function resolveStage(
   stage: ProjectStage,
   tasks: readonly ProjectStageTask[],
   outcomes: ProjectStageStateInput['outcomes'],
+  liveTaskIds: ReadonlySet<string>,
 ) {
   const byTask = new Map(tasks.map((t) => [t.taskId, t] as const))
   const results = outcomes
@@ -247,11 +265,13 @@ function resolveStage(
     !stage.checkpoint || byTask.get(r.taskId)?.clearedAt !== null
   const recorded = new Set(results.map((r) => r.taskId))
   const active = [...tasks]
-    .filter((t) => !recorded.has(t.taskId))
+    .filter((t) => !recorded.has(t.taskId) && liveTaskIds.has(t.taskId))
     .sort((a, b) => b.createdAt - a.createdAt)[0]
+  const accepted = results.filter(isAccepted).at(-1) ?? null
   return {
     latest: results.at(-1) ?? null,
-    accepted: results.filter(isAccepted).at(-1) ?? null,
+    accepted,
+    acceptedBasis: accepted ? (byTask.get(accepted.taskId)?.basis ?? {}) : null,
     activeTaskId: active?.taskId ?? null,
   }
 }
