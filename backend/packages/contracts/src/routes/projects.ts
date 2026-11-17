@@ -82,12 +82,16 @@ export const createProjectStageTaskContract = defineApiContract({
   responsesByStatusCode: { 201: blockSchema, ...errorResponses },
 })
 
-/** Accept a stage's newest result at its checkpoint, so the stages after it count it. */
+/**
+ * Accept a stage's newest result at its checkpoint, so the stages after it count it. `revision` is
+ * the person's settlement of the result, in the shape the stage's task type takes; some task types
+ * require one, and the rest refuse it.
+ */
 export const clearProjectStageCheckpointContract = defineApiContract({
   method: 'post',
   requestPathParamsSchema: projectStageParams,
   pathResolver: ({ projectId, stageId }) => `/projects/${projectId}/stages/${stageId}/checkpoint`,
-  requestBodySchema: ContractNoBody,
+  requestBodySchema: v.object({ revision: v.optional(v.unknown()) }),
   responsesByStatusCode: { 200: projectStageStateSchema, ...errorResponses },
 })
 

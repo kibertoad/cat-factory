@@ -6625,7 +6625,10 @@
         "project_link_invalid": "Dieses Projekt existiert nicht oder gehört zu einer anderen Organisation. Verknüpfen Sie ein Projekt dieser Organisation.",
         "project_has_no_result": "Dieses Projekt hat noch kein Ergebnis zum Lesen. Führen Sie zuerst eine Aufgabe darin aus und verknüpfen Sie es dann.",
         "project_task_has_no_stage": "Diese Aufgabe gehört zu einem Projekt mit Phasen, wurde aber nicht aus einer seiner Phasen gestartet und kann daher nicht laufen. Starte die Arbeit stattdessen über die Phase des Projekts.",
-        "project_stage_upstream_unreadable": "Ein Ergebnis einer früheren Phase, von dem diese Aufgabe ausging, kann gerade nicht gelesen werden. Der Lauf wurde deshalb angehalten, statt ohne es weiterzumachen. Versuche es später erneut; bleibt es so, muss das gespeicherte Ergebnis wiederhergestellt werden."
+        "project_stage_upstream_unreadable": "Ein Ergebnis einer früheren Phase, von dem diese Aufgabe ausging, kann gerade nicht gelesen werden. Der Lauf wurde deshalb angehalten, statt ohne es weiterzumachen. Versuche es später erneut; bleibt es so, muss das gespeicherte Ergebnis wiederhergestellt werden.",
+        "project_stage_revision_required": "Das Ergebnis dieser Phase muss beim Annehmen festgelegt werden: Entscheide jeden vorgeschlagenen Punkt und nimm es dann an.",
+        "project_stage_revision_unsupported": "Das Ergebnis dieser Phase wird so angenommen, wie es festgehalten wurde; am Kontrollpunkt nimmt es keine Änderungen an.",
+        "project_stage_revision_invalid": "Die Änderungen passen nicht zum Ergebnis dieser Phase. Die Details nennen den unpassenden Teil; korrigiere ihn und nimm erneut an."
       }
     },
     "action": {

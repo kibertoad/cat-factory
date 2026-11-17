@@ -23,6 +23,7 @@ import {
 } from '@cat-factory/kernel'
 import type { MountedProject } from './ProjectService.js'
 import { resolvePinnedDefinition } from './pinnedDefinition.js'
+import { type StageRevisionDeps, recordStageRevision } from './stageRevision.js'
 
 // ---------------------------------------------------------------------------
 // The stages of a project whose pinned definition declares them: where each stands, starting a
@@ -68,7 +69,11 @@ export interface ProjectStageServiceDeps {
     | 'markStageTaskRecorded'
     | 'clearStageCheckpoint'
     | 'deleteStageTasks'
+    | 'reserveSeq'
   >
+  /** Where a revised result is written, and the handlers that apply a revision. */
+  outcomes: StageRevisionDeps['outcomes']
+  modules: StageRevisionDeps['modules']
   definitions: ProjectDefinitionSource
   /** Late-bound: the board is built after the projects module. */
   board: () => StageTaskBoard | undefined
@@ -270,6 +275,7 @@ export class ProjectStageService {
     projectId: string,
     stageId: string,
     userId: string | null,
+    revision?: unknown,
   ): Promise<ProjectStageState> {
     const { project } = await this.deps.getMounted(workspaceId, projectId)
     const stages = await this.stagesOf(project)
@@ -279,6 +285,15 @@ export class ProjectStageService {
     const latest = before.status === 'awaiting-checkpoint' ? before.latest : null
     let cleared = false
     if (latest) {
+      // A revision the person sends becomes the result they accept, recorded beside the proposal.
+      await recordStageRevision(this.deps, {
+        workspaceId,
+        project,
+        stage: stages[index]!,
+        state: before,
+        revision,
+        decidedBy: userId,
+      })
       // The result is on record, so its task has recorded: say so first, in case the write that
       // freed its stage never landed and the acceptance below would find nothing to accept.
       const now = this.deps.clock.now()

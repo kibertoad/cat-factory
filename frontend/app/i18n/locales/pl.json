@@ -735,7 +735,10 @@
         "project_link_invalid": "Ten projekt nie istnieje albo należy do innej organizacji. Powiąż projekt tej organizacji.",
         "project_has_no_result": "Ten projekt nie ma jeszcze wyniku do odczytania. Najpierw uruchom w nim zadanie, a potem go połącz.",
         "project_task_has_no_stage": "To zadanie należy do projektu z etapami, ale nie zostało uruchomione z żadnego z jego etapów, więc nie może się wykonać. Zamiast tego rozpocznij pracę z etapu projektu.",
-        "project_stage_upstream_unreadable": "Wynik wcześniejszego etapu, od którego to zadanie wyszło, nie może być teraz odczytany, więc uruchomienie zatrzymało się, zamiast kontynuować bez niego. Spróbuj ponownie później; jeśli to się powtarza, zapisany wynik trzeba przywrócić."
+        "project_stage_upstream_unreadable": "Wynik wcześniejszego etapu, od którego to zadanie wyszło, nie może być teraz odczytany, więc uruchomienie zatrzymało się, zamiast kontynuować bez niego. Spróbuj ponownie później; jeśli to się powtarza, zapisany wynik trzeba przywrócić.",
+        "project_stage_revision_required": "Wynik tego etapu trzeba rozstrzygnąć przy akceptacji: zdecyduj o każdym proponowanym punkcie, a potem go zaakceptuj.",
+        "project_stage_revision_unsupported": "Wynik tego etapu jest akceptowany tak, jak został zapisany; w punkcie kontrolnym nie przyjmuje zmian.",
+        "project_stage_revision_invalid": "Zmiany nie pasują do wyniku tego etapu. Szczegóły wskazują, która część nie pasuje; popraw ją i zaakceptuj ponownie."
       }
     },
     "action": {

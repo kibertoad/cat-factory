@@ -646,6 +646,11 @@ export type CredentialWaitReason = (typeof CREDENTIAL_WAIT_REASONS)[number]
  *  - `project_stage_upstream_unreadable` a result of a stage the task consumes, which the task
  *                                       started from, cannot be read now. `details` names the
  *                                       stage and the outcome.
+ *  - `project_stage_revision_required`  the stage's task type requires the person to settle its
+ *                                       result as they accept it, and the acceptance sent nothing.
+ *  - `project_stage_revision_unsupported` the stage's task type takes no revision of its result.
+ *  - `project_stage_revision_invalid`   the revision does not fit the result; `details.problems`
+ *                                       says why.
  *  - `research_nothing_to_ask`          the research kind's own: the task's mode selects no
  *                                       question (an `extend` with no new question, or a `clarify`
  *                                       with nothing partial or blocked).
@@ -683,6 +688,9 @@ export const PROJECT_REASONS = [
   'project_task_type_changed',
   'project_task_has_no_stage',
   'project_stage_upstream_unreadable',
+  'project_stage_revision_required',
+  'project_stage_revision_unsupported',
+  'project_stage_revision_invalid',
   'research_nothing_to_ask',
   'outcome_too_large_for_inline',
   'task_owned_by_project',
