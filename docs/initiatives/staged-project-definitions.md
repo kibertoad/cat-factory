@@ -171,7 +171,7 @@ bucket for every new repository method in the same PR.
       homes the project when a stage's result awaits acceptance (raised once, on the first
       recording), naming the stage's task, and settled when the stage is accepted. It counts as
       review debt, routes to Slack and email like the other review parks, and opens the stage's
-      task on the board. PR: _pending_
+      task on the board. PR: [#2535](https://github.com/kibertoad/cat-factory/pull/2535)
 
 ## Out of scope
 
