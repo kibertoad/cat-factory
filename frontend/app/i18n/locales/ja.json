@@ -2600,7 +2600,8 @@
         "budget_threshold": "既読にする",
         "key_drift": "古い認証情報を削除",
         "merge_tag_request": "工数を記録",
-        "bug_fishing_triage": "既読にする"
+        "bug_fishing_triage": "既読にする",
+        "stage_checkpoint": "既読にする"
       },
       "toast": {
         "acted": "対応済みにしました",
@@ -4903,7 +4904,8 @@
       "visual_confirmation_ready": "ビジュアル確認準備完了",
       "pr_review_ready": "PRレビューの指摘",
       "initiative": "イニシアチブの更新",
-      "merge_tag_request": "レビュー工数の記録依頼"
+      "merge_tag_request": "レビュー工数の記録依頼",
+      "stage_checkpoint": "承認待ちのステージ"
     },
     "role": {
       "engineering": "エンジニアリング",
@@ -4977,7 +4979,8 @@
       "budget_paused": "実行の一時停止 (予算)",
       "budget_threshold": "予算の警告",
       "key_drift": "暗号化キーの不一致",
-      "merge_tag_request": "レビュー工数の記録依頼"
+      "merge_tag_request": "レビュー工数の記録依頼",
+      "stage_checkpoint": "プロジェクトのステージが承認待ちです"
     }
   },
   "docInterview": {

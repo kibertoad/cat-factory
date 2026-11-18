@@ -2655,7 +2655,8 @@
         "budget_threshold": "Segna come letto",
         "key_drift": "Elimina credenziali obsolete",
         "merge_tag_request": "Registra l’impegno",
-        "bug_fishing_triage": "Segna come letto"
+        "bug_fishing_triage": "Segna come letto",
+        "stage_checkpoint": "Segna come letto"
       },
       "failingRun": "{kind} · {at}",
       "failingRunsMore": "altre {count} non mostrate",
@@ -6904,7 +6905,8 @@
       "visual_confirmation_ready": "Pronto per la conferma visiva",
       "pr_review_ready": "Rilievi revisione PR",
       "initiative": "Aggiornamenti dell'iniziativa",
-      "merge_tag_request": "Richiesta impegno di revisione"
+      "merge_tag_request": "Richiesta impegno di revisione",
+      "stage_checkpoint": "Fasi in attesa di accettazione"
     },
     "role": {
       "engineering": "Ingegneria",
@@ -6978,7 +6980,8 @@
       "budget_paused": "Esecuzioni in pausa (budget)",
       "budget_threshold": "Avviso di budget",
       "key_drift": "Disallineamento della chiave di cifratura",
-      "merge_tag_request": "Richiesta impegno di revisione"
+      "merge_tag_request": "Richiesta impegno di revisione",
+      "stage_checkpoint": "Fase di progetto in attesa di accettazione"
     }
   },
   "docInterview": {

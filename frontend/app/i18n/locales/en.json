@@ -2746,7 +2746,8 @@
         "budget_threshold": "Mark read",
         "key_drift": "Drop stale credentials",
         "merge_tag_request": "Record effort",
-        "bug_fishing_triage": "Mark read"
+        "bug_fishing_triage": "Mark read",
+        "stage_checkpoint": "Mark read"
       },
       "failingRun": "{kind} · {at}",
       "failingRunsMore": "{count} more not shown",
@@ -5091,7 +5092,8 @@
       "visual_confirmation_ready": "Ready for visual confirmation",
       "pr_review_ready": "PR review findings",
       "initiative": "Initiative updates",
-      "merge_tag_request": "Review-effort tag requested"
+      "merge_tag_request": "Review-effort tag requested",
+      "stage_checkpoint": "Stages awaiting acceptance"
     },
     "role": {
       "engineering": "Engineering",
@@ -5165,7 +5167,8 @@
       "budget_paused": "Runs paused (budget)",
       "budget_threshold": "Budget warning",
       "key_drift": "Encryption-key drift",
-      "merge_tag_request": "Review-effort tag requested"
+      "merge_tag_request": "Review-effort tag requested",
+      "stage_checkpoint": "Project stage awaiting acceptance"
     }
   },
   "docInterview": {

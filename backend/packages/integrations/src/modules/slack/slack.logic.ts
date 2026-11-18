@@ -90,6 +90,7 @@ const MENTION_AUDIENCE: Record<NotificationType, MentionAudience> = {
   // A rubric verdict the run parked on: the task's creator decides whether to proceed, send
   // it back, or stop — the engineers are who a rework round lands on, so mention both.
   judge_review: { roles: ['engineering'], includeCreator: true },
+  stage_checkpoint: { roles: ['engineering'], includeCreator: true },
   // The PR reviewer surfaced findings to triage: tell the task's creator (who selects which
   // findings to act on) and the engineers.
   pr_review_ready: { roles: ['engineering'], includeCreator: true },
@@ -202,6 +203,7 @@ const TYPE_LABEL: Record<NotificationType, string> = {
   followup_pending: ':compass: Follow-ups to decide',
   fork_decision_pending: ':fork_and_knife: Choose an implementation approach',
   judge_review: ':balance_scale: Review verdict needs a decision',
+  stage_checkpoint: ':white_check_mark: Project stage awaits acceptance',
   pr_review_ready: ':clipboard: PR review findings',
   bug_fishing_triage: ':fishing_pole_and_fish: Bug-fishing findings to triage',
   initiative: ':world_map: Initiative update',

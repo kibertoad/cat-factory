@@ -671,3 +671,9 @@ Additive. A consumer built against 1.103.0 keeps parsing, and one that maps task
 A staged project's stages are served and driven through the API: `GET /api/v1/projects/{projectId}/stages` lists each stage of the pinned definition with its derived state (status, whether it is stale, what it waits on, the report on its newest result against its acceptance criteria); `POST /api/v1/projects/{projectId}/stages/{stageId}/tasks` starts a stage (`write`); `POST /api/v1/projects/{projectId}/stages/{stageId}/checkpoint` accepts its newest result, with a `revision` for a task type that settles one (`decide`). A refusal carries a `project_stage_*` reason. An outcome now names its `taskType`, and a project kind serves `schemas.outcomes`, each task type's body schema keyed by that name; `schemas.outcome` stays, and stays null for a kind with several task types.
 
 Additive: new routes, a new field on the outcome envelope, and a new member of a kind's `schemas`.
+
+## 1.106.0
+
+The notification type vocabulary gains `stage_checkpoint`: a project stage's result awaits a person's acceptance at its checkpoint. The card names the stage's task (`blockId`) and is settled when the stage is accepted. It counts toward review debt like the other review parks.
+
+Additive. A consumer that maps notification types through an exhaustive table gains a member to name.

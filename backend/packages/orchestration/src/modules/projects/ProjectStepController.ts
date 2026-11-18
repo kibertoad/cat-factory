@@ -60,7 +60,7 @@ export interface ProjectStepControllerDeps {
   modules: ProjectKindModuleRegistry
   clock: Clock
   /** Starts the stages a recorded outcome made ready. Absent where projects are not wired. */
-  stages?: Pick<ProjectStageService, 'advance'>
+  stages?: Pick<ProjectStageService, 'advance' | 'announceCheckpoint'>
   /** Argues a stage result's acceptance criteria. Absent: each report says nothing assessed it. */
   acceptance?: StageAcceptanceAssessor
   /** The task types the engine performs itself rather than dispatching an agent, by task type. */
@@ -363,6 +363,17 @@ export class ProjectStepController {
           () => stages.advance(workspaceId, state.projectId),
           { projectId: state.projectId, taskId },
         )
+        // A person learns the result awaits acceptance without opening the project. Only a
+        // first recording raises it; a replay lost the write and its card is already open.
+        if (recorded.written) {
+          const stageId = state.stageId
+          await runBestEffort(
+            this.log,
+            'projects.stages.announceCheckpoint',
+            () => stages.announceCheckpoint(workspaceId, state.projectId, stageId, taskId),
+            { projectId: state.projectId, taskId },
+          )
+        }
       }
       await this.assessAcceptance(project, state, taskId)
     }

@@ -134,6 +134,7 @@ export const notificationTypeSchema = v.picklist([
   'budget_threshold',
   'key_drift',
   'merge_tag_request',
+  'stage_checkpoint',
 ])
 export type NotificationType = v.InferOutput<typeof notificationTypeSchema>
 
@@ -167,6 +168,7 @@ export const REVIEW_WAIT_NOTIFICATION_TYPES = [
   'judge_review',
   'pr_review_ready',
   'bug_fishing_triage',
+  'stage_checkpoint',
 ] as const satisfies readonly NotificationType[]
 
 export type ReviewWaitNotificationType = (typeof REVIEW_WAIT_NOTIFICATION_TYPES)[number]

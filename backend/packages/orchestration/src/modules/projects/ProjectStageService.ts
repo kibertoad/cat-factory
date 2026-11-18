@@ -22,6 +22,7 @@ import {
   type ProjectRecordRepository,
   runBestEffort,
 } from '@cat-factory/kernel'
+import type { NotificationService } from '../notifications/NotificationService.js'
 import type { MountedProject } from './ProjectService.js'
 import { resolvePinnedDefinition } from './pinnedDefinition.js'
 import { type StageAwaitsDeps, assertAwaitedWorkSettled } from './stageAwaits.js'
@@ -86,6 +87,8 @@ export interface ProjectStageServiceDeps {
   board: () => StageTaskBoard | undefined
   /** Late-bound: starts a task's run; the engine is built after the projects module. */
   runStarter: () => StageRunStarter | undefined
+  /** Tells a person a result awaits acceptance, and settles that card on acceptance. */
+  notifications?: Pick<NotificationService, 'raise' | 'clearOnBlock'>
   clock: Clock
   logger?: Logger
 }
@@ -353,6 +356,22 @@ export class ProjectStageService {
         acceptedOutcomeId,
       )
     }
+    if (cleared && latest) {
+      const settled = latest.taskId
+      await runBestEffort(
+        this.log,
+        'projects.stages.settleCheckpointCard',
+        async () => {
+          await this.deps.notifications?.clearOnBlock(
+            homeWorkspaceId,
+            settled,
+            'stage_checkpoint',
+            'act',
+          )
+        },
+        { projectId, stageId },
+      )
+    }
     if (!cleared) {
       throw new ConflictError(
         'This stage has no result waiting for its checkpoint',
@@ -383,6 +402,33 @@ export class ProjectStageService {
         state: states[i]!,
         revision: revision ? (revision.required ? 'required' : 'optional') : 'none',
       }
+    })
+  }
+
+  /**
+   * Tell the board that homes the project a stage's result awaits acceptance at its checkpoint.
+   * Called when a staged task records its result; a stage without a checkpoint raises nothing.
+   * Best-effort for the caller: the result is on record whether or not a person is told.
+   */
+  async announceCheckpoint(
+    workspaceId: string,
+    projectId: string,
+    stageId: string,
+    taskId: string,
+  ): Promise<void> {
+    const notifications = this.deps.notifications
+    if (!notifications) return
+    const mounted = await this.deps.getMounted(workspaceId, projectId)
+    const stage = (await this.stagesOf(mounted.project)).find((s) => s.id === stageId)
+    if (!stage?.checkpoint) return
+    await notifications.raise(mounted.homeWorkspaceId, {
+      type: 'stage_checkpoint',
+      blockId: taskId,
+      executionId: null,
+      title: `Stage "${stage.title}" of "${mounted.rootBlock.title}" awaits acceptance`,
+      body:
+        "Its result is ready. Open the project's stages to read it and accept it, so the " +
+        'stages after it can use it.',
     })
   }
 

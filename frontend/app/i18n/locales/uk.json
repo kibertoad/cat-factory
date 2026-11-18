@@ -2600,7 +2600,8 @@
         "budget_threshold": "Позначити прочитаним",
         "key_drift": "Видалити застарілі облікові дані",
         "merge_tag_request": "Записати обсяг",
-        "bug_fishing_triage": "Позначити прочитаним"
+        "bug_fishing_triage": "Позначити прочитаним",
+        "stage_checkpoint": "Позначити прочитаним"
       },
       "toast": {
         "acted": "Позначено як опрацьоване",
@@ -4903,7 +4904,8 @@
       "visual_confirmation_ready": "Готово до візуального підтвердження",
       "pr_review_ready": "Зауваження огляду PR",
       "initiative": "Оновлення ініціативи",
-      "merge_tag_request": "Запит обсягу рецензування"
+      "merge_tag_request": "Запит обсягу рецензування",
+      "stage_checkpoint": "Етапи, що чекають на прийняття"
     },
     "role": {
       "engineering": "Інженерія",
@@ -4977,7 +4979,8 @@
       "budget_paused": "Запуски призупинено (бюджет)",
       "budget_threshold": "Попередження про бюджет",
       "key_drift": "Розбіжність ключа шифрування",
-      "merge_tag_request": "Запит обсягу рецензування"
+      "merge_tag_request": "Запит обсягу рецензування",
+      "stage_checkpoint": "Етап проєкту чекає на прийняття"
     }
   },
   "docInterview": {

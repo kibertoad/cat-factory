@@ -2650,7 +2650,8 @@
               "budget_paused",
               "budget_threshold",
               "key_drift",
-              "merge_tag_request"
+              "merge_tag_request",
+              "stage_checkpoint"
             ],
             "type": "string"
           }
@@ -2730,7 +2731,8 @@
                 "budget_paused",
                 "budget_threshold",
                 "key_drift",
-                "merge_tag_request"
+                "merge_tag_request",
+                "stage_checkpoint"
               ],
               "type": "string"
             },
@@ -11071,7 +11073,8 @@
                 "budget_paused",
                 "budget_threshold",
                 "key_drift",
-                "merge_tag_request"
+                "merge_tag_request",
+                "stage_checkpoint"
               ],
               "type": "string"
             },
@@ -11517,7 +11520,7 @@
       "name": "MIT"
     },
     "title": "cat-factory Public API",
-    "version": "1.105.0"
+    "version": "1.106.0"
   },
   "openapi": "3.1.0",
   "paths": {

@@ -149,6 +149,15 @@ export function defineCoreProjectStagesConformance(harness: ConformanceHarness):
         ['discover', 'awaiting-checkpoint'],
         ['deepen', 'blocked'],
       ])
+      // A person learns the result awaits acceptance from the inbox.
+      const cards = async () =>
+        (
+          await app.call<{ type: string; blockId: string | null; status: string }[]>(
+            'GET',
+            `/workspaces/${wsId}/notifications`,
+          )
+        ).body.filter((n) => n.type === 'stage_checkpoint' && n.blockId === task.body.id)
+      expect((await cards()).map((n) => n.status)).toEqual(['open'])
 
       // A task links the project only once a stage has an ACCEPTED result: one still awaiting
       // its checkpoint is not one.
@@ -170,6 +179,8 @@ export function defineCoreProjectStagesConformance(harness: ConformanceHarness):
       const cleared = await app.call<ProjectStageState>('POST', checkpoint, {})
       expect(cleared.status).toBe(200)
       expect(cleared.body).toMatchObject({ stageId: 'discover', status: 'done' })
+      // Accepting settles the card.
+      expect(await cards()).toEqual([])
       const twice = await app.call('POST', checkpoint, {})
       expect(twice.status).toBe(409)
       expect(reasonOf(twice.body)).toBe('project_stage_checkpoint_not_pending')

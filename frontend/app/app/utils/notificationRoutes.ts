@@ -106,6 +106,7 @@ export const NOTIFICATION_ROUTES: Record<Notification['type'], NotificationRoute
   merge_review: { verbKey: null, resolve: selectTask },
   pipeline_complete: { verbKey: null, resolve: selectTask },
   merge_tag_request: { verbKey: null, resolve: selectTask },
+  stage_checkpoint: { verbKey: null, resolve: selectTask },
   ci_failed: { verbKey: null, resolve: selectTask },
   test_failed: { verbKey: null, resolve: selectTask },
   deploy_blocked: { verbKey: null, resolve: selectTask },

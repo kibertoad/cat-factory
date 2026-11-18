@@ -1,3 +1,4 @@
+import type { NotificationService } from '../modules/notifications/NotificationService.js'
 import type {
   ExecutionEventPublisher,
   ProjectDefinitionSource,
@@ -40,6 +41,8 @@ export function createProjectsModule(
   late: {
     board: () => StageTaskBoard | undefined
     runStarter: () => StageRunStarter | undefined
+    /** Absent where notifications are not wired: no checkpoint card is raised. */
+    notifications?: Pick<NotificationService, 'raise' | 'clearOnBlock'>
   },
 ): ProjectsModule | undefined {
   const {
@@ -92,6 +95,7 @@ export function createProjectsModule(
     definitions: sources.projectDefinitions,
     board: late.board,
     runStarter: late.runStarter,
+    ...(late.notifications ? { notifications: late.notifications } : {}),
     clock: deps.clock,
     logger: deps.logger,
   })

@@ -71,6 +71,9 @@ const META: Record<Notification['type'], { icon: string; color: Accent }> = {
   // choice is made in that window — pick a fork / enter a custom approach — not here).
   fork_decision_pending: { icon: 'i-lucide-git-fork', color: 'warning' },
   judge_review: { icon: 'i-lucide-scale', color: 'warning' },
+  // A project stage's result awaits a person's acceptance at its checkpoint. Clicking the title
+  // selects the stage's task on the board; "act" just marks it read.
+  stage_checkpoint: { icon: 'i-lucide-flag', color: 'warning' },
   // The PR reviewer surfaced findings to triage. Clicking the title opens the PR-review window
   // (see `reveal`); "act" just marks it read (findings are selected in that window, not here).
   pr_review_ready: { icon: 'i-lucide-clipboard-check', color: 'primary' },
@@ -121,6 +124,7 @@ const ACTION_KEYS: Record<Notification['type'], string> = {
   followup_pending: 'layout.notifications.action.followup_pending',
   fork_decision_pending: 'layout.notifications.action.fork_decision_pending',
   judge_review: 'layout.notifications.action.judge_review',
+  stage_checkpoint: 'layout.notifications.action.stage_checkpoint',
   pr_review_ready: 'layout.notifications.action.pr_review_ready',
   bug_fishing_triage: 'layout.notifications.action.bug_fishing_triage',
   initiative: 'layout.notifications.action.initiative',
