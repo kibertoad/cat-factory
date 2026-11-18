@@ -10,7 +10,7 @@ import java.util.List;
 import org.jspecify.annotations.Nullable;
 
 /**
- * The {@code ListPublicProjectStagesResponseStageStateAcceptance} wire model.
+ * The {@code PublicProjectStageStateAcceptance} wire model.
  * @param assessedAt the {@code assessedAt} field.
  * @param criteria the {@code criteria} field.
  * @param model May be absent entirely.
@@ -19,10 +19,10 @@ import org.jspecify.annotations.Nullable;
  * @param state the {@code state} field.
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
-public record ListPublicProjectStagesResponseStageStateAcceptance(
+public record PublicProjectStageStateAcceptance(
     @JsonProperty("assessedAt") Double assessedAt,
 
-    @JsonProperty("criteria") List<ListPublicProjectStagesResponseStageStateAcceptanceCriteria> criteria,
+    @JsonProperty("criteria") List<PublicProjectStageStateAcceptanceCriteria> criteria,
 
     /** May be absent entirely. */
     @JsonInclude(JsonInclude.Include.NON_NULL) @JsonProperty("model") @Nullable String model,
@@ -32,27 +32,27 @@ public record ListPublicProjectStagesResponseStageStateAcceptance(
 
     @JsonProperty("outcomeId") String outcomeId,
 
-    @JsonProperty("state") ListPublicProjectStagesResponseStageStateAcceptanceState state
+    @JsonProperty("state") PublicProjectStageStateAcceptanceState state
 ) {
 
-    /** A new builder for {@link ListPublicProjectStagesResponseStageStateAcceptance}. */
+    /** A new builder for {@link PublicProjectStageStateAcceptance}. */
     public static Builder builder() {
         return new Builder();
     }
 
     /**
-     * Fluent builder for {@link ListPublicProjectStagesResponseStageStateAcceptance}.
+     * Fluent builder for {@link PublicProjectStageStateAcceptance}.
      * Every setter is nullable so a caller supplies only what it means to send. Java has no
      * default arguments and Kotlin cannot synthesise them for a Java constructor, so this is the
      * shape that reads naturally from both languages.
      */
     public static final class Builder {
         private @Nullable Double assessedAt;
-        private @Nullable List<ListPublicProjectStagesResponseStageStateAcceptanceCriteria> criteria;
+        private @Nullable List<PublicProjectStageStateAcceptanceCriteria> criteria;
         private @Nullable String model;
         private @Nullable String note;
         private @Nullable String outcomeId;
-        private @Nullable ListPublicProjectStagesResponseStageStateAcceptanceState state;
+        private @Nullable PublicProjectStageStateAcceptanceState state;
 
         /** Set {@code assessedAt}. */
         public Builder assessedAt(@Nullable Double assessedAt) {
@@ -61,7 +61,7 @@ public record ListPublicProjectStagesResponseStageStateAcceptance(
         }
 
         /** Set {@code criteria}. */
-        public Builder criteria(@Nullable List<ListPublicProjectStagesResponseStageStateAcceptanceCriteria> criteria) {
+        public Builder criteria(@Nullable List<PublicProjectStageStateAcceptanceCriteria> criteria) {
             this.criteria = criteria;
             return this;
         }
@@ -85,14 +85,14 @@ public record ListPublicProjectStagesResponseStageStateAcceptance(
         }
 
         /** Set {@code state}. */
-        public Builder state(@Nullable ListPublicProjectStagesResponseStageStateAcceptanceState state) {
+        public Builder state(@Nullable PublicProjectStageStateAcceptanceState state) {
             this.state = state;
             return this;
         }
 
-        /** Build the {@link ListPublicProjectStagesResponseStageStateAcceptance}. */
-        public ListPublicProjectStagesResponseStageStateAcceptance build() {
-            return new ListPublicProjectStagesResponseStageStateAcceptance(assessedAt, criteria, model, note, outcomeId, state);
+        /** Build the {@link PublicProjectStageStateAcceptance}. */
+        public PublicProjectStageStateAcceptance build() {
+            return new PublicProjectStageStateAcceptance(assessedAt, criteria, model, note, outcomeId, state);
         }
     }
 }

@@ -82,8 +82,8 @@ class AcceptanceCriterion:
 
 
 @dataclass(frozen=True, slots=True)
-class AcceptPublicProjectStageRequest:
-    """`AcceptPublicProjectStageRequest`, as carried on the wire."""
+class AcceptPublicProjectStage:
+    """`AcceptPublicProjectStage`, as carried on the wire."""
 
     #: May be absent entirely.
     revision: Any | None = None
@@ -94,8 +94,8 @@ class AcceptPublicProjectStageRequest:
     extra: dict[str, Any] = _dc_field(default_factory=dict)
 
     @classmethod
-    def from_dict(cls, data: Mapping[str, Any]) -> "AcceptPublicProjectStageRequest":
-        """Decode a `AcceptPublicProjectStageRequest` from its JSON object."""
+    def from_dict(cls, data: Mapping[str, Any]) -> "AcceptPublicProjectStage":
+        """Decode a `AcceptPublicProjectStage` from its JSON object."""
         known = {"revision"}
         return cls(
             revision=data.get("revision"),
@@ -7568,373 +7568,6 @@ class ListPublicModelPresetsResponsePreset:
         out["overrides"] = {key: _encode(val) for key, val in self.overrides.items()}
         out["presetId"] = self.preset_id
         return out
-
-
-@dataclass(frozen=True, slots=True)
-class ListPublicProjectStagesResponse:
-    """`ListPublicProjectStagesResponse`, as carried on the wire."""
-
-    stages: list[ListPublicProjectStagesResponseStage]
-
-    #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
-    #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = _dc_field(default_factory=dict)
-
-    @classmethod
-    def from_dict(cls, data: Mapping[str, Any]) -> "ListPublicProjectStagesResponse":
-        """Decode a `ListPublicProjectStagesResponse` from its JSON object."""
-        known = {"stages"}
-        return cls(
-            stages=[ListPublicProjectStagesResponseStage.from_dict(item) for item in data.get("stages") or []],
-            extra={k: v for k, v in data.items() if k not in known},
-        )
-
-    def to_dict(self) -> dict[str, Any]:
-        """Encode back to the JSON object shape the API expects."""
-        out: dict[str, Any] = dict(self.extra)
-        out["stages"] = [_encode(item) for item in self.stages]
-        return out
-
-
-@dataclass(frozen=True, slots=True)
-class ListPublicProjectStagesResponseStage:
-    """`ListPublicProjectStagesResponseStage`, as carried on the wire."""
-
-    stage: ListPublicProjectStagesResponseStageStage
-    state: ListPublicProjectStagesResponseStageState
-
-    #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
-    #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = _dc_field(default_factory=dict)
-
-    @classmethod
-    def from_dict(cls, data: Mapping[str, Any]) -> "ListPublicProjectStagesResponseStage":
-        """Decode a `ListPublicProjectStagesResponseStage` from its JSON object."""
-        known = {"stage", "state"}
-        return cls(
-            stage=ListPublicProjectStagesResponseStageStage.from_dict(data.get("stage")),
-            state=ListPublicProjectStagesResponseStageState.from_dict(data.get("state")),
-            extra={k: v for k, v in data.items() if k not in known},
-        )
-
-    def to_dict(self) -> dict[str, Any]:
-        """Encode back to the JSON object shape the API expects."""
-        out: dict[str, Any] = dict(self.extra)
-        out["stage"] = _encode(self.stage)
-        out["state"] = _encode(self.state)
-        return out
-
-
-@dataclass(frozen=True, slots=True)
-class ListPublicProjectStagesResponseStageStage:
-    """`ListPublicProjectStagesResponseStageStage`, as carried on the wire."""
-
-    after: list[str]
-    checkpoint: bool
-    consumes: list[PublicProjectDefinitionDefinitionStageConsume]
-    id: str
-    produces: str
-    repeatable: bool
-    start: PublicProjectDefinitionDefinitionStageStart
-    task_type: str
-    title: str
-    #: May be absent entirely.
-    acceptance: list[PublicProjectDefinitionDefinitionStageAcceptance] | None = None
-    #: May be absent entirely.
-    description: str | None = None
-    #: May be absent entirely.
-    writes: bool | None = None
-
-    #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
-    #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = _dc_field(default_factory=dict)
-
-    @classmethod
-    def from_dict(cls, data: Mapping[str, Any]) -> "ListPublicProjectStagesResponseStageStage":
-        """Decode a `ListPublicProjectStagesResponseStageStage` from its JSON object."""
-        known = {"after", "checkpoint", "consumes", "id", "produces", "repeatable", "start", "taskType", "title", "acceptance", "description", "writes"}
-        return cls(
-            after=[item for item in data.get("after") or []],
-            checkpoint=data.get("checkpoint"),
-            consumes=[PublicProjectDefinitionDefinitionStageConsume.from_dict(item) for item in data.get("consumes") or []],
-            id=data.get("id"),
-            produces=data.get("produces"),
-            repeatable=data.get("repeatable"),
-            start=_enum(PublicProjectDefinitionDefinitionStageStart, data.get("start")),
-            task_type=data.get("taskType"),
-            title=data.get("title"),
-            acceptance=None if data.get("acceptance") is None else [PublicProjectDefinitionDefinitionStageAcceptance.from_dict(item) for item in data.get("acceptance") or []],
-            description=data.get("description"),
-            writes=data.get("writes"),
-            extra={k: v for k, v in data.items() if k not in known},
-        )
-
-    def to_dict(self) -> dict[str, Any]:
-        """Encode back to the JSON object shape the API expects."""
-        out: dict[str, Any] = dict(self.extra)
-        out["after"] = [_encode(item) for item in self.after]
-        out["checkpoint"] = self.checkpoint
-        out["consumes"] = [_encode(item) for item in self.consumes]
-        out["id"] = self.id
-        out["produces"] = self.produces
-        out["repeatable"] = self.repeatable
-        out["start"] = _encode(self.start)
-        out["taskType"] = self.task_type
-        out["title"] = self.title
-        if self.acceptance is not None:
-            out["acceptance"] = [_encode(item) for item in self.acceptance]
-        if self.description is not None:
-            out["description"] = self.description
-        if self.writes is not None:
-            out["writes"] = self.writes
-        return out
-
-
-@dataclass(frozen=True, slots=True)
-class ListPublicProjectStagesResponseStageState:
-    """`ListPublicProjectStagesResponseStageState`, as carried on the wire."""
-
-    stage_id: str
-    stale: bool
-    status: ListPublicProjectStagesResponseStageStateStatus
-    waiting_on: list[str]
-    #: Always present; ``None`` when the server has no value for it.
-    acceptance: ListPublicProjectStagesResponseStageStateAcceptance | None = None
-    #: Always present; ``None`` when the server has no value for it.
-    accepted: ListPublicProjectStagesResponseStageStateAccepted | None = None
-    #: Always present; ``None`` when the server has no value for it.
-    active_task_id: str | None = None
-    #: Always present; ``None`` when the server has no value for it.
-    latest: ListPublicProjectStagesResponseStageStateAccepted | None = None
-
-    #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
-    #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = _dc_field(default_factory=dict)
-
-    @classmethod
-    def from_dict(cls, data: Mapping[str, Any]) -> "ListPublicProjectStagesResponseStageState":
-        """Decode a `ListPublicProjectStagesResponseStageState` from its JSON object."""
-        known = {"stageId", "stale", "status", "waitingOn", "acceptance", "accepted", "activeTaskId", "latest"}
-        return cls(
-            stage_id=data.get("stageId"),
-            stale=data.get("stale"),
-            status=_enum(ListPublicProjectStagesResponseStageStateStatus, data.get("status")),
-            waiting_on=[item for item in data.get("waitingOn") or []],
-            acceptance=None if data.get("acceptance") is None else ListPublicProjectStagesResponseStageStateAcceptance.from_dict(data.get("acceptance")),
-            accepted=None if data.get("accepted") is None else ListPublicProjectStagesResponseStageStateAccepted.from_dict(data.get("accepted")),
-            active_task_id=data.get("activeTaskId"),
-            latest=None if data.get("latest") is None else ListPublicProjectStagesResponseStageStateAccepted.from_dict(data.get("latest")),
-            extra={k: v for k, v in data.items() if k not in known},
-        )
-
-    def to_dict(self) -> dict[str, Any]:
-        """Encode back to the JSON object shape the API expects."""
-        out: dict[str, Any] = dict(self.extra)
-        out["stageId"] = self.stage_id
-        out["stale"] = self.stale
-        out["status"] = _encode(self.status)
-        out["waitingOn"] = [_encode(item) for item in self.waiting_on]
-        out["acceptance"] = _encode(self.acceptance)
-        out["accepted"] = _encode(self.accepted)
-        out["activeTaskId"] = self.active_task_id
-        out["latest"] = _encode(self.latest)
-        return out
-
-
-@dataclass(frozen=True, slots=True)
-class ListPublicProjectStagesResponseStageStateAcceptance:
-    """`ListPublicProjectStagesResponseStageStateAcceptance`, as carried on the wire."""
-
-    assessed_at: float
-    criteria: list[ListPublicProjectStagesResponseStageStateAcceptanceCriteria]
-    outcome_id: str
-    state: ListPublicProjectStagesResponseStageStateAcceptanceState
-    #: May be absent entirely.
-    model: str | None = None
-    #: May be absent entirely.
-    note: str | None = None
-
-    #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
-    #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = _dc_field(default_factory=dict)
-
-    @classmethod
-    def from_dict(cls, data: Mapping[str, Any]) -> "ListPublicProjectStagesResponseStageStateAcceptance":
-        """Decode a `ListPublicProjectStagesResponseStageStateAcceptance` from its JSON object."""
-        known = {"assessedAt", "criteria", "outcomeId", "state", "model", "note"}
-        return cls(
-            assessed_at=data.get("assessedAt"),
-            criteria=[ListPublicProjectStagesResponseStageStateAcceptanceCriteria.from_dict(item) for item in data.get("criteria") or []],
-            outcome_id=data.get("outcomeId"),
-            state=_enum(ListPublicProjectStagesResponseStageStateAcceptanceState, data.get("state")),
-            model=data.get("model"),
-            note=data.get("note"),
-            extra={k: v for k, v in data.items() if k not in known},
-        )
-
-    def to_dict(self) -> dict[str, Any]:
-        """Encode back to the JSON object shape the API expects."""
-        out: dict[str, Any] = dict(self.extra)
-        out["assessedAt"] = self.assessed_at
-        out["criteria"] = [_encode(item) for item in self.criteria]
-        out["outcomeId"] = self.outcome_id
-        out["state"] = _encode(self.state)
-        if self.model is not None:
-            out["model"] = self.model
-        if self.note is not None:
-            out["note"] = self.note
-        return out
-
-
-@dataclass(frozen=True, slots=True)
-class ListPublicProjectStagesResponseStageStateAcceptanceCriteria:
-    """`ListPublicProjectStagesResponseStageStateAcceptanceCriteria`, as carried on the wire.
-
-    """
-
-    dropped: float
-    evidence: list[str]
-    id: str
-    rationale: str
-    statement: str
-    status: ListPublicProjectStagesResponseStageStateAcceptanceCriteriaStatus
-    unfound: list[str]
-    #: Always present; ``None`` when the server has no value for it.
-    claim: ListPublicProjectStagesResponseStageStateAcceptanceCriteriaClaim | None = None
-
-    #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
-    #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = _dc_field(default_factory=dict)
-
-    @classmethod
-    def from_dict(cls, data: Mapping[str, Any]) -> "ListPublicProjectStagesResponseStageStateAcceptanceCriteria":
-        """Decode a `ListPublicProjectStagesResponseStageStateAcceptanceCriteria` from its JSON object."""
-        known = {"dropped", "evidence", "id", "rationale", "statement", "status", "unfound", "claim"}
-        return cls(
-            dropped=data.get("dropped"),
-            evidence=[item for item in data.get("evidence") or []],
-            id=data.get("id"),
-            rationale=data.get("rationale"),
-            statement=data.get("statement"),
-            status=_enum(ListPublicProjectStagesResponseStageStateAcceptanceCriteriaStatus, data.get("status")),
-            unfound=[item for item in data.get("unfound") or []],
-            claim=None if data.get("claim") is None else _enum(ListPublicProjectStagesResponseStageStateAcceptanceCriteriaClaim, data.get("claim")),
-            extra={k: v for k, v in data.items() if k not in known},
-        )
-
-    def to_dict(self) -> dict[str, Any]:
-        """Encode back to the JSON object shape the API expects."""
-        out: dict[str, Any] = dict(self.extra)
-        out["dropped"] = self.dropped
-        out["evidence"] = [_encode(item) for item in self.evidence]
-        out["id"] = self.id
-        out["rationale"] = self.rationale
-        out["statement"] = self.statement
-        out["status"] = _encode(self.status)
-        out["unfound"] = [_encode(item) for item in self.unfound]
-        out["claim"] = _encode(self.claim)
-        return out
-
-
-class ListPublicProjectStagesResponseStageStateAcceptanceCriteriaClaim(StrEnum):
-    """The `ListPublicProjectStagesResponseStageStateAcceptanceCriteriaClaim` vocabulary.
-    A `StrEnum`, so a member IS its wire string: it compares equal to it, formats as it in
-    an f-string, and serialises as it. A plain `(str, Enum)` would satisfy the first of
-    those and silently fail the other two — `str(TaskStatus.PLANNED)` is
-    "TaskStatus.PLANNED", which is the value that ends up in a log line or a report.
-    An UNKNOWN value decodes to the plain string rather than raising: this surface is
-    additive, and a client that refused a value the server legitimately added would break on
-    a release it was never told about.
-    """
-    MET = "met"
-    UNMET = "unmet"
-
-
-class ListPublicProjectStagesResponseStageStateAcceptanceCriteriaStatus(StrEnum):
-    """The `ListPublicProjectStagesResponseStageStateAcceptanceCriteriaStatus` vocabulary.
-    A `StrEnum`, so a member IS its wire string: it compares equal to it, formats as it in
-    an f-string, and serialises as it. A plain `(str, Enum)` would satisfy the first of
-    those and silently fail the other two — `str(TaskStatus.PLANNED)` is
-    "TaskStatus.PLANNED", which is the value that ends up in a log line or a report.
-    An UNKNOWN value decodes to the plain string rather than raising: this surface is
-    additive, and a client that refused a value the server legitimately added would break on
-    a release it was never told about.
-    """
-    MET = "met"
-    UNMET = "unmet"
-    UNVERIFIED = "unverified"
-
-
-class ListPublicProjectStagesResponseStageStateAcceptanceState(StrEnum):
-    """The `ListPublicProjectStagesResponseStageStateAcceptanceState` vocabulary.
-    A `StrEnum`, so a member IS its wire string: it compares equal to it, formats as it in
-    an f-string, and serialises as it. A plain `(str, Enum)` would satisfy the first of
-    those and silently fail the other two — `str(TaskStatus.PLANNED)` is
-    "TaskStatus.PLANNED", which is the value that ends up in a log line or a report.
-    An UNKNOWN value decodes to the plain string rather than raising: this surface is
-    additive, and a client that refused a value the server legitimately added would break on
-    a release it was never told about.
-    """
-    ASSESSED = "assessed"
-    UNAVAILABLE = "unavailable"
-    FAILED = "failed"
-    PENDING = "pending"
-
-
-@dataclass(frozen=True, slots=True)
-class ListPublicProjectStagesResponseStageStateAccepted:
-    """`ListPublicProjectStagesResponseStageStateAccepted`, as carried on the wire."""
-
-    id: str
-    seq: float
-    task_id: str
-
-    #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
-    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
-    #: still reach a newly added field instead of having to upgrade first.
-    extra: dict[str, Any] = _dc_field(default_factory=dict)
-
-    @classmethod
-    def from_dict(cls, data: Mapping[str, Any]) -> "ListPublicProjectStagesResponseStageStateAccepted":
-        """Decode a `ListPublicProjectStagesResponseStageStateAccepted` from its JSON object."""
-        known = {"id", "seq", "taskId"}
-        return cls(
-            id=data.get("id"),
-            seq=data.get("seq"),
-            task_id=data.get("taskId"),
-            extra={k: v for k, v in data.items() if k not in known},
-        )
-
-    def to_dict(self) -> dict[str, Any]:
-        """Encode back to the JSON object shape the API expects."""
-        out: dict[str, Any] = dict(self.extra)
-        out["id"] = self.id
-        out["seq"] = self.seq
-        out["taskId"] = self.task_id
-        return out
-
-
-class ListPublicProjectStagesResponseStageStateStatus(StrEnum):
-    """The `ListPublicProjectStagesResponseStageStateStatus` vocabulary.
-    A `StrEnum`, so a member IS its wire string: it compares equal to it, formats as it in
-    an f-string, and serialises as it. A plain `(str, Enum)` would satisfy the first of
-    those and silently fail the other two — `str(TaskStatus.PLANNED)` is
-    "TaskStatus.PLANNED", which is the value that ends up in a log line or a report.
-    An UNKNOWN value decodes to the plain string rather than raising: this surface is
-    additive, and a client that refused a value the server legitimately added would break on
-    a release it was never told about.
-    """
-    BLOCKED = "blocked"
-    READY = "ready"
-    IN_PROGRESS = "in-progress"
-    AWAITING_CHECKPOINT = "awaiting-checkpoint"
-    DONE = "done"
 
 
 @dataclass(frozen=True, slots=True)
@@ -15563,6 +15196,371 @@ class PublicProjectServices:
         out: dict[str, Any] = dict(self.extra)
         out["serviceIds"] = [_encode(item) for item in self.service_ids]
         return out
+
+
+@dataclass(frozen=True, slots=True)
+class PublicProjectStage:
+    """`PublicProjectStage`, as carried on the wire."""
+
+    stage: PublicProjectStageStage
+    state: PublicProjectStageState
+
+    #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
+    #: still reach a newly added field instead of having to upgrade first.
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> "PublicProjectStage":
+        """Decode a `PublicProjectStage` from its JSON object."""
+        known = {"stage", "state"}
+        return cls(
+            stage=PublicProjectStageStage.from_dict(data.get("stage")),
+            state=PublicProjectStageState.from_dict(data.get("state")),
+            extra={k: v for k, v in data.items() if k not in known},
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        """Encode back to the JSON object shape the API expects."""
+        out: dict[str, Any] = dict(self.extra)
+        out["stage"] = _encode(self.stage)
+        out["state"] = _encode(self.state)
+        return out
+
+
+@dataclass(frozen=True, slots=True)
+class PublicProjectStageList:
+    """`PublicProjectStageList`, as carried on the wire."""
+
+    stages: list[PublicProjectStage]
+
+    #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
+    #: still reach a newly added field instead of having to upgrade first.
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> "PublicProjectStageList":
+        """Decode a `PublicProjectStageList` from its JSON object."""
+        known = {"stages"}
+        return cls(
+            stages=[PublicProjectStage.from_dict(item) for item in data.get("stages") or []],
+            extra={k: v for k, v in data.items() if k not in known},
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        """Encode back to the JSON object shape the API expects."""
+        out: dict[str, Any] = dict(self.extra)
+        out["stages"] = [_encode(item) for item in self.stages]
+        return out
+
+
+@dataclass(frozen=True, slots=True)
+class PublicProjectStageStage:
+    """`PublicProjectStageStage`, as carried on the wire."""
+
+    after: list[str]
+    checkpoint: bool
+    consumes: list[PublicProjectDefinitionDefinitionStageConsume]
+    id: str
+    produces: str
+    repeatable: bool
+    start: PublicProjectDefinitionDefinitionStageStart
+    task_type: str
+    title: str
+    #: May be absent entirely.
+    acceptance: list[PublicProjectDefinitionDefinitionStageAcceptance] | None = None
+    #: May be absent entirely.
+    description: str | None = None
+    #: May be absent entirely.
+    writes: bool | None = None
+
+    #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
+    #: still reach a newly added field instead of having to upgrade first.
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> "PublicProjectStageStage":
+        """Decode a `PublicProjectStageStage` from its JSON object."""
+        known = {"after", "checkpoint", "consumes", "id", "produces", "repeatable", "start", "taskType", "title", "acceptance", "description", "writes"}
+        return cls(
+            after=[item for item in data.get("after") or []],
+            checkpoint=data.get("checkpoint"),
+            consumes=[PublicProjectDefinitionDefinitionStageConsume.from_dict(item) for item in data.get("consumes") or []],
+            id=data.get("id"),
+            produces=data.get("produces"),
+            repeatable=data.get("repeatable"),
+            start=_enum(PublicProjectDefinitionDefinitionStageStart, data.get("start")),
+            task_type=data.get("taskType"),
+            title=data.get("title"),
+            acceptance=None if data.get("acceptance") is None else [PublicProjectDefinitionDefinitionStageAcceptance.from_dict(item) for item in data.get("acceptance") or []],
+            description=data.get("description"),
+            writes=data.get("writes"),
+            extra={k: v for k, v in data.items() if k not in known},
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        """Encode back to the JSON object shape the API expects."""
+        out: dict[str, Any] = dict(self.extra)
+        out["after"] = [_encode(item) for item in self.after]
+        out["checkpoint"] = self.checkpoint
+        out["consumes"] = [_encode(item) for item in self.consumes]
+        out["id"] = self.id
+        out["produces"] = self.produces
+        out["repeatable"] = self.repeatable
+        out["start"] = _encode(self.start)
+        out["taskType"] = self.task_type
+        out["title"] = self.title
+        if self.acceptance is not None:
+            out["acceptance"] = [_encode(item) for item in self.acceptance]
+        if self.description is not None:
+            out["description"] = self.description
+        if self.writes is not None:
+            out["writes"] = self.writes
+        return out
+
+
+@dataclass(frozen=True, slots=True)
+class PublicProjectStageState:
+    """`PublicProjectStageState`, as carried on the wire."""
+
+    stage_id: str
+    stale: bool
+    status: PublicProjectStageStateStatus
+    waiting_on: list[str]
+    #: Always present; ``None`` when the server has no value for it.
+    acceptance: PublicProjectStageStateAcceptance | None = None
+    #: Always present; ``None`` when the server has no value for it.
+    accepted: PublicProjectStageStateAccepted | None = None
+    #: Always present; ``None`` when the server has no value for it.
+    active_task_id: str | None = None
+    #: Always present; ``None`` when the server has no value for it.
+    latest: PublicProjectStageStateAccepted | None = None
+
+    #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
+    #: still reach a newly added field instead of having to upgrade first.
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> "PublicProjectStageState":
+        """Decode a `PublicProjectStageState` from its JSON object."""
+        known = {"stageId", "stale", "status", "waitingOn", "acceptance", "accepted", "activeTaskId", "latest"}
+        return cls(
+            stage_id=data.get("stageId"),
+            stale=data.get("stale"),
+            status=_enum(PublicProjectStageStateStatus, data.get("status")),
+            waiting_on=[item for item in data.get("waitingOn") or []],
+            acceptance=None if data.get("acceptance") is None else PublicProjectStageStateAcceptance.from_dict(data.get("acceptance")),
+            accepted=None if data.get("accepted") is None else PublicProjectStageStateAccepted.from_dict(data.get("accepted")),
+            active_task_id=data.get("activeTaskId"),
+            latest=None if data.get("latest") is None else PublicProjectStageStateAccepted.from_dict(data.get("latest")),
+            extra={k: v for k, v in data.items() if k not in known},
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        """Encode back to the JSON object shape the API expects."""
+        out: dict[str, Any] = dict(self.extra)
+        out["stageId"] = self.stage_id
+        out["stale"] = self.stale
+        out["status"] = _encode(self.status)
+        out["waitingOn"] = [_encode(item) for item in self.waiting_on]
+        out["acceptance"] = _encode(self.acceptance)
+        out["accepted"] = _encode(self.accepted)
+        out["activeTaskId"] = self.active_task_id
+        out["latest"] = _encode(self.latest)
+        return out
+
+
+@dataclass(frozen=True, slots=True)
+class PublicProjectStageStateAcceptance:
+    """`PublicProjectStageStateAcceptance`, as carried on the wire."""
+
+    assessed_at: float
+    criteria: list[PublicProjectStageStateAcceptanceCriteria]
+    outcome_id: str
+    state: PublicProjectStageStateAcceptanceState
+    #: May be absent entirely.
+    model: str | None = None
+    #: May be absent entirely.
+    note: str | None = None
+
+    #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
+    #: still reach a newly added field instead of having to upgrade first.
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> "PublicProjectStageStateAcceptance":
+        """Decode a `PublicProjectStageStateAcceptance` from its JSON object."""
+        known = {"assessedAt", "criteria", "outcomeId", "state", "model", "note"}
+        return cls(
+            assessed_at=data.get("assessedAt"),
+            criteria=[PublicProjectStageStateAcceptanceCriteria.from_dict(item) for item in data.get("criteria") or []],
+            outcome_id=data.get("outcomeId"),
+            state=_enum(PublicProjectStageStateAcceptanceState, data.get("state")),
+            model=data.get("model"),
+            note=data.get("note"),
+            extra={k: v for k, v in data.items() if k not in known},
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        """Encode back to the JSON object shape the API expects."""
+        out: dict[str, Any] = dict(self.extra)
+        out["assessedAt"] = self.assessed_at
+        out["criteria"] = [_encode(item) for item in self.criteria]
+        out["outcomeId"] = self.outcome_id
+        out["state"] = _encode(self.state)
+        if self.model is not None:
+            out["model"] = self.model
+        if self.note is not None:
+            out["note"] = self.note
+        return out
+
+
+@dataclass(frozen=True, slots=True)
+class PublicProjectStageStateAcceptanceCriteria:
+    """`PublicProjectStageStateAcceptanceCriteria`, as carried on the wire."""
+
+    dropped: float
+    evidence: list[str]
+    id: str
+    rationale: str
+    statement: str
+    status: PublicProjectStageStateAcceptanceCriteriaStatus
+    unfound: list[str]
+    #: Always present; ``None`` when the server has no value for it.
+    claim: PublicProjectStageStateAcceptanceCriteriaClaim | None = None
+
+    #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
+    #: still reach a newly added field instead of having to upgrade first.
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> "PublicProjectStageStateAcceptanceCriteria":
+        """Decode a `PublicProjectStageStateAcceptanceCriteria` from its JSON object."""
+        known = {"dropped", "evidence", "id", "rationale", "statement", "status", "unfound", "claim"}
+        return cls(
+            dropped=data.get("dropped"),
+            evidence=[item for item in data.get("evidence") or []],
+            id=data.get("id"),
+            rationale=data.get("rationale"),
+            statement=data.get("statement"),
+            status=_enum(PublicProjectStageStateAcceptanceCriteriaStatus, data.get("status")),
+            unfound=[item for item in data.get("unfound") or []],
+            claim=None if data.get("claim") is None else _enum(PublicProjectStageStateAcceptanceCriteriaClaim, data.get("claim")),
+            extra={k: v for k, v in data.items() if k not in known},
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        """Encode back to the JSON object shape the API expects."""
+        out: dict[str, Any] = dict(self.extra)
+        out["dropped"] = self.dropped
+        out["evidence"] = [_encode(item) for item in self.evidence]
+        out["id"] = self.id
+        out["rationale"] = self.rationale
+        out["statement"] = self.statement
+        out["status"] = _encode(self.status)
+        out["unfound"] = [_encode(item) for item in self.unfound]
+        out["claim"] = _encode(self.claim)
+        return out
+
+
+class PublicProjectStageStateAcceptanceCriteriaClaim(StrEnum):
+    """The `PublicProjectStageStateAcceptanceCriteriaClaim` vocabulary.
+    A `StrEnum`, so a member IS its wire string: it compares equal to it, formats as it in
+    an f-string, and serialises as it. A plain `(str, Enum)` would satisfy the first of
+    those and silently fail the other two — `str(TaskStatus.PLANNED)` is
+    "TaskStatus.PLANNED", which is the value that ends up in a log line or a report.
+    An UNKNOWN value decodes to the plain string rather than raising: this surface is
+    additive, and a client that refused a value the server legitimately added would break on
+    a release it was never told about.
+    """
+    MET = "met"
+    UNMET = "unmet"
+
+
+class PublicProjectStageStateAcceptanceCriteriaStatus(StrEnum):
+    """The `PublicProjectStageStateAcceptanceCriteriaStatus` vocabulary.
+    A `StrEnum`, so a member IS its wire string: it compares equal to it, formats as it in
+    an f-string, and serialises as it. A plain `(str, Enum)` would satisfy the first of
+    those and silently fail the other two — `str(TaskStatus.PLANNED)` is
+    "TaskStatus.PLANNED", which is the value that ends up in a log line or a report.
+    An UNKNOWN value decodes to the plain string rather than raising: this surface is
+    additive, and a client that refused a value the server legitimately added would break on
+    a release it was never told about.
+    """
+    MET = "met"
+    UNMET = "unmet"
+    UNVERIFIED = "unverified"
+
+
+class PublicProjectStageStateAcceptanceState(StrEnum):
+    """The `PublicProjectStageStateAcceptanceState` vocabulary.
+    A `StrEnum`, so a member IS its wire string: it compares equal to it, formats as it in
+    an f-string, and serialises as it. A plain `(str, Enum)` would satisfy the first of
+    those and silently fail the other two — `str(TaskStatus.PLANNED)` is
+    "TaskStatus.PLANNED", which is the value that ends up in a log line or a report.
+    An UNKNOWN value decodes to the plain string rather than raising: this surface is
+    additive, and a client that refused a value the server legitimately added would break on
+    a release it was never told about.
+    """
+    ASSESSED = "assessed"
+    UNAVAILABLE = "unavailable"
+    FAILED = "failed"
+    PENDING = "pending"
+
+
+@dataclass(frozen=True, slots=True)
+class PublicProjectStageStateAccepted:
+    """`PublicProjectStageStateAccepted`, as carried on the wire."""
+
+    id: str
+    seq: float
+    task_id: str
+
+    #: Fields the server sent that this SDK release has no attribute for. `/api/v1` is
+    #: additive, so these are RETAINED rather than dropped: a caller on an older SDK can
+    #: still reach a newly added field instead of having to upgrade first.
+    extra: dict[str, Any] = _dc_field(default_factory=dict)
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> "PublicProjectStageStateAccepted":
+        """Decode a `PublicProjectStageStateAccepted` from its JSON object."""
+        known = {"id", "seq", "taskId"}
+        return cls(
+            id=data.get("id"),
+            seq=data.get("seq"),
+            task_id=data.get("taskId"),
+            extra={k: v for k, v in data.items() if k not in known},
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        """Encode back to the JSON object shape the API expects."""
+        out: dict[str, Any] = dict(self.extra)
+        out["id"] = self.id
+        out["seq"] = self.seq
+        out["taskId"] = self.task_id
+        return out
+
+
+class PublicProjectStageStateStatus(StrEnum):
+    """The `PublicProjectStageStateStatus` vocabulary.
+    A `StrEnum`, so a member IS its wire string: it compares equal to it, formats as it in
+    an f-string, and serialises as it. A plain `(str, Enum)` would satisfy the first of
+    those and silently fail the other two — `str(TaskStatus.PLANNED)` is
+    "TaskStatus.PLANNED", which is the value that ends up in a log line or a report.
+    An UNKNOWN value decodes to the plain string rather than raising: this surface is
+    additive, and a client that refused a value the server legitimately added would break on
+    a release it was never told about.
+    """
+    BLOCKED = "blocked"
+    READY = "ready"
+    IN_PROGRESS = "in-progress"
+    AWAITING_CHECKPOINT = "awaiting-checkpoint"
+    DONE = "done"
 
 
 @dataclass(frozen=True, slots=True)

@@ -8,13 +8,13 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import org.jspecify.annotations.Nullable;
 
 /**
- * The {@code ListPublicProjectStagesResponseStageStateAccepted} wire model.
+ * The {@code PublicProjectStageStateAccepted} wire model.
  * @param id the {@code id} field.
  * @param seq the {@code seq} field.
  * @param taskId the {@code taskId} field.
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
-public record ListPublicProjectStagesResponseStageStateAccepted(
+public record PublicProjectStageStateAccepted(
     @JsonProperty("id") String id,
 
     @JsonProperty("seq") Double seq,
@@ -22,13 +22,13 @@ public record ListPublicProjectStagesResponseStageStateAccepted(
     @JsonProperty("taskId") String taskId
 ) {
 
-    /** A new builder for {@link ListPublicProjectStagesResponseStageStateAccepted}. */
+    /** A new builder for {@link PublicProjectStageStateAccepted}. */
     public static Builder builder() {
         return new Builder();
     }
 
     /**
-     * Fluent builder for {@link ListPublicProjectStagesResponseStageStateAccepted}.
+     * Fluent builder for {@link PublicProjectStageStateAccepted}.
      * Every setter is nullable so a caller supplies only what it means to send. Java has no
      * default arguments and Kotlin cannot synthesise them for a Java constructor, so this is the
      * shape that reads naturally from both languages.
@@ -56,9 +56,9 @@ public record ListPublicProjectStagesResponseStageStateAccepted(
             return this;
         }
 
-        /** Build the {@link ListPublicProjectStagesResponseStageStateAccepted}. */
-        public ListPublicProjectStagesResponseStageStateAccepted build() {
-            return new ListPublicProjectStagesResponseStageStateAccepted(id, seq, taskId);
+        /** Build the {@link PublicProjectStageStateAccepted}. */
+        public PublicProjectStageStateAccepted build() {
+            return new PublicProjectStageStateAccepted(id, seq, taskId);
         }
     }
 }

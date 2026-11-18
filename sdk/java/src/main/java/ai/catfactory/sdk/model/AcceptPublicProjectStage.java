@@ -9,22 +9,22 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import org.jspecify.annotations.Nullable;
 
 /**
- * The {@code AcceptPublicProjectStageRequest} wire model.
+ * The {@code AcceptPublicProjectStage} wire model.
  * @param revision May be absent entirely.
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
-public record AcceptPublicProjectStageRequest(
+public record AcceptPublicProjectStage(
     /** May be absent entirely. */
     @JsonInclude(JsonInclude.Include.NON_NULL) @JsonProperty("revision") @Nullable Object revision
 ) {
 
-    /** A new builder for {@link AcceptPublicProjectStageRequest}. */
+    /** A new builder for {@link AcceptPublicProjectStage}. */
     public static Builder builder() {
         return new Builder();
     }
 
     /**
-     * Fluent builder for {@link AcceptPublicProjectStageRequest}.
+     * Fluent builder for {@link AcceptPublicProjectStage}.
      * Every setter is nullable so a caller supplies only what it means to send. Java has no
      * default arguments and Kotlin cannot synthesise them for a Java constructor, so this is the
      * shape that reads naturally from both languages.
@@ -38,9 +38,9 @@ public record AcceptPublicProjectStageRequest(
             return this;
         }
 
-        /** Build the {@link AcceptPublicProjectStageRequest}. */
-        public AcceptPublicProjectStageRequest build() {
-            return new AcceptPublicProjectStageRequest(revision);
+        /** Build the {@link AcceptPublicProjectStage}. */
+        public AcceptPublicProjectStage build() {
+            return new AcceptPublicProjectStage(revision);
         }
     }
 }

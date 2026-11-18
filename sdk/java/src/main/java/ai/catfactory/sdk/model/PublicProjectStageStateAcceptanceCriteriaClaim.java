@@ -8,16 +8,14 @@ import com.fasterxml.jackson.annotation.JsonValue;
 import org.jspecify.annotations.Nullable;
 
 /**
- * The {@code ListPublicProjectStagesResponseStageStateAcceptanceState} vocabulary.
+ * The {@code PublicProjectStageStateAcceptanceCriteriaClaim} vocabulary.
  * Decoding an unrecognised value yields {@link #UNRECOGNIZED} rather than throwing, and {@link
  * #wireValue()} still returns what the server actually sent. This surface is additive, so refusing
  * a value the server legitimately added would break a caller on a release it was never told about.
  */
-public enum ListPublicProjectStagesResponseStageStateAcceptanceState {
-    ASSESSED("assessed"),
-    UNAVAILABLE("unavailable"),
-    FAILED("failed"),
-    PENDING("pending"),
+public enum PublicProjectStageStateAcceptanceCriteriaClaim {
+    MET("met"),
+    UNMET("unmet"),
 
     /**
      * A value this SDK release does not know.
@@ -31,7 +29,7 @@ public enum ListPublicProjectStagesResponseStageStateAcceptanceState {
 
     private final String wire;
 
-    ListPublicProjectStagesResponseStageStateAcceptanceState(String wire) {
+    PublicProjectStageStateAcceptanceCriteriaClaim(String wire) {
         this.wire = wire;
     }
 
@@ -43,8 +41,8 @@ public enum ListPublicProjectStagesResponseStageStateAcceptanceState {
 
     /** Decode from the wire, tolerating a value this release does not know. */
     @JsonCreator
-    public static ListPublicProjectStagesResponseStageStateAcceptanceState fromWire(@Nullable String wire) {
-        for (ListPublicProjectStagesResponseStageStateAcceptanceState candidate : values()) {
+    public static PublicProjectStageStateAcceptanceCriteriaClaim fromWire(@Nullable String wire) {
+        for (PublicProjectStageStateAcceptanceCriteriaClaim candidate : values()) {
             if (candidate.wire.equals(wire)) {
                 return candidate;
             }

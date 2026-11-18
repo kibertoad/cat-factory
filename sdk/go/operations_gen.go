@@ -4175,8 +4175,10 @@ type ProjectKindsService struct {
 // Get get a project kind with its schemas
 // One kind with the JSON Schemas of the shapes the rest of this surface leaves opaque: a
 // definition's `spec`, an outcome's `body` (in the schema version the deployment writes) and a
-// project's `view`. Each is null for a kind that declares none. A schema states the shape; a kind
-// can enforce more when it parses (unique ids, say). An unknown kind is `404`.
+// project's `view`. Each is null for a kind that declares none. `outcomes` states each task
+// type's body, keyed by the `taskType` an outcome names; `outcome` is that body for a kind with
+// one task type and null for a kind with several. A schema states the shape; a kind can enforce
+// more when it parses (unique ids, say). An unknown kind is `404`.
 // GET /api/v1/project-kinds/{kind} (operation getPublicProjectKind).
 func (s *ProjectKindsService) Get(ctx context.Context, kind string) (*PublicProjectKindDetail, error) {
 	req := requestSpec{
@@ -4276,19 +4278,26 @@ type ProjectsService struct {
 	client *Client
 }
 
-// AcceptStage acceptPublicProjectStage
+// AcceptStage accept a stage's result at its checkpoint
+// Accept the stage's newest result so the stages after it count it, and return the stage's state.
+// A task type that settles its result at the checkpoint takes a `revision` (a decision register's
+// choices, say) and may require one (`422 project_stage_revision_required`); one that takes none
+// refuses it (`project_stage_revision_unsupported`). A stage whose result started tasks waits
+// until each is done or removed (`409 project_stage_work_unsettled`). `409
+// project_stage_checkpoint_not_pending` when nothing waits. The acceptance is recorded with no
+// person. Requires a `decide` key.
 // POST /api/v1/projects/{projectId}/stages/{stageId}/checkpoint (operation
 // acceptPublicProjectStage).
-func (s *ProjectsService) AcceptStage(ctx context.Context, projectID string, stageID string, body *AcceptPublicProjectStageRequest) (*ListPublicProjectStagesResponseStageState, error) {
+func (s *ProjectsService) AcceptStage(ctx context.Context, projectID string, stageID string, body *AcceptPublicProjectStage) (*PublicProjectStageState, error) {
 	if body == nil {
-		body = &AcceptPublicProjectStageRequest{}
+		body = &AcceptPublicProjectStage{}
 	}
 	req := requestSpec{
 		Method: "POST",
 		Path:   fmt.Sprintf("/api/v1/projects/%s/stages/%s/checkpoint", pathEscape(projectID), pathEscape(stageID)),
 		Body:   body,
 	}
-	var out ListPublicProjectStagesResponseStageState
+	var out PublicProjectStageState
 	if err := s.client.request(ctx, req, &out); err != nil {
 		return nil, err
 	}
@@ -4439,7 +4448,9 @@ func (s *ProjectsService) List(ctx context.Context) (*PublicProjectList, error) 
 // ListOutcomes list a project's outcomes
 // Every outcome the project's tasks recorded, without bodies, ordered by `seq`: the order the
 // tasks were STARTED, across every stream. `stream` narrows to one stream. An outcome is
-// immutable once written.
+// immutable once written. Each names its `taskType`, the task type whose handler decodes its body
+// (its schema is the kind's `schemas.outcomes[taskType]`), or null when no handler in the
+// deployment decodes it.
 // GET /api/v1/projects/{projectId}/outcomes (operation listPublicProjectOutcomes).
 func (s *ProjectsService) ListOutcomes(ctx context.Context, projectID string, query *ProjectsListOutcomesQuery) (*PublicProjectOutcomeList, error) {
 	req := requestSpec{
@@ -4454,14 +4465,21 @@ func (s *ProjectsService) ListOutcomes(ctx context.Context, projectID string, qu
 	return &out, nil
 }
 
-// ListStages listPublicProjectStages
+// ListStages list a staged project's stages
+// Each stage of the definition the project pinned, in its order, with where it stands. A stage's
+// state is derived, never stored: `blocked` (a stage it runs after has no accepted result, named
+// in `waitingOn`), `ready`, `in-progress` (its task, `activeTaskId`, has no result yet),
+// `awaiting-checkpoint` (its newest result waits for a person to accept it) or `done`. `stale`
+// says an upstream result it built on has since changed. `acceptance` reports how its newest
+// result meets the stage's acceptance criteria. Empty for a definition with no stages. A read
+// serves the pinned version even when the definition changed since.
 // GET /api/v1/projects/{projectId}/stages (operation listPublicProjectStages).
-func (s *ProjectsService) ListStages(ctx context.Context, projectID string) (*ListPublicProjectStagesResponse, error) {
+func (s *ProjectsService) ListStages(ctx context.Context, projectID string) (*PublicProjectStageList, error) {
 	req := requestSpec{
 		Method: "GET",
 		Path:   fmt.Sprintf("/api/v1/projects/%s/stages", pathEscape(projectID)),
 	}
-	var out ListPublicProjectStagesResponse
+	var out PublicProjectStageList
 	if err := s.client.request(ctx, req, &out); err != nil {
 		return nil, err
 	}
@@ -4512,7 +4530,13 @@ func (s *ProjectsService) RetryTask(ctx context.Context, projectID string, taskI
 	return &out, nil
 }
 
-// StartStage startPublicProjectStage
+// StartStage start a stage
+// Create the stage's task under the project, bound to the stage, and return it; start its run as
+// any project task's (`POST /api/v1/projects/{projectId}/tasks/{taskId}/start`). Refused with
+// `409` and a `details.reason` of `project_stage_blocked`, `project_stage_in_progress`,
+// `project_stage_awaiting_checkpoint` or `project_stage_not_repeatable` unless the stage is
+// ready, or done and repeatable. Only on the board that homes the project
+// (`project_homed_elsewhere`). Requires a `write` key.
 // POST /api/v1/projects/{projectId}/stages/{stageId}/tasks (operation startPublicProjectStage).
 func (s *ProjectsService) StartStage(ctx context.Context, projectID string, stageID string) (*PublicProjectTask, error) {
 	req := requestSpec{

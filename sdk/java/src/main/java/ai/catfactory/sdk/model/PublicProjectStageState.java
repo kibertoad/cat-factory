@@ -9,7 +9,7 @@ import java.util.List;
 import org.jspecify.annotations.Nullable;
 
 /**
- * The {@code ListPublicProjectStagesResponseStageState} wire model.
+ * The {@code PublicProjectStageState} wire model.
  * @param acceptance Always present; {@code null} when the server has no value for it.
  * @param accepted Always present; {@code null} when the server has no value for it.
  * @param activeTaskId Always present; {@code null} when the server has no value for it.
@@ -20,57 +20,57 @@ import org.jspecify.annotations.Nullable;
  * @param waitingOn the {@code waitingOn} field.
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
-public record ListPublicProjectStagesResponseStageState(
+public record PublicProjectStageState(
     /** Always present; {@code null} when the server has no value for it. */
-    @JsonProperty("acceptance") @Nullable ListPublicProjectStagesResponseStageStateAcceptance acceptance,
+    @JsonProperty("acceptance") @Nullable PublicProjectStageStateAcceptance acceptance,
 
     /** Always present; {@code null} when the server has no value for it. */
-    @JsonProperty("accepted") @Nullable ListPublicProjectStagesResponseStageStateAccepted accepted,
+    @JsonProperty("accepted") @Nullable PublicProjectStageStateAccepted accepted,
 
     /** Always present; {@code null} when the server has no value for it. */
     @JsonProperty("activeTaskId") @Nullable String activeTaskId,
 
     /** Always present; {@code null} when the server has no value for it. */
-    @JsonProperty("latest") @Nullable ListPublicProjectStagesResponseStageStateAccepted latest,
+    @JsonProperty("latest") @Nullable PublicProjectStageStateAccepted latest,
 
     @JsonProperty("stageId") String stageId,
 
     @JsonProperty("stale") Boolean stale,
 
-    @JsonProperty("status") ListPublicProjectStagesResponseStageStateStatus status,
+    @JsonProperty("status") PublicProjectStageStateStatus status,
 
     @JsonProperty("waitingOn") List<String> waitingOn
 ) {
 
-    /** A new builder for {@link ListPublicProjectStagesResponseStageState}. */
+    /** A new builder for {@link PublicProjectStageState}. */
     public static Builder builder() {
         return new Builder();
     }
 
     /**
-     * Fluent builder for {@link ListPublicProjectStagesResponseStageState}.
+     * Fluent builder for {@link PublicProjectStageState}.
      * Every setter is nullable so a caller supplies only what it means to send. Java has no
      * default arguments and Kotlin cannot synthesise them for a Java constructor, so this is the
      * shape that reads naturally from both languages.
      */
     public static final class Builder {
-        private @Nullable ListPublicProjectStagesResponseStageStateAcceptance acceptance;
-        private @Nullable ListPublicProjectStagesResponseStageStateAccepted accepted;
+        private @Nullable PublicProjectStageStateAcceptance acceptance;
+        private @Nullable PublicProjectStageStateAccepted accepted;
         private @Nullable String activeTaskId;
-        private @Nullable ListPublicProjectStagesResponseStageStateAccepted latest;
+        private @Nullable PublicProjectStageStateAccepted latest;
         private @Nullable String stageId;
         private @Nullable Boolean stale;
-        private @Nullable ListPublicProjectStagesResponseStageStateStatus status;
+        private @Nullable PublicProjectStageStateStatus status;
         private @Nullable List<String> waitingOn;
 
         /** Set {@code acceptance}. */
-        public Builder acceptance(@Nullable ListPublicProjectStagesResponseStageStateAcceptance acceptance) {
+        public Builder acceptance(@Nullable PublicProjectStageStateAcceptance acceptance) {
             this.acceptance = acceptance;
             return this;
         }
 
         /** Set {@code accepted}. */
-        public Builder accepted(@Nullable ListPublicProjectStagesResponseStageStateAccepted accepted) {
+        public Builder accepted(@Nullable PublicProjectStageStateAccepted accepted) {
             this.accepted = accepted;
             return this;
         }
@@ -82,7 +82,7 @@ public record ListPublicProjectStagesResponseStageState(
         }
 
         /** Set {@code latest}. */
-        public Builder latest(@Nullable ListPublicProjectStagesResponseStageStateAccepted latest) {
+        public Builder latest(@Nullable PublicProjectStageStateAccepted latest) {
             this.latest = latest;
             return this;
         }
@@ -100,7 +100,7 @@ public record ListPublicProjectStagesResponseStageState(
         }
 
         /** Set {@code status}. */
-        public Builder status(@Nullable ListPublicProjectStagesResponseStageStateStatus status) {
+        public Builder status(@Nullable PublicProjectStageStateStatus status) {
             this.status = status;
             return this;
         }
@@ -111,9 +111,9 @@ public record ListPublicProjectStagesResponseStageState(
             return this;
         }
 
-        /** Build the {@link ListPublicProjectStagesResponseStageState}. */
-        public ListPublicProjectStagesResponseStageState build() {
-            return new ListPublicProjectStagesResponseStageState(acceptance, accepted, activeTaskId, latest, stageId, stale, status, waitingOn);
+        /** Build the {@link PublicProjectStageState}. */
+        public PublicProjectStageState build() {
+            return new PublicProjectStageState(acceptance, accepted, activeTaskId, latest, stageId, stale, status, waitingOn);
         }
     }
 }

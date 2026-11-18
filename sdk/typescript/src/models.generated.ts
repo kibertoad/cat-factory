@@ -19,7 +19,7 @@ export interface AcceptanceCriterion {
   when: string
 }
 
-export interface AcceptPublicProjectStageRequest {
+export interface AcceptPublicProjectStage {
   revision?: unknown
 }
 
@@ -1854,96 +1854,6 @@ export interface ListPublicModelPresetsResponsePreset {
   presetId: string
 }
 
-export interface ListPublicProjectStagesResponse {
-  stages: ListPublicProjectStagesResponseStage[]
-}
-
-export interface ListPublicProjectStagesResponseStage {
-  stage: ListPublicProjectStagesResponseStageStage
-  state: ListPublicProjectStagesResponseStageState
-}
-
-export interface ListPublicProjectStagesResponseStageStage {
-  acceptance?: PublicProjectDefinitionDefinitionStageAcceptance[]
-  after: string[]
-  checkpoint: boolean
-  consumes: PublicProjectDefinitionDefinitionStageConsume[]
-  /** Length 0..4000. */
-  description?: string
-  id: string
-  produces: string
-  repeatable: boolean
-  start: PublicProjectDefinitionDefinitionStageStart
-  taskType: 'feature' | 'bug' | 'bug-fishing' | 'document' | 'spike' | 'review' | 'resolve-conflicts' | 'ralph' | 'media' | 'research' | 'decisions' | 'spawn' | 'writeup' | 'recurring' | (string & {})
-  /** Length 1..200. */
-  title: string
-  writes?: boolean
-}
-
-export interface ListPublicProjectStagesResponseStageState {
-  /** Always present; `null` when the server has no value for it. */
-  acceptance: ListPublicProjectStagesResponseStageStateAcceptance | null
-  /** Always present; `null` when the server has no value for it. */
-  accepted: ListPublicProjectStagesResponseStageStateAccepted | null
-  /** Always present; `null` when the server has no value for it. */
-  activeTaskId: string | null
-  /** Always present; `null` when the server has no value for it. */
-  latest: ListPublicProjectStagesResponseStageStateAccepted | null
-  stageId: string
-  stale: boolean
-  status: ListPublicProjectStagesResponseStageStateStatus
-  waitingOn: string[]
-}
-
-export interface ListPublicProjectStagesResponseStageStateAcceptance {
-  assessedAt: number
-  criteria: ListPublicProjectStagesResponseStageStateAcceptanceCriteria[]
-  model?: string
-  /** Length 0..2000. */
-  note?: string
-  outcomeId: string
-  state: ListPublicProjectStagesResponseStageStateAcceptanceState
-}
-
-export interface ListPublicProjectStagesResponseStageStateAcceptanceCriteria {
-  /** Always present; `null` when the server has no value for it. */
-  claim: ListPublicProjectStagesResponseStageStateAcceptanceCriteriaClaim | null
-  dropped: number
-  evidence: string[]
-  id: string
-  /** Length 0..2000. */
-  rationale: string
-  statement: string
-  status: ListPublicProjectStagesResponseStageStateAcceptanceCriteriaStatus
-  unfound: string[]
-}
-
-export type ListPublicProjectStagesResponseStageStateAcceptanceCriteriaClaim = 'met' | 'unmet'
-
-/** Every `ListPublicProjectStagesResponseStageStateAcceptanceCriteriaClaim` value, for exhaustive handling and runtime validation. */
-export const LIST_PUBLIC_PROJECT_STAGES_RESPONSE_STAGE_STATE_ACCEPTANCE_CRITERIA_CLAIM_VALUES = ['met', 'unmet'] as const
-
-export type ListPublicProjectStagesResponseStageStateAcceptanceCriteriaStatus = 'met' | 'unmet' | 'unverified'
-
-/** Every `ListPublicProjectStagesResponseStageStateAcceptanceCriteriaStatus` value, for exhaustive handling and runtime validation. */
-export const LIST_PUBLIC_PROJECT_STAGES_RESPONSE_STAGE_STATE_ACCEPTANCE_CRITERIA_STATUS_VALUES = ['met', 'unmet', 'unverified'] as const
-
-export type ListPublicProjectStagesResponseStageStateAcceptanceState = 'assessed' | 'unavailable' | 'failed' | 'pending'
-
-/** Every `ListPublicProjectStagesResponseStageStateAcceptanceState` value, for exhaustive handling and runtime validation. */
-export const LIST_PUBLIC_PROJECT_STAGES_RESPONSE_STAGE_STATE_ACCEPTANCE_STATE_VALUES = ['assessed', 'unavailable', 'failed', 'pending'] as const
-
-export interface ListPublicProjectStagesResponseStageStateAccepted {
-  id: string
-  seq: number
-  taskId: string
-}
-
-export type ListPublicProjectStagesResponseStageStateStatus = 'blocked' | 'ready' | 'in-progress' | 'awaiting-checkpoint' | 'done'
-
-/** Every `ListPublicProjectStagesResponseStageStateStatus` value, for exhaustive handling and runtime validation. */
-export const LIST_PUBLIC_PROJECT_STAGES_RESPONSE_STAGE_STATE_STATUS_VALUES = ['blocked', 'ready', 'in-progress', 'awaiting-checkpoint', 'done'] as const
-
 export interface ListPublicReposResponse {
   repos: ListPublicReposResponseRepo[]
 }
@@ -3764,6 +3674,96 @@ export interface PublicProjectPin {
 export interface PublicProjectServices {
   serviceIds: string[]
 }
+
+export interface PublicProjectStage {
+  stage: PublicProjectStageStage
+  state: PublicProjectStageState
+}
+
+export interface PublicProjectStageList {
+  stages: PublicProjectStage[]
+}
+
+export interface PublicProjectStageStage {
+  acceptance?: PublicProjectDefinitionDefinitionStageAcceptance[]
+  after: string[]
+  checkpoint: boolean
+  consumes: PublicProjectDefinitionDefinitionStageConsume[]
+  /** Length 0..4000. */
+  description?: string
+  id: string
+  produces: string
+  repeatable: boolean
+  start: PublicProjectDefinitionDefinitionStageStart
+  taskType: 'feature' | 'bug' | 'bug-fishing' | 'document' | 'spike' | 'review' | 'resolve-conflicts' | 'ralph' | 'media' | 'research' | 'decisions' | 'spawn' | 'writeup' | 'recurring' | (string & {})
+  /** Length 1..200. */
+  title: string
+  writes?: boolean
+}
+
+export interface PublicProjectStageState {
+  /** Always present; `null` when the server has no value for it. */
+  acceptance: PublicProjectStageStateAcceptance | null
+  /** Always present; `null` when the server has no value for it. */
+  accepted: PublicProjectStageStateAccepted | null
+  /** Always present; `null` when the server has no value for it. */
+  activeTaskId: string | null
+  /** Always present; `null` when the server has no value for it. */
+  latest: PublicProjectStageStateAccepted | null
+  stageId: string
+  stale: boolean
+  status: PublicProjectStageStateStatus
+  waitingOn: string[]
+}
+
+export interface PublicProjectStageStateAcceptance {
+  assessedAt: number
+  criteria: PublicProjectStageStateAcceptanceCriteria[]
+  model?: string
+  /** Length 0..2000. */
+  note?: string
+  outcomeId: string
+  state: PublicProjectStageStateAcceptanceState
+}
+
+export interface PublicProjectStageStateAcceptanceCriteria {
+  /** Always present; `null` when the server has no value for it. */
+  claim: PublicProjectStageStateAcceptanceCriteriaClaim | null
+  dropped: number
+  evidence: string[]
+  id: string
+  /** Length 0..2000. */
+  rationale: string
+  statement: string
+  status: PublicProjectStageStateAcceptanceCriteriaStatus
+  unfound: string[]
+}
+
+export type PublicProjectStageStateAcceptanceCriteriaClaim = 'met' | 'unmet'
+
+/** Every `PublicProjectStageStateAcceptanceCriteriaClaim` value, for exhaustive handling and runtime validation. */
+export const PUBLIC_PROJECT_STAGE_STATE_ACCEPTANCE_CRITERIA_CLAIM_VALUES = ['met', 'unmet'] as const
+
+export type PublicProjectStageStateAcceptanceCriteriaStatus = 'met' | 'unmet' | 'unverified'
+
+/** Every `PublicProjectStageStateAcceptanceCriteriaStatus` value, for exhaustive handling and runtime validation. */
+export const PUBLIC_PROJECT_STAGE_STATE_ACCEPTANCE_CRITERIA_STATUS_VALUES = ['met', 'unmet', 'unverified'] as const
+
+export type PublicProjectStageStateAcceptanceState = 'assessed' | 'unavailable' | 'failed' | 'pending'
+
+/** Every `PublicProjectStageStateAcceptanceState` value, for exhaustive handling and runtime validation. */
+export const PUBLIC_PROJECT_STAGE_STATE_ACCEPTANCE_STATE_VALUES = ['assessed', 'unavailable', 'failed', 'pending'] as const
+
+export interface PublicProjectStageStateAccepted {
+  id: string
+  seq: number
+  taskId: string
+}
+
+export type PublicProjectStageStateStatus = 'blocked' | 'ready' | 'in-progress' | 'awaiting-checkpoint' | 'done'
+
+/** Every `PublicProjectStageStateStatus` value, for exhaustive handling and runtime validation. */
+export const PUBLIC_PROJECT_STAGE_STATE_STATUS_VALUES = ['blocked', 'ready', 'in-progress', 'awaiting-checkpoint', 'done'] as const
 
 export interface PublicProjectTask {
   description: string

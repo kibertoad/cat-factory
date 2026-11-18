@@ -31,8 +31,10 @@ public final class ProjectKindsClient {
      * Get a project kind with its schemas
      * One kind with the JSON Schemas of the shapes the rest of this surface leaves opaque: a
      * definition's `spec`, an outcome's `body` (in the schema version the deployment writes) and a
-     * project's `view`. Each is null for a kind that declares none. A schema states the shape; a
-     * kind can enforce more when it parses (unique ids, say). An unknown kind is `404`.
+     * project's `view`. Each is null for a kind that declares none. `outcomes` states each task
+     * type's body, keyed by the `taskType` an outcome names; `outcome` is that body for a kind
+     * with one task type and null for a kind with several. A schema states the shape; a kind can
+     * enforce more when it parses (unique ids, say). An unknown kind is `404`.
      * {@code GET /api/v1/project-kinds/{kind}} (operation {@code getPublicProjectKind}).
      */
     public PublicProjectKindDetail get(String kind) {

@@ -766,7 +766,7 @@ export const SESSION_METHOD_SIGNATURES: readonly SessionMethodSignature[] = [
   },
   {
     name: 'projects_accept_stage',
-    doc: '  /**\n   * acceptPublicProjectStage\n   *\n   * `POST /api/v1/projects/{projectId}/stages/{stageId}/checkpoint`, scope floor `decide`.\n   */\n',
+    doc: '  /**\n   * Accept a stage\'s result at its checkpoint\n   *\n   * `POST /api/v1/projects/{projectId}/stages/{stageId}/checkpoint`, scope floor `decide`.\n   */\n',
     signature: '  projects_accept_stage(args: { projectId: string; stageId: string; body?: unknown }): Promise<unknown>\n',
   },
   {
@@ -816,7 +816,7 @@ export const SESSION_METHOD_SIGNATURES: readonly SessionMethodSignature[] = [
   },
   {
     name: 'projects_list_stages',
-    doc: '  /**\n   * listPublicProjectStages\n   *\n   * `GET /api/v1/projects/{projectId}/stages`, scope floor `read`.\n   */\n',
+    doc: '  /**\n   * List a staged project\'s stages\n   *\n   * `GET /api/v1/projects/{projectId}/stages`, scope floor `read`.\n   */\n',
     signature: '  projects_list_stages(args: { projectId: string }): Promise<unknown>\n',
   },
   {
@@ -836,7 +836,7 @@ export const SESSION_METHOD_SIGNATURES: readonly SessionMethodSignature[] = [
   },
   {
     name: 'projects_start_stage',
-    doc: '  /**\n   * startPublicProjectStage\n   *\n   * `POST /api/v1/projects/{projectId}/stages/{stageId}/tasks`, scope floor `write`.\n   */\n',
+    doc: '  /**\n   * Start a stage\n   *\n   * `POST /api/v1/projects/{projectId}/stages/{stageId}/tasks`, scope floor `write`.\n   */\n',
     signature: '  projects_start_stage(args: { projectId: string; stageId: string }): Promise<unknown>\n',
   },
   {

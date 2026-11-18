@@ -9,7 +9,7 @@ import java.util.List;
 import org.jspecify.annotations.Nullable;
 
 /**
- * The {@code ListPublicProjectStagesResponseStageStateAcceptanceCriteria} wire model.
+ * The {@code PublicProjectStageStateAcceptanceCriteria} wire model.
  * @param claim Always present; {@code null} when the server has no value for it.
  * @param dropped the {@code dropped} field.
  * @param evidence the {@code evidence} field.
@@ -20,9 +20,9 @@ import org.jspecify.annotations.Nullable;
  * @param unfound the {@code unfound} field.
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
-public record ListPublicProjectStagesResponseStageStateAcceptanceCriteria(
+public record PublicProjectStageStateAcceptanceCriteria(
     /** Always present; {@code null} when the server has no value for it. */
-    @JsonProperty("claim") @Nullable ListPublicProjectStagesResponseStageStateAcceptanceCriteriaClaim claim,
+    @JsonProperty("claim") @Nullable PublicProjectStageStateAcceptanceCriteriaClaim claim,
 
     @JsonProperty("dropped") Double dropped,
 
@@ -35,34 +35,34 @@ public record ListPublicProjectStagesResponseStageStateAcceptanceCriteria(
 
     @JsonProperty("statement") String statement,
 
-    @JsonProperty("status") ListPublicProjectStagesResponseStageStateAcceptanceCriteriaStatus status,
+    @JsonProperty("status") PublicProjectStageStateAcceptanceCriteriaStatus status,
 
     @JsonProperty("unfound") List<String> unfound
 ) {
 
-    /** A new builder for {@link ListPublicProjectStagesResponseStageStateAcceptanceCriteria}. */
+    /** A new builder for {@link PublicProjectStageStateAcceptanceCriteria}. */
     public static Builder builder() {
         return new Builder();
     }
 
     /**
-     * Fluent builder for {@link ListPublicProjectStagesResponseStageStateAcceptanceCriteria}.
+     * Fluent builder for {@link PublicProjectStageStateAcceptanceCriteria}.
      * Every setter is nullable so a caller supplies only what it means to send. Java has no
      * default arguments and Kotlin cannot synthesise them for a Java constructor, so this is the
      * shape that reads naturally from both languages.
      */
     public static final class Builder {
-        private @Nullable ListPublicProjectStagesResponseStageStateAcceptanceCriteriaClaim claim;
+        private @Nullable PublicProjectStageStateAcceptanceCriteriaClaim claim;
         private @Nullable Double dropped;
         private @Nullable List<String> evidence;
         private @Nullable String id;
         private @Nullable String rationale;
         private @Nullable String statement;
-        private @Nullable ListPublicProjectStagesResponseStageStateAcceptanceCriteriaStatus status;
+        private @Nullable PublicProjectStageStateAcceptanceCriteriaStatus status;
         private @Nullable List<String> unfound;
 
         /** Set {@code claim}. */
-        public Builder claim(@Nullable ListPublicProjectStagesResponseStageStateAcceptanceCriteriaClaim claim) {
+        public Builder claim(@Nullable PublicProjectStageStateAcceptanceCriteriaClaim claim) {
             this.claim = claim;
             return this;
         }
@@ -98,7 +98,7 @@ public record ListPublicProjectStagesResponseStageStateAcceptanceCriteria(
         }
 
         /** Set {@code status}. */
-        public Builder status(@Nullable ListPublicProjectStagesResponseStageStateAcceptanceCriteriaStatus status) {
+        public Builder status(@Nullable PublicProjectStageStateAcceptanceCriteriaStatus status) {
             this.status = status;
             return this;
         }
@@ -109,9 +109,9 @@ public record ListPublicProjectStagesResponseStageStateAcceptanceCriteria(
             return this;
         }
 
-        /** Build the {@link ListPublicProjectStagesResponseStageStateAcceptanceCriteria}. */
-        public ListPublicProjectStagesResponseStageStateAcceptanceCriteria build() {
-            return new ListPublicProjectStagesResponseStageStateAcceptanceCriteria(claim, dropped, evidence, id, rationale, statement, status, unfound);
+        /** Build the {@link PublicProjectStageStateAcceptanceCriteria}. */
+        public PublicProjectStageStateAcceptanceCriteria build() {
+            return new PublicProjectStageStateAcceptanceCriteria(claim, dropped, evidence, id, rationale, statement, status, unfound);
         }
     }
 }

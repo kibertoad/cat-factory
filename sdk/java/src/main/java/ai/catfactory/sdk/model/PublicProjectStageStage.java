@@ -10,7 +10,7 @@ import java.util.List;
 import org.jspecify.annotations.Nullable;
 
 /**
- * The {@code ListPublicProjectStagesResponseStageStage} wire model.
+ * The {@code PublicProjectStageStage} wire model.
  * @param acceptance May be absent entirely.
  * @param after the {@code after} field.
  * @param checkpoint the {@code checkpoint} field.
@@ -25,7 +25,7 @@ import org.jspecify.annotations.Nullable;
  * @param writes May be absent entirely.
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
-public record ListPublicProjectStagesResponseStageStage(
+public record PublicProjectStageStage(
     /** May be absent entirely. */
     @JsonInclude(JsonInclude.Include.NON_NULL) @JsonProperty("acceptance") @Nullable List<PublicProjectDefinitionDefinitionStageAcceptance> acceptance,
 
@@ -55,13 +55,13 @@ public record ListPublicProjectStagesResponseStageStage(
     @JsonInclude(JsonInclude.Include.NON_NULL) @JsonProperty("writes") @Nullable Boolean writes
 ) {
 
-    /** A new builder for {@link ListPublicProjectStagesResponseStageStage}. */
+    /** A new builder for {@link PublicProjectStageStage}. */
     public static Builder builder() {
         return new Builder();
     }
 
     /**
-     * Fluent builder for {@link ListPublicProjectStagesResponseStageStage}.
+     * Fluent builder for {@link PublicProjectStageStage}.
      * Every setter is nullable so a caller supplies only what it means to send. Java has no
      * default arguments and Kotlin cannot synthesise them for a Java constructor, so this is the
      * shape that reads naturally from both languages.
@@ -152,9 +152,9 @@ public record ListPublicProjectStagesResponseStageStage(
             return this;
         }
 
-        /** Build the {@link ListPublicProjectStagesResponseStageStage}. */
-        public ListPublicProjectStagesResponseStageStage build() {
-            return new ListPublicProjectStagesResponseStageStage(acceptance, after, checkpoint, consumes, description, id, produces, repeatable, start, taskType, title, writes);
+        /** Build the {@link PublicProjectStageStage}. */
+        public PublicProjectStageStage build() {
+            return new PublicProjectStageStage(acceptance, after, checkpoint, consumes, description, id, produces, repeatable, start, taskType, title, writes);
         }
     }
 }

@@ -28,6 +28,8 @@ import {
   stopPublicProjectTaskContract,
   UNATTRIBUTED_BLOCK_EDIT_AUTHORITY,
   unlinkPublicProjectServicesContract,
+  type ProjectStageState,
+  type PublicProjectStageState,
 } from '@cat-factory/contracts'
 import type { PublicApiKeyAuth } from '@cat-factory/integrations'
 import { ConflictError, NotFoundError, ValidationError } from '@cat-factory/kernel'
@@ -464,14 +466,29 @@ function registerOutcomeRoutes(app: Hono<AppEnv>): void {
   })
 }
 
+/** A stage view as `/api/v1` serves it: its own projection, field by field. */
+function toPublicStageState(state: ProjectStageState): PublicProjectStageState {
+  return {
+    stageId: state.stageId,
+    status: state.status,
+    stale: state.stale,
+    waitingOn: state.waitingOn,
+    activeTaskId: state.activeTaskId,
+    latest: state.latest,
+    accepted: state.accepted,
+    acceptance: state.acceptance,
+  }
+}
+
 function registerStageRoutes(app: Hono<AppEnv>): void {
   buildHonoRoute(app, listPublicProjectStagesContract, async (c) => {
     const gate = await authorize(c, listPublicProjectStagesContract.minScope)
     if ('fail' in gate) return refuse(c, gate.fail)
-    const stages = await requireProjects(c).stages.list(
+    const views = await requireProjects(c).stages.list(
       gate.auth.workspaceId,
       c.req.valid('param').projectId,
     )
+    const stages = views.map(({ stage, state }) => ({ stage, state: toPublicStageState(state) }))
     return c.json({ stages }, 200)
   })
 
@@ -479,31 +496,31 @@ function registerStageRoutes(app: Hono<AppEnv>): void {
     const gate = await authorize(c, startPublicProjectStageContract.minScope)
     if ('fail' in gate) return refuse(c, gate.fail)
     const { projectId, stageId } = c.req.valid('param')
-    const mounted = await requireHomedProject(c, gate.auth.workspaceId, projectId)
     const block = await requireProjects(c).stages.createTask(
       gate.auth.workspaceId,
-      mounted.project.id,
+      projectId,
       stageId,
       // A key holds scopes rather than a workspace tier, as on the project task creation route.
       UNATTRIBUTED_BLOCK_EDIT_AUTHORITY,
       null,
+      { homedOnly: true },
     )
-    return c.json(toPublicProjectTask(block, mounted.project.id), 201)
+    return c.json(toPublicProjectTask(block, projectId), 201)
   })
 
   buildHonoRoute(app, acceptPublicProjectStageContract, async (c) => {
     const gate = await authorize(c, acceptPublicProjectStageContract.minScope)
     if ('fail' in gate) return refuse(c, gate.fail)
     const { projectId, stageId } = c.req.valid('param')
-    const mounted = await requireHomedProject(c, gate.auth.workspaceId, projectId)
     const state = await requireProjects(c).stages.clearCheckpoint(
       gate.auth.workspaceId,
-      mounted.project.id,
+      projectId,
       stageId,
       // A key names no person, so the acceptance is recorded unattributed.
       null,
       c.req.valid('json')?.revision,
+      { homedOnly: true },
     )
-    return c.json(state, 200)
+    return c.json(toPublicStageState(state), 200)
   })
 }

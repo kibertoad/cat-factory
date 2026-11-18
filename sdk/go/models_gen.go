@@ -19,8 +19,8 @@ type AcceptanceCriterion struct {
 	When    string `json:"when"`
 }
 
-// AcceptPublicProjectStageRequest is the `AcceptPublicProjectStageRequest` wire model.
-type AcceptPublicProjectStageRequest struct {
+// AcceptPublicProjectStage is the `AcceptPublicProjectStage` wire model.
+type AcceptPublicProjectStage struct {
 	// Revision may be absent entirely.
 	Revision any `json:"revision,omitempty"`
 }
@@ -3201,151 +3201,6 @@ type ListPublicModelPresetsResponsePreset struct {
 	PresetID    string            `json:"presetId"`
 }
 
-// ListPublicProjectStagesResponse is the `ListPublicProjectStagesResponse` wire model.
-type ListPublicProjectStagesResponse struct {
-	Stages []ListPublicProjectStagesResponseStage `json:"stages"`
-}
-
-// ListPublicProjectStagesResponseStage is the `ListPublicProjectStagesResponseStage` wire model.
-type ListPublicProjectStagesResponseStage struct {
-	Stage ListPublicProjectStagesResponseStageStage `json:"stage"`
-	State ListPublicProjectStagesResponseStageState `json:"state"`
-}
-
-// ListPublicProjectStagesResponseStageStage is the `ListPublicProjectStagesResponseStageStage` wire model.
-type ListPublicProjectStagesResponseStageStage struct {
-	// Acceptance may be absent entirely.
-	Acceptance []PublicProjectDefinitionDefinitionStageAcceptance `json:"acceptance,omitempty"`
-	After      []string                                           `json:"after"`
-	Checkpoint bool                                               `json:"checkpoint"`
-	Consumes   []PublicProjectDefinitionDefinitionStageConsume    `json:"consumes"`
-	// Description may be absent entirely.
-	Description *string                                     `json:"description,omitempty"`
-	ID          string                                      `json:"id"`
-	Produces    string                                      `json:"produces"`
-	Repeatable  bool                                        `json:"repeatable"`
-	Start       PublicProjectDefinitionDefinitionStageStart `json:"start"`
-	TaskType    string                                      `json:"taskType"`
-	Title       string                                      `json:"title"`
-	// Writes may be absent entirely.
-	Writes *bool `json:"writes,omitempty"`
-}
-
-// ListPublicProjectStagesResponseStageState is the `ListPublicProjectStagesResponseStageState` wire model.
-type ListPublicProjectStagesResponseStageState struct {
-	// Acceptance always present; nil when the server has no value for it.
-	Acceptance *ListPublicProjectStagesResponseStageStateAcceptance `json:"acceptance"`
-	// Accepted always present; nil when the server has no value for it.
-	Accepted *ListPublicProjectStagesResponseStageStateAccepted `json:"accepted"`
-	// ActiveTaskID always present; nil when the server has no value for it.
-	ActiveTaskID *string `json:"activeTaskId"`
-	// Latest always present; nil when the server has no value for it.
-	Latest    *ListPublicProjectStagesResponseStageStateAccepted `json:"latest"`
-	StageID   string                                             `json:"stageId"`
-	Stale     bool                                               `json:"stale"`
-	Status    ListPublicProjectStagesResponseStageStateStatus    `json:"status"`
-	WaitingOn []string                                           `json:"waitingOn"`
-}
-
-// ListPublicProjectStagesResponseStageStateAcceptance is the `ListPublicProjectStagesResponseStageStateAcceptance` wire model.
-type ListPublicProjectStagesResponseStageStateAcceptance struct {
-	AssessedAt float64                                                       `json:"assessedAt"`
-	Criteria   []ListPublicProjectStagesResponseStageStateAcceptanceCriteria `json:"criteria"`
-	// Model may be absent entirely.
-	Model *string `json:"model,omitempty"`
-	// Note may be absent entirely.
-	Note      *string                                                  `json:"note,omitempty"`
-	OutcomeID string                                                   `json:"outcomeId"`
-	State     ListPublicProjectStagesResponseStageStateAcceptanceState `json:"state"`
-}
-
-// ListPublicProjectStagesResponseStageStateAcceptanceCriteria is the `ListPublicProjectStagesResponseStageStateAcceptanceCriteria` wire model.
-type ListPublicProjectStagesResponseStageStateAcceptanceCriteria struct {
-	// Claim always present; nil when the server has no value for it.
-	Claim     *ListPublicProjectStagesResponseStageStateAcceptanceCriteriaClaim `json:"claim"`
-	Dropped   float64                                                           `json:"dropped"`
-	Evidence  []string                                                          `json:"evidence"`
-	ID        string                                                            `json:"id"`
-	Rationale string                                                            `json:"rationale"`
-	Statement string                                                            `json:"statement"`
-	Status    ListPublicProjectStagesResponseStageStateAcceptanceCriteriaStatus `json:"status"`
-	Unfound   []string                                                          `json:"unfound"`
-}
-
-// ListPublicProjectStagesResponseStageStateAcceptanceCriteriaClaim is the `ListPublicProjectStagesResponseStageStateAcceptanceCriteriaClaim` vocabulary as carried
-// on the wire.
-// A string type rather than an int enum: the wire form IS the string, and an unknown value must
-// round-trip rather than fail to decode — this surface is additive, so a client that refused a
-// value the server legitimately added would break on a release it was never told about.
-type ListPublicProjectStagesResponseStageStateAcceptanceCriteriaClaim string
-
-const (
-	ListPublicProjectStagesResponseStageStateAcceptanceCriteriaClaimMet   ListPublicProjectStagesResponseStageStateAcceptanceCriteriaClaim = "met"
-	ListPublicProjectStagesResponseStageStateAcceptanceCriteriaClaimUnmet ListPublicProjectStagesResponseStageStateAcceptanceCriteriaClaim = "unmet"
-)
-
-// ListPublicProjectStagesResponseStageStateAcceptanceCriteriaClaimValues lists every ListPublicProjectStagesResponseStageStateAcceptanceCriteriaClaim this SDK release
-// knows.
-var ListPublicProjectStagesResponseStageStateAcceptanceCriteriaClaimValues = []ListPublicProjectStagesResponseStageStateAcceptanceCriteriaClaim{ListPublicProjectStagesResponseStageStateAcceptanceCriteriaClaimMet, ListPublicProjectStagesResponseStageStateAcceptanceCriteriaClaimUnmet}
-
-// ListPublicProjectStagesResponseStageStateAcceptanceCriteriaStatus is the `ListPublicProjectStagesResponseStageStateAcceptanceCriteriaStatus` vocabulary as
-// carried on the wire.
-// A string type rather than an int enum: the wire form IS the string, and an unknown value must
-// round-trip rather than fail to decode — this surface is additive, so a client that refused a
-// value the server legitimately added would break on a release it was never told about.
-type ListPublicProjectStagesResponseStageStateAcceptanceCriteriaStatus string
-
-const (
-	ListPublicProjectStagesResponseStageStateAcceptanceCriteriaStatusMet        ListPublicProjectStagesResponseStageStateAcceptanceCriteriaStatus = "met"
-	ListPublicProjectStagesResponseStageStateAcceptanceCriteriaStatusUnmet      ListPublicProjectStagesResponseStageStateAcceptanceCriteriaStatus = "unmet"
-	ListPublicProjectStagesResponseStageStateAcceptanceCriteriaStatusUnverified ListPublicProjectStagesResponseStageStateAcceptanceCriteriaStatus = "unverified"
-)
-
-// ListPublicProjectStagesResponseStageStateAcceptanceCriteriaStatusValues lists every ListPublicProjectStagesResponseStageStateAcceptanceCriteriaStatus this SDK release
-// knows.
-var ListPublicProjectStagesResponseStageStateAcceptanceCriteriaStatusValues = []ListPublicProjectStagesResponseStageStateAcceptanceCriteriaStatus{ListPublicProjectStagesResponseStageStateAcceptanceCriteriaStatusMet, ListPublicProjectStagesResponseStageStateAcceptanceCriteriaStatusUnmet, ListPublicProjectStagesResponseStageStateAcceptanceCriteriaStatusUnverified}
-
-// ListPublicProjectStagesResponseStageStateAcceptanceState is the `ListPublicProjectStagesResponseStageStateAcceptanceState` vocabulary as carried on the
-// wire.
-// A string type rather than an int enum: the wire form IS the string, and an unknown value must
-// round-trip rather than fail to decode — this surface is additive, so a client that refused a
-// value the server legitimately added would break on a release it was never told about.
-type ListPublicProjectStagesResponseStageStateAcceptanceState string
-
-const (
-	ListPublicProjectStagesResponseStageStateAcceptanceStateAssessed    ListPublicProjectStagesResponseStageStateAcceptanceState = "assessed"
-	ListPublicProjectStagesResponseStageStateAcceptanceStateUnavailable ListPublicProjectStagesResponseStageStateAcceptanceState = "unavailable"
-	ListPublicProjectStagesResponseStageStateAcceptanceStateFailed      ListPublicProjectStagesResponseStageStateAcceptanceState = "failed"
-	ListPublicProjectStagesResponseStageStateAcceptanceStatePending     ListPublicProjectStagesResponseStageStateAcceptanceState = "pending"
-)
-
-// ListPublicProjectStagesResponseStageStateAcceptanceStateValues lists every ListPublicProjectStagesResponseStageStateAcceptanceState this SDK release knows.
-var ListPublicProjectStagesResponseStageStateAcceptanceStateValues = []ListPublicProjectStagesResponseStageStateAcceptanceState{ListPublicProjectStagesResponseStageStateAcceptanceStateAssessed, ListPublicProjectStagesResponseStageStateAcceptanceStateUnavailable, ListPublicProjectStagesResponseStageStateAcceptanceStateFailed, ListPublicProjectStagesResponseStageStateAcceptanceStatePending}
-
-// ListPublicProjectStagesResponseStageStateAccepted is the `ListPublicProjectStagesResponseStageStateAccepted` wire model.
-type ListPublicProjectStagesResponseStageStateAccepted struct {
-	ID     string  `json:"id"`
-	Seq    float64 `json:"seq"`
-	TaskID string  `json:"taskId"`
-}
-
-// ListPublicProjectStagesResponseStageStateStatus is the `ListPublicProjectStagesResponseStageStateStatus` vocabulary as carried on the wire.
-// A string type rather than an int enum: the wire form IS the string, and an unknown value must
-// round-trip rather than fail to decode — this surface is additive, so a client that refused a
-// value the server legitimately added would break on a release it was never told about.
-type ListPublicProjectStagesResponseStageStateStatus string
-
-const (
-	ListPublicProjectStagesResponseStageStateStatusBlocked            ListPublicProjectStagesResponseStageStateStatus = "blocked"
-	ListPublicProjectStagesResponseStageStateStatusReady              ListPublicProjectStagesResponseStageStateStatus = "ready"
-	ListPublicProjectStagesResponseStageStateStatusInProgress         ListPublicProjectStagesResponseStageStateStatus = "in-progress"
-	ListPublicProjectStagesResponseStageStateStatusAwaitingCheckpoint ListPublicProjectStagesResponseStageStateStatus = "awaiting-checkpoint"
-	ListPublicProjectStagesResponseStageStateStatusDone               ListPublicProjectStagesResponseStageStateStatus = "done"
-)
-
-// ListPublicProjectStagesResponseStageStateStatusValues lists every ListPublicProjectStagesResponseStageStateStatus this SDK release knows.
-var ListPublicProjectStagesResponseStageStateStatusValues = []ListPublicProjectStagesResponseStageStateStatus{ListPublicProjectStagesResponseStageStateStatusBlocked, ListPublicProjectStagesResponseStageStateStatusReady, ListPublicProjectStagesResponseStageStateStatusInProgress, ListPublicProjectStagesResponseStageStateStatusAwaitingCheckpoint, ListPublicProjectStagesResponseStageStateStatusDone}
-
 // ListPublicReposResponse is the `ListPublicReposResponse` wire model.
 type ListPublicReposResponse struct {
 	Repos []ListPublicReposResponseRepo `json:"repos"`
@@ -6401,6 +6256,146 @@ type PublicProjectPin struct {
 type PublicProjectServices struct {
 	ServiceIds []string `json:"serviceIds"`
 }
+
+// PublicProjectStage is the `PublicProjectStage` wire model.
+type PublicProjectStage struct {
+	Stage PublicProjectStageStage `json:"stage"`
+	State PublicProjectStageState `json:"state"`
+}
+
+// PublicProjectStageList is the `PublicProjectStageList` wire model.
+type PublicProjectStageList struct {
+	Stages []PublicProjectStage `json:"stages"`
+}
+
+// PublicProjectStageStage is the `PublicProjectStageStage` wire model.
+type PublicProjectStageStage struct {
+	// Acceptance may be absent entirely.
+	Acceptance []PublicProjectDefinitionDefinitionStageAcceptance `json:"acceptance,omitempty"`
+	After      []string                                           `json:"after"`
+	Checkpoint bool                                               `json:"checkpoint"`
+	Consumes   []PublicProjectDefinitionDefinitionStageConsume    `json:"consumes"`
+	// Description may be absent entirely.
+	Description *string                                     `json:"description,omitempty"`
+	ID          string                                      `json:"id"`
+	Produces    string                                      `json:"produces"`
+	Repeatable  bool                                        `json:"repeatable"`
+	Start       PublicProjectDefinitionDefinitionStageStart `json:"start"`
+	TaskType    string                                      `json:"taskType"`
+	Title       string                                      `json:"title"`
+	// Writes may be absent entirely.
+	Writes *bool `json:"writes,omitempty"`
+}
+
+// PublicProjectStageState is the `PublicProjectStageState` wire model.
+type PublicProjectStageState struct {
+	// Acceptance always present; nil when the server has no value for it.
+	Acceptance *PublicProjectStageStateAcceptance `json:"acceptance"`
+	// Accepted always present; nil when the server has no value for it.
+	Accepted *PublicProjectStageStateAccepted `json:"accepted"`
+	// ActiveTaskID always present; nil when the server has no value for it.
+	ActiveTaskID *string `json:"activeTaskId"`
+	// Latest always present; nil when the server has no value for it.
+	Latest    *PublicProjectStageStateAccepted `json:"latest"`
+	StageID   string                           `json:"stageId"`
+	Stale     bool                             `json:"stale"`
+	Status    PublicProjectStageStateStatus    `json:"status"`
+	WaitingOn []string                         `json:"waitingOn"`
+}
+
+// PublicProjectStageStateAcceptance is the `PublicProjectStageStateAcceptance` wire model.
+type PublicProjectStageStateAcceptance struct {
+	AssessedAt float64                                     `json:"assessedAt"`
+	Criteria   []PublicProjectStageStateAcceptanceCriteria `json:"criteria"`
+	// Model may be absent entirely.
+	Model *string `json:"model,omitempty"`
+	// Note may be absent entirely.
+	Note      *string                                `json:"note,omitempty"`
+	OutcomeID string                                 `json:"outcomeId"`
+	State     PublicProjectStageStateAcceptanceState `json:"state"`
+}
+
+// PublicProjectStageStateAcceptanceCriteria is the `PublicProjectStageStateAcceptanceCriteria` wire model.
+type PublicProjectStageStateAcceptanceCriteria struct {
+	// Claim always present; nil when the server has no value for it.
+	Claim     *PublicProjectStageStateAcceptanceCriteriaClaim `json:"claim"`
+	Dropped   float64                                         `json:"dropped"`
+	Evidence  []string                                        `json:"evidence"`
+	ID        string                                          `json:"id"`
+	Rationale string                                          `json:"rationale"`
+	Statement string                                          `json:"statement"`
+	Status    PublicProjectStageStateAcceptanceCriteriaStatus `json:"status"`
+	Unfound   []string                                        `json:"unfound"`
+}
+
+// PublicProjectStageStateAcceptanceCriteriaClaim is the `PublicProjectStageStateAcceptanceCriteriaClaim` vocabulary as carried on the wire.
+// A string type rather than an int enum: the wire form IS the string, and an unknown value must
+// round-trip rather than fail to decode — this surface is additive, so a client that refused a
+// value the server legitimately added would break on a release it was never told about.
+type PublicProjectStageStateAcceptanceCriteriaClaim string
+
+const (
+	PublicProjectStageStateAcceptanceCriteriaClaimMet   PublicProjectStageStateAcceptanceCriteriaClaim = "met"
+	PublicProjectStageStateAcceptanceCriteriaClaimUnmet PublicProjectStageStateAcceptanceCriteriaClaim = "unmet"
+)
+
+// PublicProjectStageStateAcceptanceCriteriaClaimValues lists every PublicProjectStageStateAcceptanceCriteriaClaim this SDK release knows.
+var PublicProjectStageStateAcceptanceCriteriaClaimValues = []PublicProjectStageStateAcceptanceCriteriaClaim{PublicProjectStageStateAcceptanceCriteriaClaimMet, PublicProjectStageStateAcceptanceCriteriaClaimUnmet}
+
+// PublicProjectStageStateAcceptanceCriteriaStatus is the `PublicProjectStageStateAcceptanceCriteriaStatus` vocabulary as carried on the wire.
+// A string type rather than an int enum: the wire form IS the string, and an unknown value must
+// round-trip rather than fail to decode — this surface is additive, so a client that refused a
+// value the server legitimately added would break on a release it was never told about.
+type PublicProjectStageStateAcceptanceCriteriaStatus string
+
+const (
+	PublicProjectStageStateAcceptanceCriteriaStatusMet        PublicProjectStageStateAcceptanceCriteriaStatus = "met"
+	PublicProjectStageStateAcceptanceCriteriaStatusUnmet      PublicProjectStageStateAcceptanceCriteriaStatus = "unmet"
+	PublicProjectStageStateAcceptanceCriteriaStatusUnverified PublicProjectStageStateAcceptanceCriteriaStatus = "unverified"
+)
+
+// PublicProjectStageStateAcceptanceCriteriaStatusValues lists every PublicProjectStageStateAcceptanceCriteriaStatus this SDK release knows.
+var PublicProjectStageStateAcceptanceCriteriaStatusValues = []PublicProjectStageStateAcceptanceCriteriaStatus{PublicProjectStageStateAcceptanceCriteriaStatusMet, PublicProjectStageStateAcceptanceCriteriaStatusUnmet, PublicProjectStageStateAcceptanceCriteriaStatusUnverified}
+
+// PublicProjectStageStateAcceptanceState is the `PublicProjectStageStateAcceptanceState` vocabulary as carried on the wire.
+// A string type rather than an int enum: the wire form IS the string, and an unknown value must
+// round-trip rather than fail to decode — this surface is additive, so a client that refused a
+// value the server legitimately added would break on a release it was never told about.
+type PublicProjectStageStateAcceptanceState string
+
+const (
+	PublicProjectStageStateAcceptanceStateAssessed    PublicProjectStageStateAcceptanceState = "assessed"
+	PublicProjectStageStateAcceptanceStateUnavailable PublicProjectStageStateAcceptanceState = "unavailable"
+	PublicProjectStageStateAcceptanceStateFailed      PublicProjectStageStateAcceptanceState = "failed"
+	PublicProjectStageStateAcceptanceStatePending     PublicProjectStageStateAcceptanceState = "pending"
+)
+
+// PublicProjectStageStateAcceptanceStateValues lists every PublicProjectStageStateAcceptanceState this SDK release knows.
+var PublicProjectStageStateAcceptanceStateValues = []PublicProjectStageStateAcceptanceState{PublicProjectStageStateAcceptanceStateAssessed, PublicProjectStageStateAcceptanceStateUnavailable, PublicProjectStageStateAcceptanceStateFailed, PublicProjectStageStateAcceptanceStatePending}
+
+// PublicProjectStageStateAccepted is the `PublicProjectStageStateAccepted` wire model.
+type PublicProjectStageStateAccepted struct {
+	ID     string  `json:"id"`
+	Seq    float64 `json:"seq"`
+	TaskID string  `json:"taskId"`
+}
+
+// PublicProjectStageStateStatus is the `PublicProjectStageStateStatus` vocabulary as carried on the wire.
+// A string type rather than an int enum: the wire form IS the string, and an unknown value must
+// round-trip rather than fail to decode — this surface is additive, so a client that refused a
+// value the server legitimately added would break on a release it was never told about.
+type PublicProjectStageStateStatus string
+
+const (
+	PublicProjectStageStateStatusBlocked            PublicProjectStageStateStatus = "blocked"
+	PublicProjectStageStateStatusReady              PublicProjectStageStateStatus = "ready"
+	PublicProjectStageStateStatusInProgress         PublicProjectStageStateStatus = "in-progress"
+	PublicProjectStageStateStatusAwaitingCheckpoint PublicProjectStageStateStatus = "awaiting-checkpoint"
+	PublicProjectStageStateStatusDone               PublicProjectStageStateStatus = "done"
+)
+
+// PublicProjectStageStateStatusValues lists every PublicProjectStageStateStatus this SDK release knows.
+var PublicProjectStageStateStatusValues = []PublicProjectStageStateStatus{PublicProjectStageStateStatusBlocked, PublicProjectStageStateStatusReady, PublicProjectStageStateStatusInProgress, PublicProjectStageStateStatusAwaitingCheckpoint, PublicProjectStageStateStatusDone}
 
 // PublicProjectTask is the `PublicProjectTask` wire model.
 type PublicProjectTask struct {

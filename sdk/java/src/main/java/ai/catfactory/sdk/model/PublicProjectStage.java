@@ -8,47 +8,47 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import org.jspecify.annotations.Nullable;
 
 /**
- * The {@code ListPublicProjectStagesResponseStage} wire model.
+ * The {@code PublicProjectStage} wire model.
  * @param stage the {@code stage} field.
  * @param state the {@code state} field.
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
-public record ListPublicProjectStagesResponseStage(
-    @JsonProperty("stage") ListPublicProjectStagesResponseStageStage stage,
+public record PublicProjectStage(
+    @JsonProperty("stage") PublicProjectStageStage stage,
 
-    @JsonProperty("state") ListPublicProjectStagesResponseStageState state
+    @JsonProperty("state") PublicProjectStageState state
 ) {
 
-    /** A new builder for {@link ListPublicProjectStagesResponseStage}. */
+    /** A new builder for {@link PublicProjectStage}. */
     public static Builder builder() {
         return new Builder();
     }
 
     /**
-     * Fluent builder for {@link ListPublicProjectStagesResponseStage}.
+     * Fluent builder for {@link PublicProjectStage}.
      * Every setter is nullable so a caller supplies only what it means to send. Java has no
      * default arguments and Kotlin cannot synthesise them for a Java constructor, so this is the
      * shape that reads naturally from both languages.
      */
     public static final class Builder {
-        private @Nullable ListPublicProjectStagesResponseStageStage stage;
-        private @Nullable ListPublicProjectStagesResponseStageState state;
+        private @Nullable PublicProjectStageStage stage;
+        private @Nullable PublicProjectStageState state;
 
         /** Set {@code stage}. */
-        public Builder stage(@Nullable ListPublicProjectStagesResponseStageStage stage) {
+        public Builder stage(@Nullable PublicProjectStageStage stage) {
             this.stage = stage;
             return this;
         }
 
         /** Set {@code state}. */
-        public Builder state(@Nullable ListPublicProjectStagesResponseStageState state) {
+        public Builder state(@Nullable PublicProjectStageState state) {
             this.state = state;
             return this;
         }
 
-        /** Build the {@link ListPublicProjectStagesResponseStage}. */
-        public ListPublicProjectStagesResponseStage build() {
-            return new ListPublicProjectStagesResponseStage(stage, state);
+        /** Build the {@link PublicProjectStage}. */
+        public PublicProjectStage build() {
+            return new PublicProjectStage(stage, state);
         }
     }
 }

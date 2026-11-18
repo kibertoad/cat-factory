@@ -10,7 +10,7 @@ import type { RequestOptions, Transport } from './http.ts'
 import { encodePathSegment } from './http.ts'
 import { repeatedCursorError } from './errors.ts'
 import type {
-  AcceptPublicProjectStageRequest,
+  AcceptPublicProjectStage,
   AcknowledgeKaizenEntry,
   ActPublicNotificationRequest,
   AddPublicTaskDependencyRequest,
@@ -75,8 +75,6 @@ import type {
   ListPublicKaizenEntriesAcknowledged,
   ListPublicMergeClassRollupsResponse,
   ListPublicModelPresetsResponse,
-  ListPublicProjectStagesResponse,
-  ListPublicProjectStagesResponseStageState,
   ListPublicReposResponse,
   ListPublicReposResponseRepo,
   ListPublicRiskPoliciesResponse,
@@ -127,6 +125,8 @@ import type {
   PublicProjectOutcome,
   PublicProjectOutcomeList,
   PublicProjectServices,
+  PublicProjectStageList,
+  PublicProjectStageState,
   PublicProjectTask,
   PublicProjectTaskList,
   PublicProjectView,
@@ -2735,7 +2735,7 @@ export class ProjectKindsResource {
 
   /**
    * Get a project kind with its schemas
-   * One kind with the JSON Schemas of the shapes the rest of this surface leaves opaque: a definition's `spec`, an outcome's `body` (in the schema version the deployment writes) and a project's `view`. Each is null for a kind that declares none. A schema states the shape; a kind can enforce more when it parses (unique ids, say). An unknown kind is `404`.
+   * One kind with the JSON Schemas of the shapes the rest of this surface leaves opaque: a definition's `spec`, an outcome's `body` (in the schema version the deployment writes) and a project's `view`. Each is null for a kind that declares none. `outcomes` states each task type's body, keyed by the `taskType` an outcome names; `outcome` is that body for a kind with one task type and null for a kind with several. A schema states the shape; a kind can enforce more when it parses (unique ids, say). An unknown kind is `404`.
    * `GET /api/v1/project-kinds/{kind}` — operation `getPublicProjectKind`.
    */
   get(kind: string, options: RequestOptions = {}): Promise<PublicProjectKindDetail> {
@@ -2809,11 +2809,12 @@ export class ProjectsResource {
   }
 
   /**
-   * acceptPublicProjectStage
+   * Accept a stage's result at its checkpoint
+   * Accept the stage's newest result so the stages after it count it, and return the stage's state. A task type that settles its result at the checkpoint takes a `revision` (a decision register's choices, say) and may require one (`422 project_stage_revision_required`); one that takes none refuses it (`project_stage_revision_unsupported`). A stage whose result started tasks waits until each is done or removed (`409 project_stage_work_unsettled`). `409 project_stage_checkpoint_not_pending` when nothing waits. The acceptance is recorded with no person. Requires a `decide` key.
    * `POST /api/v1/projects/{projectId}/stages/{stageId}/checkpoint` — operation `acceptPublicProjectStage`.
    */
-  acceptStage(projectId: string, stageId: string, body: AcceptPublicProjectStageRequest = {}, options: RequestOptions = {}): Promise<ListPublicProjectStagesResponseStageState> {
-    return this.#transport.request<ListPublicProjectStagesResponseStageState>({
+  acceptStage(projectId: string, stageId: string, body: AcceptPublicProjectStage = {}, options: RequestOptions = {}): Promise<PublicProjectStageState> {
+    return this.#transport.request<PublicProjectStageState>({
       method: 'POST',
       path: `/api/v1/projects/${encodePathSegment(projectId)}/stages/${encodePathSegment(stageId)}/checkpoint`,
       body,
@@ -2928,7 +2929,7 @@ export class ProjectsResource {
 
   /**
    * List a project's outcomes
-   * Every outcome the project's tasks recorded, without bodies, ordered by `seq`: the order the tasks were STARTED, across every stream. `stream` narrows to one stream. An outcome is immutable once written.
+   * Every outcome the project's tasks recorded, without bodies, ordered by `seq`: the order the tasks were STARTED, across every stream. `stream` narrows to one stream. An outcome is immutable once written. Each names its `taskType`, the task type whose handler decodes its body (its schema is the kind's `schemas.outcomes[taskType]`), or null when no handler in the deployment decodes it.
    * `GET /api/v1/projects/{projectId}/outcomes` — operation `listPublicProjectOutcomes`.
    */
   listOutcomes(projectId: string, query: ProjectsListOutcomesQuery = {}, options: RequestOptions = {}): Promise<PublicProjectOutcomeList> {
@@ -2941,11 +2942,12 @@ export class ProjectsResource {
   }
 
   /**
-   * listPublicProjectStages
+   * List a staged project's stages
+   * Each stage of the definition the project pinned, in its order, with where it stands. A stage's state is derived, never stored: `blocked` (a stage it runs after has no accepted result, named in `waitingOn`), `ready`, `in-progress` (its task, `activeTaskId`, has no result yet), `awaiting-checkpoint` (its newest result waits for a person to accept it) or `done`. `stale` says an upstream result it built on has since changed. `acceptance` reports how its newest result meets the stage's acceptance criteria. Empty for a definition with no stages. A read serves the pinned version even when the definition changed since.
    * `GET /api/v1/projects/{projectId}/stages` — operation `listPublicProjectStages`.
    */
-  listStages(projectId: string, options: RequestOptions = {}): Promise<ListPublicProjectStagesResponse> {
-    return this.#transport.request<ListPublicProjectStagesResponse>({
+  listStages(projectId: string, options: RequestOptions = {}): Promise<PublicProjectStageList> {
+    return this.#transport.request<PublicProjectStageList>({
       method: 'GET',
       path: `/api/v1/projects/${encodePathSegment(projectId)}/stages`,
       options,
@@ -2990,7 +2992,8 @@ export class ProjectsResource {
   }
 
   /**
-   * startPublicProjectStage
+   * Start a stage
+   * Create the stage's task under the project, bound to the stage, and return it; start its run as any project task's (`POST /api/v1/projects/{projectId}/tasks/{taskId}/start`). Refused with `409` and a `details.reason` of `project_stage_blocked`, `project_stage_in_progress`, `project_stage_awaiting_checkpoint` or `project_stage_not_repeatable` unless the stage is ready, or done and repeatable. Only on the board that homes the project (`project_homed_elsewhere`). Requires a `write` key.
    * `POST /api/v1/projects/{projectId}/stages/{stageId}/tasks` — operation `startPublicProjectStage`.
    */
   startStage(projectId: string, stageId: string, options: RequestOptions = {}): Promise<PublicProjectTask> {

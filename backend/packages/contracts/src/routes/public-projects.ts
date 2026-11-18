@@ -22,8 +22,10 @@ import {
   publicProjectTaskSchema,
   publicProjectViewSchema,
   publishProjectDefinitionSchema,
+  acceptPublicProjectStageSchema,
+  publicProjectStageListSchema,
+  publicProjectStageStateSchema,
 } from '../public-projects.js'
-import { projectStageStateSchema, projectStageViewSchema } from '../project-stages.js'
 import { errorResponses, singleStringParam, withMinScope, withPersonalUnlock } from './_shared.js'
 
 // ---------------------------------------------------------------------------
@@ -44,15 +46,6 @@ const projectTaskParams = withObjectKeys(v.object({ projectId: v.string(), taskI
 const runIdParams = singleStringParam('runId')
 const outcomeParams = withObjectKeys(v.object({ projectId: v.string(), outcomeId: v.string() }))
 const stageParams = withObjectKeys(v.object({ projectId: v.string(), stageId: v.string() }))
-
-/** A staged project's stages, each with where it stands. */
-export const publicProjectStageListSchema = v.object({ stages: v.array(projectStageViewSchema) })
-export type PublicProjectStageList = v.InferOutput<typeof publicProjectStageListSchema>
-
-/** A person's settlement of a stage's result, for a task type that takes one. */
-export const acceptPublicProjectStageInputSchema = v.optional(
-  v.object({ revision: v.optional(v.unknown()) }),
-)
 
 /** The project kinds the deployment offers. */
 export const listPublicProjectKindsContract = withMinScope(
@@ -315,8 +308,8 @@ export const acceptPublicProjectStageContract = withMinScope(
     requestPathParamsSchema: stageParams,
     pathResolver: ({ projectId, stageId }) =>
       `/api/v1/projects/${projectId}/stages/${stageId}/checkpoint`,
-    requestBodySchema: acceptPublicProjectStageInputSchema,
-    responsesByStatusCode: { 200: projectStageStateSchema, ...errorResponses },
+    requestBodySchema: v.optional(acceptPublicProjectStageSchema),
+    responsesByStatusCode: { 200: publicProjectStageStateSchema, ...errorResponses },
   }),
 )
 

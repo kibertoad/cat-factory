@@ -13,6 +13,8 @@ import {
 } from './project-definitions.js'
 import { taskTypeFieldDescriptorSchema } from './task-types.js'
 import { outcomeStreamSchema, projectOutcomeMetaSchema } from './project-outcomes.js'
+import { projectStageSchema, projectStageStatusSchema } from './project-stages.js'
+import { stageAcceptanceReportSchema } from './stage-acceptance.js'
 import {
   projectKindDescriptorSchema,
   projectKindIdSchema,
@@ -57,7 +59,7 @@ export const publicProjectKindDetailSchema = v.object({
      */
     outcome: v.nullable(jsonSchemaSchema),
     /** Each task type's outcome `body`, keyed by the `taskType` an outcome carries. */
-    outcomes: v.optional(v.record(v.string(), v.nullable(jsonSchemaSchema)), {}),
+    outcomes: v.record(v.string(), v.nullable(jsonSchemaSchema)),
     /** A project's `view`. */
     view: v.nullable(jsonSchemaSchema),
   }),
@@ -196,15 +198,18 @@ export const createPublicProjectTaskSchema = v.object({
 })
 export type CreatePublicProjectTaskInput = v.InferOutput<typeof createPublicProjectTaskSchema>
 
-/** A project's outcomes without their bodies, `seq` ascending. */
-/** An outcome as the API serves it, with the task type whose handler wrote and decodes it. */
+/** An outcome as the API serves it, with the task type whose handler decodes it. */
 export const publicProjectOutcomeMetaSchema = v.object({
   ...projectOutcomeMetaSchema.entries,
-  /** Names the shape of `body` among the kind's `schemas.outcomes`; null when not recorded. */
+  /**
+   * The task type whose handler decodes `body`, naming its shape among the kind's
+   * `schemas.outcomes`; null when no handler in this deployment decodes it.
+   */
   taskType: v.nullable(v.string()),
 })
 export type PublicProjectOutcomeMeta = v.InferOutput<typeof publicProjectOutcomeMetaSchema>
 
+/** A project's outcomes without their bodies, `seq` ascending. */
 export const publicProjectOutcomeListSchema = v.object({
   outcomes: v.array(publicProjectOutcomeMetaSchema),
 })
@@ -240,3 +245,47 @@ export const publicCredentialResumeSchema = v.object({
   status: v.string(),
 })
 export type PublicCredentialResume = v.InferOutput<typeof publicCredentialResumeSchema>
+
+// ---- Stages ------------------------------------------------------------------------------------
+// The public projection of a staged project's stages. Its own schemas, so a change to the board's
+// stage view does not reach `/api/v1` unnoticed (ADR 0034).
+
+const publicStageOutcomeRefSchema = v.object({
+  id: v.string(),
+  seq: v.number(),
+  taskId: v.string(),
+})
+
+/** Where a stage stands, derived from its tasks and the project's outcomes. */
+export const publicProjectStageStateSchema = v.object({
+  stageId: v.string(),
+  /** `blocked`, `ready`, `in-progress`, `awaiting-checkpoint` or `done`. */
+  status: projectStageStatusSchema,
+  /** An upstream stage's accepted result changed since this stage's accepted result started. */
+  stale: v.boolean(),
+  /** The stages it runs after that have no accepted result, for a `blocked` stage. */
+  waitingOn: v.array(v.string()),
+  /** The task of it with no result yet, for an `in-progress` stage. */
+  activeTaskId: v.nullable(v.string()),
+  /** Its newest result, accepted or not. */
+  latest: v.nullable(publicStageOutcomeRefSchema),
+  /** The newest result a person accepted, or its newest one when it has no checkpoint. */
+  accepted: v.nullable(publicStageOutcomeRefSchema),
+  /** How its newest result meets the stage's acceptance criteria; null with no criteria. */
+  acceptance: v.nullable(stageAcceptanceReportSchema),
+})
+export type PublicProjectStageState = v.InferOutput<typeof publicProjectStageStateSchema>
+
+/** A stage of the pinned definition, without its task type's config, and where it stands. */
+export const publicProjectStageSchema = v.object({
+  stage: v.omit(projectStageSchema, ['config']),
+  state: publicProjectStageStateSchema,
+})
+export type PublicProjectStage = v.InferOutput<typeof publicProjectStageSchema>
+
+/** A staged project's stages, in the definition's order. */
+export const publicProjectStageListSchema = v.object({ stages: v.array(publicProjectStageSchema) })
+export type PublicProjectStageList = v.InferOutput<typeof publicProjectStageListSchema>
+
+/** A person's settlement of a stage's result, for a task type that takes one. */
+export const acceptPublicProjectStageSchema = v.object({ revision: v.optional(v.unknown()) })

@@ -9,37 +9,37 @@ import java.util.List;
 import org.jspecify.annotations.Nullable;
 
 /**
- * The {@code ListPublicProjectStagesResponse} wire model.
+ * The {@code PublicProjectStageList} wire model.
  * @param stages the {@code stages} field.
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
-public record ListPublicProjectStagesResponse(
-    @JsonProperty("stages") List<ListPublicProjectStagesResponseStage> stages
+public record PublicProjectStageList(
+    @JsonProperty("stages") List<PublicProjectStage> stages
 ) {
 
-    /** A new builder for {@link ListPublicProjectStagesResponse}. */
+    /** A new builder for {@link PublicProjectStageList}. */
     public static Builder builder() {
         return new Builder();
     }
 
     /**
-     * Fluent builder for {@link ListPublicProjectStagesResponse}.
+     * Fluent builder for {@link PublicProjectStageList}.
      * Every setter is nullable so a caller supplies only what it means to send. Java has no
      * default arguments and Kotlin cannot synthesise them for a Java constructor, so this is the
      * shape that reads naturally from both languages.
      */
     public static final class Builder {
-        private @Nullable List<ListPublicProjectStagesResponseStage> stages;
+        private @Nullable List<PublicProjectStage> stages;
 
         /** Set {@code stages}. */
-        public Builder stages(@Nullable List<ListPublicProjectStagesResponseStage> stages) {
+        public Builder stages(@Nullable List<PublicProjectStage> stages) {
             this.stages = stages;
             return this;
         }
 
-        /** Build the {@link ListPublicProjectStagesResponse}. */
-        public ListPublicProjectStagesResponse build() {
-            return new ListPublicProjectStagesResponse(stages);
+        /** Build the {@link PublicProjectStageList}. */
+        public PublicProjectStageList build() {
+            return new PublicProjectStageList(stages);
         }
     }
 }
