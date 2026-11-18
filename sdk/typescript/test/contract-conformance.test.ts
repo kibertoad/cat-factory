@@ -181,6 +181,22 @@ expectMutuallyAssignable<
   v.InferOutput<typeof contracts.publicProjectViewSchema>
 >()
 expectMutuallyAssignable<
+  sdk.PublicProjectStageState,
+  v.InferOutput<typeof contracts.publicProjectStageStateSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PublicProjectStage,
+  v.InferOutput<typeof contracts.publicProjectStageSchema>
+>()
+expectMutuallyAssignable<
+  sdk.PublicProjectStageList,
+  v.InferOutput<typeof contracts.publicProjectStageListSchema>
+>()
+expectMutuallyAssignable<
+  sdk.AcceptPublicProjectStage,
+  v.InferOutput<typeof contracts.acceptPublicProjectStageSchema>
+>()
+expectMutuallyAssignable<
   sdk.PublicCredentialResume,
   v.InferOutput<typeof contracts.publicCredentialResumeSchema>
 >()
@@ -810,6 +826,10 @@ const ASSERTED_COMPONENTS = [
   'PublicProjectOutcome',
   'PublicProjectOutcomeList',
   'PublicProjectView',
+  'PublicProjectStageState',
+  'PublicProjectStage',
+  'PublicProjectStageList',
+  'AcceptPublicProjectStage',
   'PublicCredentialResume',
   'GuidedReviewSessionView',
   'GuidedReviewThreadView',
