@@ -113,6 +113,17 @@ export interface ProjectTaskHandler<Body = unknown> {
     }): DefinitionParseResult<Body>
   }
   /**
+   * The tasks a result set going that must settle (done, or removed from the board) before a
+   * person may accept it at its stage's checkpoint. Absent: an acceptance waits on nothing.
+   */
+  checkpointAwaits?(body: Body): readonly { workspaceId: string; taskId: string }[]
+  /**
+   * What a stage running this task type must declare: a `checkpoint`, or at least one stage it
+   * runs `after`. A handler with a required revision or with {@link checkpointAwaits} needs a
+   * checkpoint whether or not it says so here.
+   */
+  stageRequires?: { checkpoint?: boolean; after?: boolean }
+  /**
    * Validate and normalize the `config` a definition's stage gives this task type. Absent: the
    * task type takes no config, and a stage that gives one is refused.
    */

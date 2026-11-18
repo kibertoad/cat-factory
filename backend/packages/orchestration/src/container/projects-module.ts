@@ -18,6 +18,7 @@ import {
 } from '../modules/projects/ProjectStageService.js'
 import { TaskProjectLinkService } from '../modules/projects/TaskProjectLinkService.js'
 import { projectContextContributor } from '../modules/projects/projectContext.js'
+import { stageSpawner } from '../modules/projects/stageSpawner.js'
 import { createBlockHomes } from '../modules/board/blockHomes.js'
 import { createProjectOutcomeStore } from '../modules/projects/createProjectStepController.js'
 import type { CoreDependencies } from './dependencies.js'
@@ -85,6 +86,7 @@ export function createProjectsModule(
     listTasks: (project) => service.listTasks(project),
     records: projectRecordRepository,
     outcomes,
+    blocks: deps.blockRepository,
     modules: sources.projectKindModules,
     definitions: sources.projectDefinitions,
     board: late.board,
@@ -93,7 +95,38 @@ export function createProjectsModule(
     logger: deps.logger,
   })
   stagesRef = stages
+  const taskLinks = taskProjectLinkRepository
+    ? new TaskProjectLinkService({
+        links: taskProjectLinkRepository,
+        projectRepository,
+        blockRepository: deps.blockRepository,
+        resolveBlock: createBlockHomes({
+          blockRepository: deps.blockRepository,
+          ...(deps.workspaceMountRepository
+            ? { workspaceMountRepository: deps.workspaceMountRepository }
+            : {}),
+        }).resolveBlock,
+        workspaceRepository: deps.workspaceRepository,
+        context: projectContextContributor({
+          records: projectRecordRepository,
+          outcomes,
+          definitions: sources.projectDefinitions,
+          modules: sources.projectKindModules,
+        }),
+        clock: deps.clock,
+      })
+    : undefined
   return {
+    engineTasks: [
+      stageSpawner({
+        serviceRepository,
+        blockRepository: deps.blockRepository,
+        board: late.board,
+        runStarter: late.runStarter,
+        ...(taskLinks ? { links: taskLinks } : {}),
+        logger: deps.logger,
+      }),
+    ],
     stages,
     service,
     records: projectRecordRepository,
@@ -124,29 +157,7 @@ export function createProjectsModule(
           }),
         }
       : {}),
-    ...(taskProjectLinkRepository
-      ? {
-          taskLinks: new TaskProjectLinkService({
-            links: taskProjectLinkRepository,
-            projectRepository,
-            blockRepository: deps.blockRepository,
-            resolveBlock: createBlockHomes({
-              blockRepository: deps.blockRepository,
-              ...(deps.workspaceMountRepository
-                ? { workspaceMountRepository: deps.workspaceMountRepository }
-                : {}),
-            }).resolveBlock,
-            workspaceRepository: deps.workspaceRepository,
-            context: projectContextContributor({
-              records: projectRecordRepository,
-              outcomes,
-              definitions: sources.projectDefinitions,
-              modules: sources.projectKindModules,
-            }),
-            clock: deps.clock,
-          }),
-        }
-      : {}),
+    ...(taskLinks ? { taskLinks } : {}),
     ...(projectDefinitionRepository
       ? {
           publisher: new ProjectDefinitionPublisher({

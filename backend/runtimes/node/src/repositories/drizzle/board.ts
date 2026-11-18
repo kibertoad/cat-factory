@@ -502,6 +502,18 @@ export class DrizzleBlockRepository implements BlockRepository {
     return row ? rowToBlock(row) : null
   }
 
+  async getMany(workspaceId: string, ids: string[]): Promise<Block[]> {
+    const out: Block[] = []
+    for (let i = 0; i < ids.length; i += 500) {
+      const rows = await this.db
+        .select()
+        .from(blocks)
+        .where(and(eq(blocks.workspace_id, workspaceId), inArray(blocks.id, ids.slice(i, i + 500))))
+      out.push(...rows.map(rowToBlock))
+    }
+    return out
+  }
+
   async getByExecution(workspaceId: string, executionId: string): Promise<Block | null> {
     const [row] = await this.db
       .select()

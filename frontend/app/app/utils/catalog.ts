@@ -1081,6 +1081,12 @@ export const TASK_TYPE_META: Record<string, TaskTypeMeta> = {
     color: 'var(--app-hue-cyan)',
     labelKey: 'board.addTask.types.decisions',
   },
+  spawn: {
+    taskType: 'spawn',
+    icon: 'i-lucide-git-fork',
+    color: 'var(--app-hue-teal)',
+    labelKey: 'board.addTask.types.spawn',
+  },
   recurring: {
     taskType: 'recurring',
     icon: 'i-lucide-repeat',

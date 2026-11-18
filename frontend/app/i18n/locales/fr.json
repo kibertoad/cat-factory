@@ -238,7 +238,8 @@
         "bugFishing": "Pêche aux bogues",
         "resolveConflicts": "Résoudre les conflits",
         "research": "Recherche",
-        "decisions": "Décisions"
+        "decisions": "Décisions",
+        "spawn": "Répartition"
       },
       "recurringWithFrame": "Une tâche récurrente exécute une pipeline selon une cadence. Continuez pour définir le calendrier et le prompt.",
       "recurringNoFrame": "Une tâche récurrente doit appartenir à un service. Ajoutez-la depuis un cadre de service (ou un module à l’intérieur).",
@@ -841,7 +842,8 @@
         "project_stage_blocked": "Étape précédente inachevée",
         "project_stage_awaiting_checkpoint": "Résultat en attente de revue",
         "project_stage_not_repeatable": "Étape déjà terminée",
-        "project_stage_checkpoint_not_pending": "Rien à accepter"
+        "project_stage_checkpoint_not_pending": "Rien à accepter",
+        "project_stage_work_unsettled": "Du travail est encore en cours"
       },
       "description": {
         "dependencies_unmet": "Cette tâche dépend d'autres qui ne sont pas encore terminées. Terminez-les ou débloquez-les, puis relancez-la.",
@@ -916,6 +918,7 @@
         "project_stage_blocked": "Cette étape s'exécute après des étapes qui n'ont pas encore de résultat accepté. Terminez-les d'abord.",
         "project_stage_awaiting_checkpoint": "Le dernier résultat de cette étape attend d'être accepté à son point de contrôle. Examinez-le et acceptez-le avant de relancer l'étape.",
         "project_stage_not_repeatable": "Cette étape a un résultat accepté et sa définition ne permet pas de la relancer.",
+        "project_stage_work_unsettled": "Cette étape a créé des tâches qui ne sont pas encore terminées. Acceptez son résultat une fois chacune terminée ou supprimée.",
         "project_stage_checkpoint_not_pending": "Cette étape n'a aucun résultat en attente à son point de contrôle. Il a peut-être déjà été accepté, ou sa tâche n'en a pas encore enregistré."
       },
       "action": {
@@ -5549,7 +5552,8 @@
         "media": "Média",
         "maintenance": "Maintenance de PR",
         "projectResearch": "Recherche de projet",
-        "projectDecisions": "Décisions du projet"
+        "projectDecisions": "Décisions du projet",
+        "projectSpawn": "Répartition du projet"
       },
       "strategyOption": {
         "specialist-panel": "Panel de spécialistes",

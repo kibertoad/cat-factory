@@ -86,6 +86,8 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
     // reason — it is board state, on a path a mothership-mode node serves from a laptop.
     shiftChildPositions: { scope: { kind: 'workspace', arg: 0 } },
     deleteMany: { scope: { kind: 'workspace', arg: 0 } },
+    // Which of the ids a caller derived exist in a workspace (a replayed spawn's own tasks).
+    getMany: { scope: { kind: 'workspace', arg: 0 } },
     // Entity-id-keyed (no workspace arg): resolve the block's home workspace's account server-side.
     findById: { scope: { kind: 'block', arg: 0 } },
     // The batched form (the cross-workspace dependency resolution on the run-start path).

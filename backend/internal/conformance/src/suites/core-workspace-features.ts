@@ -739,6 +739,10 @@ function registerBlockRepositoryTests(harness: ConformanceHarness): void {
       expect(byId.get(a.body.id)?.block.title).toBe('Home task')
       // Empty input short-circuits to an empty result.
       expect(await repo.findByIds([])).toEqual([])
+      // The workspace-scoped batch answers only for its own workspace, and skips a missing id.
+      const own = await repo.getMany(wsA.id, [a.body.id, b.body.id, 'blk_does_not_exist'])
+      expect(own.map((block) => block.id)).toEqual([a.body.id])
+      expect(await repo.getMany(wsA.id, [])).toEqual([])
     })
 
     it('stamps completedAt when a block reaches done, and only the FIRST time', async () => {

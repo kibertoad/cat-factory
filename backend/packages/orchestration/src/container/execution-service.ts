@@ -92,7 +92,7 @@ export function buildExecutionService(input: ExecutionServiceWiringInput): Execu
     projectStep: createProjectStepController(dependencies, {
       definitions: runtime.projectDefinitions,
       modules: runtime.projectKindModuleRegistry,
-      ...(projects ? { stages: projects.stages } : {}),
+      ...(projects ? { stages: projects.stages, engineTasks: projects.engineTasks } : {}),
     }),
     gateRegistry: runtime.gateRegistry,
     judgeRegistry: runtime.judgeRegistry,

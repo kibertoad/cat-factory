@@ -823,6 +823,11 @@ export class BoardService {
     }
   }
 
+  /** A new task's id: the one its caller derived, else a fresh one. */
+  private newTaskId(opts: { id?: string } | undefined): string {
+    return opts?.id ?? this.idGenerator.next('task')
+  }
+
   /**
    * Add a task inside a container (a service frame or a module).
    *
@@ -837,6 +842,8 @@ export class BoardService {
     input: AddTaskInput,
     editor: BlockEditAuthority,
     createdBy?: string | null,
+    /** An id the caller derived, so a replayed creation finds the task it made before. */
+    opts?: { id?: string },
   ): Promise<Block> {
     await this.requireWorkspace(workspaceId)
     // The container may be a frame/module of a service mounted from another workspace; create
@@ -896,7 +903,7 @@ export class BoardService {
     // guard above, and before any side effect.
     await this.taskTypeDefaults.assertNotSuppressed(workspaceId, taskType)
     const block: Block = {
-      id: this.idGenerator.next('task'),
+      id: this.newTaskId(opts),
       title: input.title.trim(),
       type: service?.type ?? container.type,
       description: input.description?.trim() ?? '',

@@ -66,6 +66,7 @@ function makeMachine(getFails: unknown, block: Block | null | 'throws' = TASK) {
     },
   } as unknown as ExecutionRepository
   const blockRepository: BlockRepository = {
+    getMany: async () => [],
     getByExecution: async () => {
       if (block === 'throws') throw new Error('blocks table unavailable')
       return block

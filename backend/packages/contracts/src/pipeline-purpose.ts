@@ -193,6 +193,16 @@ const PURPOSE_SUGGESTED_CATEGORIES: Record<
     docs: false,
     gates: true,
   },
+  // The engine creates the services' tasks itself, so no agent category belongs in its palette
+  // beyond the gates a person may want in front of it.
+  'project-spawn': {
+    review: false,
+    design: false,
+    build: false,
+    test: false,
+    docs: false,
+    gates: true,
+  },
 }
 
 /**
@@ -338,6 +348,7 @@ const EXACT_PURPOSE_FOR_TASK_TYPE: ReadonlyMap<string, PipelinePurpose> = new Ma
   ['resolve-conflicts', 'maintenance'],
   ['research', 'project-research'],
   ['decisions', 'project-decisions'],
+  ['spawn', 'project-spawn'],
 ])
 
 /** The purposes offered only to the one task type mapped to them, and to no other. */
@@ -345,6 +356,7 @@ const EXCLUSIVE_PURPOSES: readonly PipelinePurpose[] = [
   'maintenance',
   'project-research',
   'project-decisions',
+  'project-spawn',
 ]
 
 /**

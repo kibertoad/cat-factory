@@ -274,7 +274,8 @@
         "bugFishing": "Bug fishing",
         "resolveConflicts": "Resolve conflicts",
         "research": "Research",
-        "decisions": "Decisions"
+        "decisions": "Decisions",
+        "spawn": "Spawn"
       },
       "recurringWithFrame": "A recurring task runs a pipeline on a cadence. Continue to set the schedule + prompt.",
       "recurringNoFrame": "A recurring task must live on a service. Add it from a service frame (or a module inside one).",
@@ -922,7 +923,8 @@
         "project_stage_blocked": "Earlier stage not finished",
         "project_stage_awaiting_checkpoint": "Result awaits review",
         "project_stage_not_repeatable": "Stage already done",
-        "project_stage_checkpoint_not_pending": "Nothing to accept"
+        "project_stage_checkpoint_not_pending": "Nothing to accept",
+        "project_stage_work_unsettled": "Work still running"
       },
       "description": {
         "dependencies_unmet": "This task depends on others that aren't finished yet. Complete or unblock them, then start it again.",
@@ -1000,6 +1002,7 @@
         "project_stage_blocked": "This stage runs after stages that have no accepted result yet. Finish those first.",
         "project_stage_awaiting_checkpoint": "This stage's latest result is waiting for someone to accept it at its checkpoint. Review and accept it before running the stage again.",
         "project_stage_not_repeatable": "This stage has an accepted result and its definition does not let it run again.",
+        "project_stage_work_unsettled": "This stage created tasks that have not finished yet. Accept its result once every one of them is done or removed.",
         "project_stage_checkpoint_not_pending": "This stage has no result waiting at its checkpoint. It may have been accepted already, or its task has not recorded one yet."
       },
       "action": {
@@ -5749,7 +5752,8 @@
         "media": "Media",
         "maintenance": "PR maintenance",
         "projectResearch": "Project research",
-        "projectDecisions": "Project decisions"
+        "projectDecisions": "Project decisions",
+        "projectSpawn": "Project spawn"
       },
       "strategyOption": {
         "specialist-panel": "Specialist panel",

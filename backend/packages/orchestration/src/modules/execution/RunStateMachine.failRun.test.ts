@@ -51,6 +51,7 @@ function makeMachine(opts: {
   } as unknown as ExecutionRepository
 
   const blockRepository: BlockRepository = {
+    getMany: async () => [],
     get: async () => ({ id: BASE.blockId }) as unknown as Block,
     update: async (_ws: string, _id: string, patch: { status?: string }) => {
       blockUpdates.push(patch)

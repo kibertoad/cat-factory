@@ -256,6 +256,7 @@ export {
   BUG_FISHING_PIPELINE_ID,
   RESEARCH_PIPELINE_ID,
   DECISIONS_PIPELINE_ID,
+  SPAWN_PIPELINE_ID,
   CODE_COMMENTS_PIPELINE_ID,
   BUSINESS_DOCS_PIPELINE_ID,
   DOCUMENT_PIPELINE_ID,
@@ -1230,6 +1231,7 @@ export {
   type ProjectContextRendering,
 } from './domain/project-kind-module.js'
 export { decisionTaskHandler } from './domain/decision-handler.js'
+export { spawnTaskHandler } from './domain/spawn-handler.js'
 export {
   PROJECT_RESEARCHER_AGENT_KIND,
   RESEARCH_PROJECT_KIND,

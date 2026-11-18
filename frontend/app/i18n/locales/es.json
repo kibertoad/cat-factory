@@ -238,7 +238,8 @@
         "bugFishing": "Pesca de errores",
         "resolveConflicts": "Resolver conflictos",
         "research": "Investigación",
-        "decisions": "Decisiones"
+        "decisions": "Decisiones",
+        "spawn": "Distribución"
       },
       "recurringWithFrame": "Una tarea recurrente ejecuta una pipeline con cierta cadencia. Continúa para definir el horario y el prompt.",
       "recurringNoFrame": "Una tarea recurrente debe vivir en un servicio. Añádela desde un marco de servicio (o un módulo dentro de él).",
@@ -841,7 +842,8 @@
         "project_stage_blocked": "Etapa anterior sin terminar",
         "project_stage_awaiting_checkpoint": "El resultado espera revisión",
         "project_stage_not_repeatable": "La etapa ya está hecha",
-        "project_stage_checkpoint_not_pending": "Nada que aceptar"
+        "project_stage_checkpoint_not_pending": "Nada que aceptar",
+        "project_stage_work_unsettled": "Todavía hay trabajo en curso"
       },
       "description": {
         "dependencies_unmet": "Esta tarea depende de otras que aún no están terminadas. Complétalas o desbloquéalas y vuelve a iniciarla.",
@@ -916,6 +918,7 @@
         "project_stage_blocked": "Esta etapa se ejecuta después de etapas que aún no tienen un resultado aceptado. Termínalas primero.",
         "project_stage_awaiting_checkpoint": "El último resultado de esta etapa espera que alguien lo acepte en su punto de control. Revísalo y acéptalo antes de volver a ejecutar la etapa.",
         "project_stage_not_repeatable": "Esta etapa tiene un resultado aceptado y su definición no permite volver a ejecutarla.",
+        "project_stage_work_unsettled": "Esta etapa creó tareas que aún no han terminado. Acepta su resultado cuando cada una esté terminada o eliminada.",
         "project_stage_checkpoint_not_pending": "Esta etapa no tiene ningún resultado esperando en su punto de control. Puede que ya se haya aceptado o que su tarea aún no haya registrado uno."
       },
       "action": {
@@ -5549,7 +5552,8 @@
         "media": "Medios",
         "maintenance": "Mantenimiento de PR",
         "projectResearch": "Investigación de proyecto",
-        "projectDecisions": "Decisiones del proyecto"
+        "projectDecisions": "Decisiones del proyecto",
+        "projectSpawn": "Distribución del proyecto"
       },
       "strategyOption": {
         "specialist-panel": "Panel de especialistas",

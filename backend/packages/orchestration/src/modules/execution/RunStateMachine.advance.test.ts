@@ -40,6 +40,7 @@ function makeMachine(status: Block['status']) {
   const patches: BlockPatch[] = []
   const block = { id: 'task_login', title: 'Add passkey login', status } as unknown as Block
   const blockRepository: BlockRepository = {
+    getMany: async () => [],
     get: async () => block,
     update: async (_ws: string, _id: string, patch: BlockPatch) => {
       patches.push(patch)

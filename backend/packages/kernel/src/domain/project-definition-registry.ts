@@ -87,12 +87,25 @@ function parseStageConfig(
       issues: [`project kind '${module.kind}' offers no task type '${stage.taskType}'`],
     }
   }
-  if (handler.checkpointRevision?.required && !stage.checkpoint) {
+  const needsCheckpoint =
+    handler.checkpointRevision?.required ||
+    handler.checkpointAwaits !== undefined ||
+    handler.stageRequires?.checkpoint
+  if (needsCheckpoint && !stage.checkpoint) {
     return {
       ok: false,
       issues: [
-        `task type '${stage.taskType}' needs a person to settle its result, so its stage must ` +
+        `task type '${stage.taskType}' needs a person to accept its result, so its stage must ` +
           'declare a checkpoint',
+      ],
+    }
+  }
+  if (handler.stageRequires?.after && stage.after.length === 0) {
+    return {
+      ok: false,
+      issues: [
+        `task type '${stage.taskType}' works from what earlier stages accepted, so its stage must ` +
+          'run after at least one',
       ],
     }
   }

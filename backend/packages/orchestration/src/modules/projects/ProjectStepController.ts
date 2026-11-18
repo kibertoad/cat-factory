@@ -35,6 +35,7 @@ import type { ProjectOutcomeStore } from './ProjectOutcomeStore.js'
 import type { ProjectStageService } from './ProjectStageService.js'
 import { decodeOutcome, outcomeTaskType } from './outcomeDecoding.js'
 import { resolvePinnedDefinition } from './pinnedDefinition.js'
+import type { ProjectEngineTask } from './stageSpawner.js'
 import { renderStageUpstream } from './stageUpstream.js'
 
 // ---------------------------------------------------------------------------
@@ -57,6 +58,8 @@ export interface ProjectStepControllerDeps {
   clock: Clock
   /** Starts the stages a recorded outcome made ready. Absent where projects are not wired. */
   stages?: Pick<ProjectStageService, 'advance'>
+  /** The task types the engine performs itself rather than dispatching an agent, by task type. */
+  engineTasks?: readonly ProjectEngineTask[]
   logger?: Logger
 }
 
@@ -95,6 +98,34 @@ export class ProjectStepController {
   /** Whether a step of `agentKind` is a project task's run that a task handler plans. */
   handles(agentKind: string): boolean {
     return this.deps.modules.forAgentKind(agentKind) !== undefined
+  }
+
+  /** Whether a step of `agentKind` is performed by the engine rather than dispatched to an agent. */
+  runsInEngine(agentKind: string): boolean {
+    const handler = this.deps.modules.forAgentKind(agentKind)
+    return !!handler && this.engineTaskOf(handler.taskType) !== undefined
+  }
+
+  /**
+   * Perform a prepared engine step: the reply its handler's `finish` reads, which the ordinary
+   * completion records as the task's outcome.
+   */
+  async runInEngine(
+    workspaceId: string,
+    step: PipelineStep,
+    block: Block,
+  ): Promise<AgentRunResult> {
+    const state = requireState(step)
+    const engineTask = state.taskType ? this.engineTaskOf(state.taskType) : undefined
+    if (!engineTask) throw new Error(`No engine task performs '${state.taskType}' in this process`)
+    const project = await this.deps.projectRepository.get(state.projectId)
+    if (!project) throw new Error(`Project '${state.projectId}' no longer exists`)
+    const reply = await engineTask.run({ workspaceId, project, task: block, plan: state.plan })
+    return { output: '', custom: reply }
+  }
+
+  private engineTaskOf(taskType: string): ProjectEngineTask | undefined {
+    return this.deps.engineTasks?.find((t) => t.taskType === taskType)
   }
 
   /**

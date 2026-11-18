@@ -3182,7 +3182,8 @@
         "bugFishing": "Pesca di bug",
         "resolveConflicts": "Risolvi conflitti",
         "research": "Ricerca",
-        "decisions": "Decisioni"
+        "decisions": "Decisioni",
+        "spawn": "Distribuzione"
       },
       "recurringWithFrame": "Un'attività ricorrente esegue una pipeline a cadenza regolare. Continua per impostare la pianificazione e il prompt.",
       "recurringNoFrame": "Un'attività ricorrente deve risiedere su un servizio. Aggiungila da un frame di servizio (o da un modulo al suo interno).",
@@ -4943,7 +4944,8 @@
         "media": "Media",
         "maintenance": "Manutenzione PR",
         "projectResearch": "Ricerca di progetto",
-        "projectDecisions": "Decisioni del progetto"
+        "projectDecisions": "Decisioni del progetto",
+        "projectSpawn": "Distribuzione del progetto"
       },
       "strategyOption": {
         "specialist-panel": "Panel di specialisti",
@@ -6732,7 +6734,8 @@
         "project_stage_blocked": "Fase precedente non conclusa",
         "project_stage_awaiting_checkpoint": "Risultato in attesa di revisione",
         "project_stage_not_repeatable": "Fase già completata",
-        "project_stage_checkpoint_not_pending": "Niente da accettare"
+        "project_stage_checkpoint_not_pending": "Niente da accettare",
+        "project_stage_work_unsettled": "Lavoro ancora in corso"
       },
       "description": {
         "dependencies_unmet": "Questa attività dipende da altre non ancora completate. Completale o sbloccale, poi avviala di nuovo.",
@@ -6807,6 +6810,7 @@
         "project_stage_blocked": "Questa fase viene eseguita dopo fasi che non hanno ancora un risultato accettato. Completale prima.",
         "project_stage_awaiting_checkpoint": "L'ultimo risultato di questa fase attende che qualcuno lo accetti al suo checkpoint. Rivedilo e accettalo prima di eseguire di nuovo la fase.",
         "project_stage_not_repeatable": "Questa fase ha un risultato accettato e la sua definizione non consente di eseguirla di nuovo.",
+        "project_stage_work_unsettled": "Questa fase ha creato attività non ancora concluse. Accetta il suo risultato quando ciascuna è completata o rimossa.",
         "project_stage_checkpoint_not_pending": "Questa fase non ha alcun risultato in attesa al suo checkpoint. Potrebbe essere già stato accettato, oppure la sua attività non ne ha ancora registrato uno."
       },
       "action": {

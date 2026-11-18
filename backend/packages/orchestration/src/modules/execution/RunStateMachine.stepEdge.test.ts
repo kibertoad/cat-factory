@@ -62,6 +62,7 @@ function makeMachine(
   const order: string[] = []
   const block = options.block === undefined ? task : options.block
   const blockRepository: BlockRepository = {
+    getMany: async () => [],
     get: async (_ws: string, id: string) => {
       blockReads.push(id)
       if (options.blockReadThrows) throw new Error('block store unreachable')

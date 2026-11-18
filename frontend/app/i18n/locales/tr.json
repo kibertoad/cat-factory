@@ -238,7 +238,8 @@
         "bugFishing": "Hata avı",
         "resolveConflicts": "Çakışmaları çöz",
         "research": "Araştırma",
-        "decisions": "Kararlar"
+        "decisions": "Kararlar",
+        "spawn": "Dağıtım"
       },
       "recurringWithFrame": "Yinelenen bir görev, bir işlem hattını belirli bir aralıkta çalıştırır. Programı ve istemi ayarlamak için devam edin.",
       "recurringNoFrame": "Yinelenen bir görev bir serviste bulunmalıdır. Bir servis çerçevesinden (veya içindeki bir modülden) ekleyin.",
@@ -841,7 +842,8 @@
         "project_stage_blocked": "Önceki aşama bitmedi",
         "project_stage_awaiting_checkpoint": "Sonuç incelemeyi bekliyor",
         "project_stage_not_repeatable": "Aşama zaten tamamlandı",
-        "project_stage_checkpoint_not_pending": "Kabul edilecek bir şey yok"
+        "project_stage_checkpoint_not_pending": "Kabul edilecek bir şey yok",
+        "project_stage_work_unsettled": "İş hâlâ sürüyor"
       },
       "description": {
         "dependencies_unmet": "Bu görev henüz tamamlanmamış başka görevlere bağlı. Onları tamamla veya engelini kaldır, ardından yeniden başlat.",
@@ -916,6 +918,7 @@
         "project_stage_blocked": "Bu aşama, henüz kabul edilmiş bir sonucu olmayan aşamalardan sonra çalışır. Önce onları tamamlayın.",
         "project_stage_awaiting_checkpoint": "Bu aşamanın en son sonucu, kontrol noktasında birinin onu kabul etmesini bekliyor. Aşamayı yeniden çalıştırmadan önce inceleyip kabul edin.",
         "project_stage_not_repeatable": "Bu aşamanın kabul edilmiş bir sonucu var ve tanımı yeniden çalıştırılmasına izin vermiyor.",
+        "project_stage_work_unsettled": "Bu aşama henüz bitmemiş görevler oluşturdu. Her biri tamamlandığında veya kaldırıldığında sonucunu kabul edin.",
         "project_stage_checkpoint_not_pending": "Bu aşamanın kontrol noktasında bekleyen bir sonucu yok. Zaten kabul edilmiş olabilir ya da görevi henüz bir sonuç kaydetmemiş olabilir."
       },
       "action": {
@@ -5549,7 +5552,8 @@
         "media": "Medya",
         "maintenance": "PR bakımı",
         "projectResearch": "Proje araştırması",
-        "projectDecisions": "Proje kararları"
+        "projectDecisions": "Proje kararları",
+        "projectSpawn": "Proje dağıtımı"
       },
       "strategyOption": {
         "specialist-panel": "Uzman paneli",

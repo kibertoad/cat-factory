@@ -647,3 +647,9 @@ Additive on the wire, and both target fields are optional with no default, so a 
 The task-type vocabulary gains `decisions`: a project stage that proposes a decision register (each item a question with options, a recommended default, the rationale and the evidence) for a person to settle, run on the new `pl_decisions` pipeline. Like `research`, it belongs under a project and is refused under a service. The pipeline-purpose vocabulary gains `project-decisions`.
 
 Additive. A consumer built against 1.100.0 keeps parsing, and one that maps task types or purposes through an exhaustive table gains a member to name.
+
+## 1.102.0
+
+The task-type vocabulary gains `spawn`: a project stage that creates a task in each service the project links, with the project linked to it as context, and starts each task's run, on the new `pl_spawn` pipeline. Its result records the tasks it created, and its checkpoint is accepted once every one of them is done. Like `research`, it belongs under a project and is refused under a service. The pipeline-purpose vocabulary gains `project-spawn`, and the conflict reasons gain `project_stage_work_unsettled`.
+
+Additive. A consumer built against 1.101.0 keeps parsing, and one that maps task types, purposes or reasons through an exhaustive table gains a member to name.

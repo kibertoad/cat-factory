@@ -27,7 +27,9 @@ The one rule that belongs to no single bucket, and so is stated in the root
   **`resolveHelperCompletion`** is the seam for an INVESTIGATE-don't-fix helper (`on-call` never
   reverts), settling the gate without re-probing.
 - **One-shot engine steps**: `tracker`, `deployer`, `requirements-review`. Bespoke handling; not gates
-  because they don't poll-or-escalate.
+  because they don't poll-or-escalate. A project task type the engine performs (the spawn stage's
+  `project-spawner`) completes the same way through the project step's engine tasks, with no
+  bespoke step kind of its own.
 - **Judges**: an inline LLM scores work against a rubric, disposing: advance / park / bounce the
   producing step with findings as `rework` / fail. **Adding a judge is a new registry entry**
   (`JudgeDefinition`). Model, and why it is neither a gate nor a `StepCompletionResolver`:
