@@ -13,8 +13,9 @@
   acceptance prompt), `@cat-factory/server` (the project stage routes, internal and public), the
   executor harness's target access tools, both runtime facades, and `frontend/app`
   (`ProjectStageRail.vue`, `ProjectStageDecisions.vue`). Builds on
-  [ADR 0069](./0069-projects-and-research-projects.md). Product page: the catfactory.ai guide
-  "Work Through a Staged Project" and the public API page's "Staged projects" section.
+  [ADR 0069](./0069-projects-and-research-projects.md). Product pages, not yet live: the guide
+  "Work Through a Staged Project" and the public API page's "Staged projects" section, in
+  [kibertoad/cat-factory-website#128](https://github.com/kibertoad/cat-factory-website/pull/128).
 
 ## Context
 
@@ -37,8 +38,13 @@ stages it runs `after`, the stages whose results it `consumes`, the stream it `p
 it starts on its own (`start: 'auto'`) or by a person, whether a person accepts its result at a
 `checkpoint`, whether it is `repeatable`, whether its runs may write to a vendor (`writes`), its
 `acceptance` criteria, and its task type's `config`. Validation is structural (unique ids and
-streams, known and acyclic `after`, `consumes` within the ancestry, the write and acceptance rules)
-and per stage by its task type's handler. A definition with no stages hashes as it always did.
+streams, known and acyclic `after`, `consumes` within the ancestry and never repeated; a stage with
+criteria declares a checkpoint; a writing stage reads at least one stage and only checkpointed
+ones, is not repeatable, and sits in a definition with a writable target; two targets on one
+origin differ in path prefix) and per stage by its task type's handler: its `config`, a checkpoint
+where the handler requires a revision or awaits tasks, and `stageRequires` (a spawn stage runs
+after another, a writeup reads at least one). A definition with no stages hashes without the
+`stages` key, so a pin taken on a definition without stages stays valid.
 
 **Content lives in task handlers.** A kind module lists `ProjectTaskHandler`s, one per task type:
 the agent kind it dispatches (or `performedBy: 'engine'`), its outcome body schema and version,
@@ -77,7 +83,10 @@ the outline sections it lacks and drops an artifact no result it read holds.
 
 **Vendor writes are opt-in per stage.** A target may allow writes under a path prefix, and only a
 writing stage's run is given it. A writing stage reads only stages a person accepted at a
-checkpoint, and is not repeatable, so every write follows a person's acceptance.
+checkpoint, and is not repeatable, so every write follows a person's acceptance. The bound is the
+harness's `http_request` tool, so it holds on runner image 1.168.0 and later; it does not bind the
+browser, through which a run can still submit a form on a `ui` target. See
+[`security-model.md`](../security-model.md).
 
 **Surfaces.** The project takeover opens a staged project on its Stages tab, where a person starts a
 stage and accepts a result. A `stage_checkpoint` notification tells them a result awaits acceptance
@@ -92,8 +101,9 @@ The public API lists stages, starts one (`write`) and accepts one (`decide`); an
   data or a handler method, the rule initiative presets follow, so a deployment's own stage kinds
   ride the same seams as the built-in ones.
 - **The model proposes, a person decides.** A checkpoint is cleared by a person; the engine never
-  reads a verdict out of model prose. Decisions are settled by a person, and acceptance criteria
-  are judged in code against quoted evidence, never by a model's say-so.
+  reads a verdict out of model prose. Decisions are settled by a person, and a criterion counts
+  as met only when every passage the model quoted for it is in the result; the report informs
+  the person and accepts nothing.
 - **Derived state cannot drift.** Outcomes are immutable and sequence-ordered, so the only new
   facts are which task belongs to which stage and who accepted what. A status computed on read
   cannot disagree with the outcomes it summarises, and nothing needs a rev-guarded document.
@@ -108,6 +118,14 @@ The public API lists stages, starts one (`write`) and accepts one (`decide`); an
 
 ## Consequences
 
+- A task type and an agent kind each name exactly one handler. Dispatch resolves the handler from
+  the task's type under its project's kind and records the task type on the step, so
+  checkpointing and recording read back the same handler. A kind's descriptor and its module list
+  task types separately: a task type the descriptor offers with no handler in the module is
+  refused at dispatch with `task_type_not_offered_by_project`.
+- The research kind's project-level view folds only its unstaged `main` stream, so a staged
+  research project shows no findings there; its stages show them. A staged definition of the
+  research kind still carries the kind's top-level spec; a kind built for stages declares its own.
 - A staged project's task belongs to the stage that started it. A task created under a staged
   project any other way is refused at dispatch with `project_task_has_no_stage`.
 - A stage's slot is freed after a lost claim only when its holder can no longer finish (its task
@@ -116,15 +134,21 @@ The public API lists stages, starts one (`write`) and accepts one (`decide`); an
 - `stale` compares the upstream results a stage's accepted task started from with the ones accepted
   now, so a result accepted after the downstream task recorded still makes it stale.
 - An automatic stage starts once, when it first becomes ready with no task of it yet; after that a
-  person decides, so deleting its task stops it. Its run is started with no initiator, and a run on
-  an individual-usage model waits on the board for a person.
+  person decides, so deleting its task stops it. A task it created whose run never started (the
+  process died in between, or the start failed) has its run started by the next trigger. Its run
+  is started with no initiator, and a run on an individual-usage model waits on the board for a
+  person. Each trigger is best-effort, so nothing undoes the outcome or checkpoint that made the
+  stage ready.
 - A staged project is linkable once some stage has an accepted result, and a link reads only those
   results' bodies. A project pinned to a definition the deployment cannot resolve is stated rather
   than rendered.
 - A spawned task asks after itself per board (`BlockRepository.getMany`), because a mothership
   node's by-id read refuses an id that resolves to no block, and a service's frame is matched
-  through its owning service, because a block id alone does not name one board. A task moved to
-  another board of the account is still awaited at the checkpoint.
+  through its owning service, because a block id alone does not name one board. A spawned task
+  waits on its board for a person when its task type pins no pipeline, when it runs on an
+  individual-usage model, or when its run fails to start, and the result says which. A task moved
+  to another board of the account, or left behind by a service unlinked after the spawn ran, is
+  still awaited at the checkpoint until it is done or removed.
 - An acceptance report that assessed nothing (no model, a failed call) says so and is replaced by
   the next attempt; a result not yet assessed reads as `pending`.
 - An outcome with no recorded task type is decoded by the kind's handler when the kind has exactly

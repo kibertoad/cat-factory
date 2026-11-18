@@ -71,6 +71,8 @@ in [`backend/docs/adr/`](../backend/docs/adr); the file names are the index.
 
 - [Projects and research projects: account-owned peers of services, kind modules and outcome
   revisions, the credential park and linking a project to a task](../backend/docs/adr/0069-projects-and-research-projects.md)
+- [Staged project definitions: stages as definition data, derived stage state, checkpoints and
+  settlements, and the built-in decisions, spawn and writeup stages](../backend/docs/adr/0070-staged-project-definitions.md)
 - [Images attached to a task: storage, retention and delivery to each agent path](../backend/docs/task-images.md)
 - [Model support: selection, fallbacks, harnesses & provisioning](../backend/docs/model-support.md)
   (using it: [Model providers](https://www.catfactory.ai/guide/model-providers.html))
