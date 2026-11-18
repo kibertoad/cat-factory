@@ -33,6 +33,7 @@ const PURPOSE_LABELS = computed<Record<PipelinePurpose, string>>(() => ({
   media: t('pipeline.builder.purposeOption.media'),
   maintenance: t('pipeline.builder.purposeOption.maintenance'),
   'project-research': t('pipeline.builder.purposeOption.projectResearch'),
+  'project-decisions': t('pipeline.builder.purposeOption.projectDecisions'),
 }))
 
 // The button text. A stored purpose this build has no label for is NAMED as unrecognised and

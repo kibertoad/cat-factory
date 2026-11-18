@@ -237,7 +237,8 @@
         "ralph": "Ralph döngüsü",
         "bugFishing": "Hata avı",
         "resolveConflicts": "Çakışmaları çöz",
-        "research": "Araştırma"
+        "research": "Araştırma",
+        "decisions": "Kararlar"
       },
       "recurringWithFrame": "Yinelenen bir görev, bir işlem hattını belirli bir aralıkta çalıştırır. Programı ve istemi ayarlamak için devam edin.",
       "recurringNoFrame": "Yinelenen bir görev bir serviste bulunmalıdır. Bir servis çerçevesinden (veya içindeki bir modülden) ekleyin.",
@@ -739,7 +740,8 @@
         "project_stage_revision_required": "Bu aşamanın sonucu kabul edilirken karara bağlanmalı: önerdiği her maddeye karar verin, sonra kabul edin.",
         "project_stage_revision_unsupported": "Bu aşamanın sonucu kaydedildiği gibi kabul edilir; kontrol noktasında değişiklik kabul etmez.",
         "project_stage_revision_invalid": "Değişiklikler bu aşamanın sonucuna uymuyor. Ayrıntılar hangi kısmın uymadığını gösteriyor; düzeltip yeniden kabul edin.",
-        "project_stage_result_unreadable": "Bu aşamanın sonucu şu anda okunamıyor, bu yüzden karara bağlanamıyor. Daha sonra yeniden deneyin; sorun sürerse kayıtlı sonucun geri yüklenmesi gerekir."
+        "project_stage_result_unreadable": "Bu aşamanın sonucu şu anda okunamıyor, bu yüzden karara bağlanamıyor. Daha sonra yeniden deneyin; sorun sürerse kayıtlı sonucun geri yüklenmesi gerekir.",
+        "project_task_type_needs_stage": "Bu görev türü yalnızca aşamalı bir projenin aşaması olarak çalışır ve bu projenin tanımı hiç aşama bildirmiyor. Onu aşama olarak çalıştıran bir tanım kullanın."
       }
     },
     "action": {
@@ -5546,7 +5548,8 @@
         "planning": "Planlama",
         "media": "Medya",
         "maintenance": "PR bakımı",
-        "projectResearch": "Proje araştırması"
+        "projectResearch": "Proje araştırması",
+        "projectDecisions": "Proje kararları"
       },
       "strategyOption": {
         "specialist-panel": "Uzman paneli",

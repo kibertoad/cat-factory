@@ -562,6 +562,13 @@ export {
   registerProjectResearcherAgent,
 } from './agents/kinds/project-researcher.js'
 export {
+  DECISION_REGISTER_SHAPE_HINT,
+  PROJECT_DECIDER_AGENT_KINDS,
+  PROJECT_DECIDER_KIND,
+  projectDeciderUserPrompt,
+  registerProjectDeciderAgent,
+} from './agents/kinds/project-decider.js'
+export {
   ENVIRONMENT_ANALYST_KIND,
   ENVIRONMENT_ANALYST_AGENT_KINDS,
   environmentRecipeDraft,

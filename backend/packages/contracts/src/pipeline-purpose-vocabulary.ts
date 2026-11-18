@@ -32,6 +32,9 @@ import * as v from 'valibot'
  *                  describes and records a findings revision on the project. It has no
  *                  repository to write to, so a `research` task offers ONLY these, and no other
  *                  task type is offered one.
+ *   - `project-decisions` proposes a project's decision register from what earlier stages found,
+ *                  for a person to settle. It has no repository either, so a `decisions` task
+ *                  offers ONLY these, and no other task type is offered one.
  *
  * The gating predicates that read it live in `pipeline-purpose.ts`, which re-exports this
  * module. The vocabulary sits apart from them because `agent-presentation.ts` has to name a
@@ -50,6 +53,7 @@ export const PIPELINE_PURPOSES = [
   'media',
   'maintenance',
   'project-research',
+  'project-decisions',
 ] as const
 export const pipelinePurposeSchema = v.picklist(PIPELINE_PURPOSES)
 export type PipelinePurpose = v.InferOutput<typeof pipelinePurposeSchema>

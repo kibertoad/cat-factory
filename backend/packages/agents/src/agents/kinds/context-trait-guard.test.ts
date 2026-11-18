@@ -13,6 +13,7 @@ import {
 } from './built-in-container.js'
 import { UI_TESTER_AGENT_KIND } from '@cat-factory/contracts'
 import { MEDIA_GENERATOR_AGENT_KIND } from './media.js'
+import { PROJECT_DECIDER_KIND } from './project-decider.js'
 import { PROJECT_RESEARCHER_KIND } from './project-researcher.js'
 import { TASK_REASSESSOR_AGENT_KIND } from '../prompts/roles.js'
 
@@ -85,6 +86,10 @@ const FRAGMENT_FOLD_OPT_OUT = new Set<string>([
   // repository prose, so no fold applies; its research definition is what steers it. It declares
   // `standardsDelivery: 'none'` for the same reason.
   PROJECT_RESEARCHER_KIND,
+  // Proposes a decision register from what earlier stages found, for a person to settle. It clones
+  // no working tree and writes neither code nor repository prose, so no fold applies; its stage's
+  // config steers it. It declares `standardsDelivery: 'none'` for the same reason.
+  PROJECT_DECIDER_KIND,
 ])
 
 describe('registered container kinds fold the task fragments', () => {

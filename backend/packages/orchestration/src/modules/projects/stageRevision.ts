@@ -84,13 +84,16 @@ export async function settleStageRevision(
       outcomeId: proposal.id,
     })
   }
-  const settled = accepts.revise({
-    stage: { id: stage.id, title: stage.title, config: stage.config },
-    body: decoded.body,
-    revision,
-    decidedBy: input.decidedBy,
-    decidedAt: deps.clock.now(),
-  })
+  const settle = (decidedAt: number) =>
+    accepts.revise({
+      stage: { id: stage.id, title: stage.title, config: stage.config },
+      body: decoded.body,
+      revision,
+      decidedBy: input.decidedBy,
+      decidedAt,
+    })
+  const settledAt = deps.clock.now()
+  const settled = settle(settledAt)
   if (!settled.ok) {
     throw new ValidationError(
       `The revision of stage '${stage.id}' does not fit its result: ${settled.issues.join('; ')}`,
@@ -101,8 +104,12 @@ export async function settleStageRevision(
   const earlier = input.envelopes.filter(
     (row) => row.taskId === proposal.taskId && row.intent === REVISION_INTENT,
   )
+  // A retried acceptance settles the same revision again, but a handler may stamp the time it was
+  // settled into the body. Each earlier revision is compared against the same revision settled at
+  // that revision's own time, so a retry reuses it instead of writing another.
   for (const written of await deps.outcomes.bodiesOf(project, earlier)) {
-    if (written.json === json) return written.row.id
+    const again = settle(written.row.createdAt)
+    if (again.ok && written.json === JSON.stringify(again.value)) return written.row.id
   }
   const seq = await deps.records.reserveSeq(project.id)
   const id = `${outcomeIdFor(proposal.taskId)}_rev${seq}`
@@ -122,7 +129,7 @@ export async function settleStageRevision(
       definitionKey: pin?.definitionKey ?? null,
       definitionVersion: pin?.definitionVersion ?? null,
       artifactRefs: handler.artifactRefs(settled.value),
-      createdAt: deps.clock.now(),
+      createdAt: settledAt,
     },
     json,
   })

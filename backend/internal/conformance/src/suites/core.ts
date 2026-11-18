@@ -9,6 +9,7 @@ import { defineCoreRiskPolicyTiersConformance } from './core-risk-policy-tiers.j
 import { defineCoreProjectsConformance } from './core-projects.js'
 import { defineCoreResearchRunsConformance } from './core-research-runs.js'
 import { defineCoreProjectStagesConformance } from './core-project-stages.js'
+import { defineCoreProjectDecisionsConformance } from './core-project-decisions.js'
 import { defineCoreProjectViewsConformance } from './core-project-views.js'
 import { defineCoreTaskProjectLinksConformance } from './core-task-project-links.js'
 
@@ -27,6 +28,7 @@ export function defineCoreConformance(harness: ConformanceHarness): void {
     defineCoreProjectsConformance(harness)
     defineCoreResearchRunsConformance(harness)
     defineCoreProjectStagesConformance(harness)
+    defineCoreProjectDecisionsConformance(harness)
     defineCoreProjectViewsConformance(harness)
     defineCoreTaskProjectLinksConformance(harness)
   })

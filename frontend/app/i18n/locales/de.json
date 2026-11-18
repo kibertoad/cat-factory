@@ -3181,7 +3181,8 @@
         "ralph": "Ralph-Schleife",
         "bugFishing": "Fehlersuche",
         "resolveConflicts": "Konflikte lösen",
-        "research": "Recherche"
+        "research": "Recherche",
+        "decisions": "Entscheidungen"
       },
       "recurringWithFrame": "Eine wiederkehrende Aufgabe führt eine Pipeline in einem Takt aus. Fahren Sie fort, um Zeitplan + Prompt festzulegen.",
       "recurringNoFrame": "Eine wiederkehrende Aufgabe muss auf einem Service liegen. Fügen Sie sie aus einem Service-Frame (oder einem darin enthaltenen Modul) hinzu.",
@@ -4941,7 +4942,8 @@
         "planning": "Planung",
         "media": "Medien",
         "maintenance": "PR-Pflege",
-        "projectResearch": "Projektrecherche"
+        "projectResearch": "Projektrecherche",
+        "projectDecisions": "Projektentscheidungen"
       },
       "strategyOption": {
         "specialist-panel": "Spezialisten-Panel",
@@ -6629,7 +6631,8 @@
         "project_stage_revision_required": "Das Ergebnis dieser Phase muss beim Annehmen festgelegt werden: Entscheide jeden vorgeschlagenen Punkt und nimm es dann an.",
         "project_stage_revision_unsupported": "Das Ergebnis dieser Phase wird so angenommen, wie es festgehalten wurde; am Kontrollpunkt nimmt es keine Änderungen an.",
         "project_stage_revision_invalid": "Die Änderungen passen nicht zum Ergebnis dieser Phase. Die Details nennen den unpassenden Teil; korrigiere ihn und nimm erneut an.",
-        "project_stage_result_unreadable": "Das Ergebnis dieser Phase kann gerade nicht gelesen werden und lässt sich daher nicht festlegen. Versuche es später erneut; bleibt es so, muss das gespeicherte Ergebnis wiederhergestellt werden."
+        "project_stage_result_unreadable": "Das Ergebnis dieser Phase kann gerade nicht gelesen werden und lässt sich daher nicht festlegen. Versuche es später erneut; bleibt es so, muss das gespeicherte Ergebnis wiederhergestellt werden.",
+        "project_task_type_needs_stage": "Diese Art von Aufgabe läuft nur als Phase eines Projekts mit Phasen, und die Definition dieses Projekts deklariert keine Phasen. Verwende eine Definition, die sie als Phase ausführt."
       }
     },
     "action": {

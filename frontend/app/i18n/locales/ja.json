@@ -237,7 +237,8 @@
         "ralph": "Ralph ループ",
         "bugFishing": "バグ探索",
         "resolveConflicts": "コンフリクト解消",
-        "research": "リサーチ"
+        "research": "リサーチ",
+        "decisions": "決定"
       },
       "recurringWithFrame": "繰り返しタスクは一定の周期でパイプラインを実行します。続行してスケジュールとプロンプトを設定してください。",
       "recurringNoFrame": "繰り返しタスクはサービス上に配置する必要があります。サービスフレーム（またはその中のモジュール）から追加してください。",
@@ -739,7 +740,8 @@
         "project_stage_revision_required": "このステージの結果は承認時に確定する必要があります。提案された各項目を決定してから承認してください。",
         "project_stage_revision_unsupported": "このステージの結果は記録されたとおりに承認され、チェックポイントでの変更は受け付けません。",
         "project_stage_revision_invalid": "変更がこのステージの結果に合いません。詳細に合わない箇所が示されているので、修正してから再度承認してください。",
-        "project_stage_result_unreadable": "このステージの結果を現在読み取れないため、確定できません。後でもう一度お試しください。解決しない場合は、保存された結果の復元が必要です。"
+        "project_stage_result_unreadable": "このステージの結果を現在読み取れないため、確定できません。後でもう一度お試しください。解決しない場合は、保存された結果の復元が必要です。",
+        "project_task_type_needs_stage": "この種類のタスクはステージのあるプロジェクトのステージとしてのみ実行されますが、このプロジェクトの定義はステージを宣言していません。ステージとして実行する定義を使用してください。"
       }
     },
     "action": {
@@ -5546,7 +5548,8 @@
         "planning": "計画",
         "media": "メディア",
         "maintenance": "PR メンテナンス",
-        "projectResearch": "プロジェクトリサーチ"
+        "projectResearch": "プロジェクトリサーチ",
+        "projectDecisions": "プロジェクトの決定"
       },
       "strategyOption": {
         "specialist-panel": "専門家パネル",

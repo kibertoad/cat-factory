@@ -168,6 +168,7 @@ const REASON_DESCRIPTION_KEYS: Record<
     'errors.reason.description.project_stage_revision_unsupported',
   project_stage_revision_invalid: 'errors.reason.description.project_stage_revision_invalid',
   project_stage_result_unreadable: 'errors.reason.description.project_stage_result_unreadable',
+  project_task_type_needs_stage: 'errors.reason.description.project_task_type_needs_stage',
   project_not_pinned: 'errors.reason.description.project_not_pinned',
   project_definition_changed: 'errors.reason.description.project_definition_changed',
   project_task_already_recorded: 'errors.reason.description.project_task_already_recorded',

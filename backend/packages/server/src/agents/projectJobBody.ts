@@ -63,16 +63,21 @@ export async function buildProjectJobBody(
   deps: ProjectJobBodyDeps,
 ): Promise<ProjectJobBody> {
   const project = requireProject(context)
+  // A kind that reaches no target (declared on its agent step) is handed none, and so none of the
+  // definition's credentials either: it neither holds vendor credentials nor waits on one.
+  const reachesTargets =
+    deps.agentKindRegistry.agentStep(context.agentKind)?.projectTargets !== 'none'
+  const definition = reachesTargets ? project.definition : null
   // A kind that pins no definition reaches no target and holds no credential. A target admits
   // writes only for a run of a stage that writes; the harness refuses anything else.
-  const targets = (project.definition?.targets ?? []).map((t) => ({
+  const targets = (definition?.targets ?? []).map((t) => ({
     baseUrl: t.baseUrl,
     surface: t.surface,
     access: t.access === 'write' && project.writes ? ('write' as const) : ('read' as const),
     ...(t.pathPrefix ? { pathPrefix: t.pathPrefix } : {}),
   }))
-  const credentials = project.definition
-    ? await resolveProjectCredentials(project.definition, {
+  const credentials = definition
+    ? await resolveProjectCredentials(definition, {
         workspaceId: ids.workspaceId,
         ...(deps.resolveToolSecrets ? { resolver: deps.resolveToolSecrets } : {}),
       })

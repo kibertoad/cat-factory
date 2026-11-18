@@ -183,6 +183,16 @@ const PURPOSE_SUGGESTED_CATEGORIES: Record<
     docs: false,
     gates: true,
   },
+  // Proposes a decision register for a person to settle: the proposing kind groups under `design`,
+  // and the checkpoint where the person settles it is the point. Nothing here touches a repository.
+  'project-decisions': {
+    review: false,
+    design: true,
+    build: false,
+    test: false,
+    docs: false,
+    gates: true,
+  },
 }
 
 /**
@@ -327,10 +337,15 @@ const EXACT_PURPOSE_FOR_TASK_TYPE: ReadonlyMap<string, PipelinePurpose> = new Ma
   ['bug-fishing', 'research'],
   ['resolve-conflicts', 'maintenance'],
   ['research', 'project-research'],
+  ['decisions', 'project-decisions'],
 ])
 
 /** The purposes offered only to the one task type mapped to them, and to no other. */
-const EXCLUSIVE_PURPOSES: readonly PipelinePurpose[] = ['maintenance', 'project-research']
+const EXCLUSIVE_PURPOSES: readonly PipelinePurpose[] = [
+  'maintenance',
+  'project-research',
+  'project-decisions',
+]
 
 /**
  * Whether `pipeline` should be offered when starting a task of `taskType` — the pickers' gate.

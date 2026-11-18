@@ -653,6 +653,8 @@ export type CredentialWaitReason = (typeof CREDENTIAL_WAIT_REASONS)[number]
  *                                       says why.
  *  - `project_stage_result_unreadable`  the stage's own result awaiting its checkpoint cannot be
  *                                       read to settle it.
+ *  - `project_task_type_needs_stage`    the task type runs only as a stage of a staged definition,
+ *                                       and the project's definition declares no stages.
  *  - `research_nothing_to_ask`          the research kind's own: the task's mode selects no
  *                                       question (an `extend` with no new question, or a `clarify`
  *                                       with nothing partial or blocked).
@@ -694,6 +696,7 @@ export const PROJECT_REASONS = [
   'project_stage_revision_unsupported',
   'project_stage_revision_invalid',
   'project_stage_result_unreadable',
+  'project_task_type_needs_stage',
   'research_nothing_to_ask',
   'outcome_too_large_for_inline',
   'task_owned_by_project',

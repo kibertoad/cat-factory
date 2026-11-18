@@ -641,3 +641,9 @@ Additive. A consumer built against 1.98.0 keeps parsing, and a definition that d
 A project definition's target may declare `access` (`read`, or `write` for a stage that writes) and a `pathPrefix` bounding the paths a run's API requests reach; two targets on one origin must differ in `pathPrefix`. A stage may declare `writes`: it must read at least one stage, every stage it reads must hold its result at a checkpoint, and it cannot be `repeatable`. A run's API requests to a target are read-only unless the target allows writes and the run is a writing stage.
 
 Additive on the wire, and both target fields are optional with no default, so a definition that names neither hashes as before. What a consumer NOTICES: a project run's API requests to its targets are refused for any method but GET, HEAD and OPTIONS unless the definition grants a writing stage, where before any method was sent.
+
+## 1.101.0
+
+The task-type vocabulary gains `decisions`: a project stage that proposes a decision register (each item a question with options, a recommended default, the rationale and the evidence) for a person to settle, run on the new `pl_decisions` pipeline. Like `research`, it belongs under a project and is refused under a service. The pipeline-purpose vocabulary gains `project-decisions`.
+
+Additive. A consumer built against 1.100.0 keeps parsing, and one that maps task types or purposes through an exhaustive table gains a member to name.
