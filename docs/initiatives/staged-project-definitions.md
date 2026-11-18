@@ -132,7 +132,7 @@ bucket for every new repository method in the same PR.
       (`checkpointAwaits`): the checkpoint refuses with `project_stage_work_unsettled` until each
       is done or removed. A handler may also require its stage to declare a checkpoint or to run
       after another (`stageRequires`); spawn requires both. The initiative loop and the spawner
-      share `modules/spawn/spawnedTask.ts`. PR: _pending_
+      share `modules/spawn/spawnedTask.ts`. PR: [#2530](https://github.com/kibertoad/cat-factory/pull/2530)
 - [ ] **7. Exit criteria.** Stage `acceptance` criteria judged through `JudgeRegistry` against the
       outcome and its evidence; each criterion reported met, unmet or unverified at the checkpoint.
 - [ ] **8. Document stage.** A handler that composes upstream streams and their artifacts into one
