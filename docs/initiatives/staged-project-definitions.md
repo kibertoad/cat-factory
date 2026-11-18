@@ -165,7 +165,8 @@ bucket for every new repository method in the same PR.
 - [x] **9b. Stage rail.** A Stages tab in the project takeover, opened first for a staged
       project: each stage with its status, what it waits on, the task working on it, whether it
       is stale, and the acceptance report; a person starts a ready stage and accepts a result
-      there, settling a decisions stage item by item as it is accepted. PR: _pending_
+      there, settling a decisions stage item by item as it is accepted. PR:
+      [#2534](https://github.com/kibertoad/cat-factory/pull/2534)
 - [ ] **9c. Checkpoint notification.** A notification when a stage's result awaits acceptance,
       resolved when it is accepted, so a person learns of it without opening the project.
 
