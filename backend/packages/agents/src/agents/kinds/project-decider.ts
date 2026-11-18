@@ -1,5 +1,6 @@
 import { type DecisionBrief, PROJECT_DECIDER_AGENT_KIND } from '@cat-factory/contracts'
 import type { AgentRunContext } from '@cat-factory/kernel'
+import { fencedJson } from './fenced-json.js'
 import type { AgentKindDefinition, AgentKindRegistry } from './registry.js'
 
 // ---------------------------------------------------------------------------
@@ -37,17 +38,6 @@ const PROJECT_DECIDER_SYSTEM_PROMPT = [
   '',
   `Reply with ONLY a JSON object of this shape: ${DECISION_REGISTER_SHAPE_HINT}`,
 ].join('\n')
-
-/**
- * Model-authored JSON inside a fence one backtick longer than its longest backtick run, so a code
- * fence quoted in a rationale cannot close the block and spill into the prompt.
- */
-function fencedJson(value: unknown): string[] {
-  const json = JSON.stringify(value, null, 2)
-  const longest = Math.max(0, ...(json.match(/`+/g) ?? []).map((run) => run.length))
-  const fence = '`'.repeat(Math.max(3, longest + 1))
-  return [`${fence}json`, json, fence]
-}
 
 /** The user prompt: the stage's brief, the questions it requires, and any earlier proposal. */
 export function projectDeciderUserPrompt(context: AgentRunContext): string {

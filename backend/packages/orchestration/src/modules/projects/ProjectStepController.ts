@@ -39,7 +39,7 @@ import { decodeOutcome, outcomeTaskType } from './outcomeDecoding.js'
 import { resolvePinnedDefinition } from './pinnedDefinition.js'
 import { assessStageResult } from './stageAcceptance.js'
 import type { ProjectEngineTask } from './stageSpawner.js'
-import { renderStageUpstream } from './stageUpstream.js'
+import { renderStageUpstream, upstreamArtifactRefs } from './stageUpstream.js'
 
 // ---------------------------------------------------------------------------
 // The engine half of a project task's run, for every project kind: what its step is asked when it
@@ -201,9 +201,16 @@ export class ProjectStepController {
         reason: 'project_task_already_recorded',
       })
     }
-    const input = this.taskInput(task, block)
     if (!step.project) {
-      const planned = task.handler.planTask(input)
+      // Only a first dispatch plans, so only it reads which artifacts the stages it reads hold.
+      const planned = task.handler.planTask({
+        ...this.taskInput(task, block),
+        ...(task.staged && task.definition
+          ? {
+              upstreamArtifacts: upstreamArtifactRefs(task.definition, task.staged, task.envelopes),
+            }
+          : {}),
+      })
       const seq = await this.deps.records.reserveTaskSeq(task.project.id, block.id)
       step.project = {
         projectId: task.project.id,

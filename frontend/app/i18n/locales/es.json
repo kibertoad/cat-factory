@@ -239,7 +239,8 @@
         "resolveConflicts": "Resolver conflictos",
         "research": "Investigación",
         "decisions": "Decisiones",
-        "spawn": "Distribución"
+        "spawn": "Distribución",
+        "writeup": "Informe"
       },
       "recurringWithFrame": "Una tarea recurrente ejecuta una pipeline con cierta cadencia. Continúa para definir el horario y el prompt.",
       "recurringNoFrame": "Una tarea recurrente debe vivir en un servicio. Añádela desde un marco de servicio (o un módulo dentro de él).",
@@ -5553,7 +5554,8 @@
         "maintenance": "Mantenimiento de PR",
         "projectResearch": "Investigación de proyecto",
         "projectDecisions": "Decisiones del proyecto",
-        "projectSpawn": "Distribución del proyecto"
+        "projectSpawn": "Distribución del proyecto",
+        "projectWriteup": "Informe del proyecto"
       },
       "strategyOption": {
         "specialist-panel": "Panel de especialistas",

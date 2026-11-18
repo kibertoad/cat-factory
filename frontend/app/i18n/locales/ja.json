@@ -239,7 +239,8 @@
         "resolveConflicts": "コンフリクト解消",
         "research": "リサーチ",
         "decisions": "決定",
-        "spawn": "展開"
+        "spawn": "展開",
+        "writeup": "ドキュメント作成"
       },
       "recurringWithFrame": "繰り返しタスクは一定の周期でパイプラインを実行します。続行してスケジュールとプロンプトを設定してください。",
       "recurringNoFrame": "繰り返しタスクはサービス上に配置する必要があります。サービスフレーム（またはその中のモジュール）から追加してください。",
@@ -5553,7 +5554,8 @@
         "maintenance": "PR メンテナンス",
         "projectResearch": "プロジェクトリサーチ",
         "projectDecisions": "プロジェクトの決定",
-        "projectSpawn": "プロジェクトの展開"
+        "projectSpawn": "プロジェクトの展開",
+        "projectWriteup": "プロジェクトのドキュメント作成"
       },
       "strategyOption": {
         "specialist-panel": "専門家パネル",

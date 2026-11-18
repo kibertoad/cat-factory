@@ -37,6 +37,11 @@ export interface ProjectTaskInput<Body> {
    * staged task, only those of its own stage.
    */
   outcomes: ReadonlyArray<ProjectOutcome<Body>>
+  /**
+   * The binary artifacts the results a staged task reads (`consumes`) reference, as of the
+   * results it started from. Absent for a task that reads no stage.
+   */
+  upstreamArtifacts?: readonly string[]
 }
 
 /** What a handler reads to render one stream's outcomes as context. */
@@ -124,10 +129,11 @@ export interface ProjectTaskHandler<Body = unknown> {
    */
   checkpointAwaits?(body: Body): readonly { workspaceId: string; taskId: string }[]
   /**
-   * Whether a stage running this task type must run `after` at least one other stage. A checkpoint
-   * is implied by a required revision or by {@link checkpointAwaits}, and needs no flag here.
+   * Whether a stage running this task type must run `after` at least one other stage, or read
+   * (`consumes`) at least one. A checkpoint is implied by a required revision or by
+   * {@link checkpointAwaits}, and needs no flag here.
    */
-  stageRequires?: { after?: boolean }
+  stageRequires?: { after?: boolean; consumes?: boolean }
   /**
    * Validate and normalize the `config` a definition's stage gives this task type. Absent: the
    * task type takes no config, and a stage that gives one is refused.

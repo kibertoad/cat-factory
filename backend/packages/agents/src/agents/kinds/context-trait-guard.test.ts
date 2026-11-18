@@ -14,6 +14,7 @@ import {
 import { UI_TESTER_AGENT_KIND } from '@cat-factory/contracts'
 import { MEDIA_GENERATOR_AGENT_KIND } from './media.js'
 import { PROJECT_DECIDER_KIND } from './project-decider.js'
+import { PROJECT_WRITER_KIND } from './project-writer.js'
 import { PROJECT_RESEARCHER_KIND } from './project-researcher.js'
 import { TASK_REASSESSOR_AGENT_KIND } from '../prompts/roles.js'
 
@@ -90,6 +91,9 @@ const FRAGMENT_FOLD_OPT_OUT = new Set<string>([
   // no working tree and writes neither code nor repository prose, so no fold applies; its stage's
   // config steers it. It declares `standardsDelivery: 'none'` for the same reason.
   PROJECT_DECIDER_KIND,
+  // Composes a document from what earlier stages found; it clones no working tree and its stage's
+  // config steers it, so no fold applies and it declares `standardsDelivery: 'none'`.
+  PROJECT_WRITER_KIND,
 ])
 
 describe('registered container kinds fold the task fragments', () => {

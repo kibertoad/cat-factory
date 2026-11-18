@@ -573,6 +573,13 @@ export {
   registerProjectDeciderAgent,
 } from './agents/kinds/project-decider.js'
 export {
+  PROJECT_WRITER_AGENT_KINDS,
+  PROJECT_WRITER_KIND,
+  WRITEUP_SHAPE_HINT,
+  projectWriterUserPrompt,
+  registerProjectWriterAgent,
+} from './agents/kinds/project-writer.js'
+export {
   ENVIRONMENT_ANALYST_KIND,
   ENVIRONMENT_ANALYST_AGENT_KINDS,
   environmentRecipeDraft,

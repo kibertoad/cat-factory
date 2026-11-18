@@ -1099,6 +1099,12 @@ export const TASK_TYPE_META: Record<string, TaskTypeMeta> = {
     color: 'var(--app-hue-teal)',
     labelKey: 'board.addTask.types.spawn',
   },
+  writeup: {
+    taskType: 'writeup',
+    icon: 'i-lucide-file-text',
+    color: 'var(--app-hue-violet)',
+    labelKey: 'board.addTask.types.writeup',
+  },
   recurring: {
     taskType: 'recurring',
     icon: 'i-lucide-repeat',

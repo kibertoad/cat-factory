@@ -239,7 +239,8 @@
         "resolveConflicts": "Résoudre les conflits",
         "research": "Recherche",
         "decisions": "Décisions",
-        "spawn": "Répartition"
+        "spawn": "Répartition",
+        "writeup": "Rédaction"
       },
       "recurringWithFrame": "Une tâche récurrente exécute une pipeline selon une cadence. Continuez pour définir le calendrier et le prompt.",
       "recurringNoFrame": "Une tâche récurrente doit appartenir à un service. Ajoutez-la depuis un cadre de service (ou un module à l’intérieur).",
@@ -5553,7 +5554,8 @@
         "maintenance": "Maintenance de PR",
         "projectResearch": "Recherche de projet",
         "projectDecisions": "Décisions du projet",
-        "projectSpawn": "Répartition du projet"
+        "projectSpawn": "Répartition du projet",
+        "projectWriteup": "Rédaction du projet"
       },
       "strategyOption": {
         "specialist-panel": "Panel de spécialistes",

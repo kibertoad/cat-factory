@@ -3183,7 +3183,8 @@
         "resolveConflicts": "Konflikte lösen",
         "research": "Recherche",
         "decisions": "Entscheidungen",
-        "spawn": "Verteilen"
+        "spawn": "Verteilen",
+        "writeup": "Ausarbeitung"
       },
       "recurringWithFrame": "Eine wiederkehrende Aufgabe führt eine Pipeline in einem Takt aus. Fahren Sie fort, um Zeitplan + Prompt festzulegen.",
       "recurringNoFrame": "Eine wiederkehrende Aufgabe muss auf einem Service liegen. Fügen Sie sie aus einem Service-Frame (oder einem darin enthaltenen Modul) hinzu.",
@@ -4945,7 +4946,8 @@
         "maintenance": "PR-Pflege",
         "projectResearch": "Projektrecherche",
         "projectDecisions": "Projektentscheidungen",
-        "projectSpawn": "Projektverteilung"
+        "projectSpawn": "Projektverteilung",
+        "projectWriteup": "Projektausarbeitung"
       },
       "strategyOption": {
         "specialist-panel": "Spezialisten-Panel",

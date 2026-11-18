@@ -12,6 +12,7 @@ import { defineCoreProjectStagesConformance } from './core-project-stages.js'
 import { defineCoreProjectDecisionsConformance } from './core-project-decisions.js'
 import { defineCoreProjectSpawnConformance } from './core-project-spawn.js'
 import { defineCoreProjectAcceptanceConformance } from './core-project-acceptance.js'
+import { defineCoreProjectWriteupConformance } from './core-project-writeup.js'
 import { defineCoreProjectViewsConformance } from './core-project-views.js'
 import { defineCoreTaskProjectLinksConformance } from './core-task-project-links.js'
 
@@ -33,6 +34,7 @@ export function defineCoreConformance(harness: ConformanceHarness): void {
     defineCoreProjectDecisionsConformance(harness)
     defineCoreProjectSpawnConformance(harness)
     defineCoreProjectAcceptanceConformance(harness)
+    defineCoreProjectWriteupConformance(harness)
     defineCoreProjectViewsConformance(harness)
     defineCoreTaskProjectLinksConformance(harness)
   })

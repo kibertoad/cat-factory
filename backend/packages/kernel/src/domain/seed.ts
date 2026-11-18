@@ -645,6 +645,17 @@ function buildOtherDeliveryPipelines(): Pipeline[] {
         "Create a task in each service a project links, with the project linked as context, and start each task's run.",
       steps: ['project-spawner'],
     }),
+    // The WRITEUP run: one `project-writer` step that composes a project's stage results into one
+    // Markdown document. No repository to write to, so no tail.
+    definePipeline({
+      id: 'pl_writeup',
+      name: 'Project writeup',
+      purpose: 'project-writeup',
+      version: 1,
+      description:
+        "Compose a project's stage results into one Markdown document, referencing the artifacts they hold.",
+      steps: ['project-writer'],
+    }),
     // The "Ralph loop": a single persistent, retry-until-done coding step. Each iteration is
     // a fresh-context container run that works the task spec, after which the harness runs the
     // task's configured programmatic validation command (exit 0 = done) and the engine loops
@@ -1364,7 +1375,7 @@ export const MEDIA_PIPELINE_ID = 'pl_media'
 /**
  * The pipeline a task of the given task type should default to when the creator pins none.
  * `document` → `pl_document`, `spike` → `pl_spike`, `review` → `pl_review`, `media` →
- * `pl_media`, `bug-fishing` → `pl_bug_fishing`, `research` → `pl_research`, `decisions` → `pl_decisions`, `spawn` → `pl_spawn` and
+ * `pl_media`, `bug-fishing` → `pl_bug_fishing`, `research` → `pl_research`, `decisions` → `pl_decisions`, `spawn` → `pl_spawn`, `writeup` → `pl_writeup` and
  * `resolve-conflicts` → `pl_resolve_conflicts`
  * (the full-build `pl_full` is wrong for all six: a document has no code, a spike has no code, a
  * review opens no PR, a media task's deliverable is a stored binary, an expedition changes
@@ -1388,6 +1399,7 @@ export function defaultPipelineIdForTaskType(
   if (taskType === 'research') return RESEARCH_PIPELINE_ID
   if (taskType === 'decisions') return DECISIONS_PIPELINE_ID
   if (taskType === 'spawn') return SPAWN_PIPELINE_ID
+  if (taskType === 'writeup') return WRITEUP_PIPELINE_ID
   if (taskType && taskTypeRegistry) return taskTypeRegistry.defaultPipelineId(taskType)
   return undefined
 }
@@ -1432,6 +1444,9 @@ export const DECISIONS_PIPELINE_ID = 'pl_decisions'
 
 /** Pipeline id of a spawn stage's run (one `project-spawner` step the engine performs). */
 export const SPAWN_PIPELINE_ID = 'pl_spawn'
+
+/** Pipeline id of a document stage's run (one `project-writer` step). */
+export const WRITEUP_PIPELINE_ID = 'pl_writeup'
 
 // ---- The build ladder's rungs ---------------------------------------------------------------
 // The axis is how much design a task gets. `pl_build` is the DEFAULT and must stay first in
