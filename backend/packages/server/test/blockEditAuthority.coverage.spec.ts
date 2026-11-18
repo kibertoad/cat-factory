@@ -113,6 +113,9 @@ const UNATTRIBUTED: Record<string, string> = {
     'an automatic project stage starting its own task when the stages before it settle: the ' +
     'engine acting on a definition the project pinned, with no session behind it. A stage a ' +
     'person starts goes through the project controller, which names that person.',
+  'orchestration:modules/projects/stageSpawner.ts':
+    "a spawn stage's run creating a task in each service its project links: the engine acting on " +
+    'a definition the project pinned, inside a run, with no session behind it.',
   'orchestration:modules/execution/PostMergeBoardController.ts':
     'the post-merge follow-up that materialises the module a merged task named and moves the ' +
     'task into it: the engine acting on what the run produced, with no session behind it. The ' +
