@@ -42,6 +42,7 @@ describe('settleWriteup', () => {
         ],
         missingSections: [],
         droppedArtifacts: [],
+        overflowArtifacts: [],
       },
       ['Summary'],
       ['art_held'],
