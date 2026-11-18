@@ -45,6 +45,7 @@ const stage = (
     acceptance: null,
     ...state,
   },
+  revision: 'none',
 })
 
 const board: ProjectBoardView = {

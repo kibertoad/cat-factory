@@ -22,6 +22,8 @@ const { t, te } = useI18n()
 const projectViews = useProjectViewsStore()
 const blocks = useBoardStore()
 const errors = usePipelineErrorToast()
+const pipelines = usePipelinesStore()
+const execution = useExecutionStore()
 
 const STATUS_COLOR: Record<ProjectStageStatus, BadgeColor> = {
   blocked: 'neutral',
@@ -39,7 +41,8 @@ const CRITERION_ICON: Record<StageCriterionStatus, { icon: string; class: string
 const titles = computed(
   () => new Map(props.board.stages.map((view) => [view.stage.id, view.stage.title] as const)),
 )
-const busy = ref<string | null>(null)
+// The stages with a request in flight, each tracked on its own.
+const busy = ref<ReadonlySet<string>>(new Set())
 
 function taskTypeLabel(taskType: string): string {
   const key = `board.addTask.types.${taskType}`
@@ -50,25 +53,42 @@ function startable(view: ProjectStageView): boolean {
   return view.state.status === 'ready' || (view.state.status === 'done' && view.stage.repeatable)
 }
 
-async function run(stageId: string, action: () => Promise<void>, failureKey: string) {
-  busy.value = stageId
+async function act(stageId: string, action: () => Promise<void>, failureKey: string) {
+  busy.value = new Set([...busy.value, stageId])
   try {
     await action()
   } catch (e) {
     errors.present(e, failureKey)
+    return
   } finally {
-    busy.value = null
+    busy.value = new Set([...busy.value].filter((id) => id !== stageId))
+  }
+  await refresh()
+}
+
+/** Re-read the project after an action went through; a failed re-read is its own failure. */
+async function refresh() {
+  try {
+    await projectViews.load(props.project.id)
+  } catch (e) {
+    errors.present(e, 'projects.view.loadFailed')
   }
 }
 
+// Starting a stage creates its task and starts its run, as an automatic stage's start does.
 const start = (view: ProjectStageView) =>
-  run(
+  act(
     view.stage.id,
-    () => projectViews.startStage(props.project.id, view.stage.id),
+    async () => {
+      const task = await projectViews.startStage(props.project.id, view.stage.id)
+      if (!task.pipelineId) return
+      const name = pipelines.getPipeline(task.pipelineId)?.name ?? task.pipelineId
+      await execution.start(task.id, { id: task.pipelineId, name })
+    },
     'projects.view.stages.startFailed',
   )
 const accept = (view: ProjectStageView) =>
-  run(
+  act(
     view.stage.id,
     () => projectViews.acceptStage(props.project.id, view.stage.id),
     'projects.view.stages.acceptFailed',
@@ -105,21 +125,19 @@ const accept = (view: ProjectStageView) =>
             v-if="startable(view)"
             icon="i-lucide-play"
             size="xs"
-            :loading="busy === view.stage.id"
+            :loading="busy.has(view.stage.id)"
             data-testid="project-stage-start"
             @click="start(view)"
           >
             {{ t('projects.view.stages.start') }}
           </UButton>
           <UButton
-            v-if="
-              view.state.status === 'awaiting-checkpoint' &&
-              view.stage.taskType !== DECISIONS_TASK_TYPE
-            "
+            v-if="view.state.status === 'awaiting-checkpoint' && view.revision !== 'required'"
             icon="i-lucide-check"
             size="xs"
             color="warning"
-            :loading="busy === view.stage.id"
+            variant="subtle"
+            :loading="busy.has(view.stage.id)"
             data-testid="project-stage-accept"
             @click="accept(view)"
           >
@@ -144,7 +162,7 @@ const accept = (view: ProjectStageView) =>
           })
         }}
       </p>
-      <p v-if="view.state.stale" class="mt-2 text-xs text-warning">
+      <p v-if="view.state.stale && startable(view)" class="mt-2 text-xs text-warning">
         {{ t('projects.view.stages.staleHint') }}
       </p>
 
@@ -180,16 +198,19 @@ const accept = (view: ProjectStageView) =>
         </ul>
       </div>
 
-      <ProjectStageDecisions
-        v-if="
-          view.state.status === 'awaiting-checkpoint' &&
-          view.stage.taskType === DECISIONS_TASK_TYPE &&
-          view.state.latest
-        "
-        :project="project"
-        :stage-id="view.stage.id"
-        :outcome-id="view.state.latest.id"
-      />
+      <template v-if="view.state.status === 'awaiting-checkpoint' && view.revision === 'required'">
+        <ProjectStageDecisions
+          v-if="view.stage.taskType === DECISIONS_TASK_TYPE && view.state.latest"
+          :key="view.state.latest.id"
+          :project="project"
+          :stage-id="view.stage.id"
+          :outcome-id="view.state.latest.id"
+          @accepted="refresh"
+        />
+        <p v-else class="mt-3 text-xs text-dimmed">
+          {{ t('projects.view.stages.revisionElsewhere') }}
+        </p>
+      </template>
     </li>
   </ol>
 </template>

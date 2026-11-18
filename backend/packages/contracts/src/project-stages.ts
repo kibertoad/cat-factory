@@ -384,9 +384,18 @@ function resolveStage(
   }
 }
 
+/** Whether a stage's checkpoint takes a person's settlement of its result. */
+export const projectStageRevisionSchema = v.picklist(['none', 'optional', 'required'])
+export type ProjectStageRevision = v.InferOutput<typeof projectStageRevisionSchema>
+
 /** A stage as a board reads it: the definition's stage without its config, and where it stands. */
 export const projectStageViewSchema = v.object({
   stage: v.omit(projectStageSchema, ['config']),
   state: projectStageStateSchema,
+  /**
+   * Whether accepting its result takes a person's settlement (`revision`) as its task type's
+   * handler says: `none`, `optional`, or `required`.
+   */
+  revision: projectStageRevisionSchema,
 })
 export type ProjectStageView = v.InferOutput<typeof projectStageViewSchema>

@@ -9433,8 +9433,11 @@
           "loadFailed": "Nie udało się wczytać proponowanych decyzji",
           "choice": "Albo wpisz własny wybór",
           "note": "Notatka (opcjonalnie)",
-          "accept": "Rozstrzygnij i zaakceptuj"
-        }
+          "accept": "Rozstrzygnij i zaakceptuj",
+          "retry": "Spróbuj ponownie",
+          "unanswered": "Propozycja pomija wymagane pytania: {questions}"
+        },
+        "revisionElsewhere": "Wynik tego etapu rozstrzyga się przy akceptacji, czego ten widok nie potrafi dla jego typu zadania. Zaakceptuj go przez API wraz z rozstrzygnięciem."
       }
     }
   },

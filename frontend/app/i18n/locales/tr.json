@@ -9433,8 +9433,11 @@
           "loadFailed": "Önerilen kararlar yüklenemedi",
           "choice": "Ya da kendi seçiminizi yazın",
           "note": "Not (isteğe bağlı)",
-          "accept": "Karar ver ve kabul et"
-        }
+          "accept": "Karar ver ve kabul et",
+          "retry": "Yeniden dene",
+          "unanswered": "Öneri zorunlu soruları atlıyor: {questions}"
+        },
+        "revisionElsewhere": "Bu aşamanın sonucu kabul edilirken karara bağlanır; bu görünüm bunu görev türü için yapamaz. API üzerinden kararıyla birlikte kabul edin."
       }
     }
   },

@@ -9433,8 +9433,11 @@
           "loadFailed": "Impossible de charger les décisions proposées",
           "choice": "Ou saisissez votre propre choix",
           "note": "Note (facultative)",
-          "accept": "Trancher et accepter"
-        }
+          "accept": "Trancher et accepter",
+          "retry": "Réessayer",
+          "unanswered": "La proposition omet des questions obligatoires : {questions}"
+        },
+        "revisionElsewhere": "Le résultat de cette étape se tranche au moment de l'accepter, ce que cette vue ne sait pas faire pour son type de tâche. Acceptez-le par l'API avec sa révision."
       }
     }
   },

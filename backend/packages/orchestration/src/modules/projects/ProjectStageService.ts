@@ -140,7 +140,7 @@ export class ProjectStageService {
     const stages = definition?.stages ?? []
     if (stages.length === 0) return []
     const { states } = await this.snapshot(project, stages, outcomes)
-    return viewsOf(stages, states)
+    return this.viewsOf(project, stages, states)
   }
 
   /**
@@ -161,7 +161,7 @@ export class ProjectStageService {
       : null
     const stages = resolved?.definition.stages ?? []
     if (stages.length === 0) return []
-    return viewsOf(stages, (await this.snapshot(project, stages)).states)
+    return this.viewsOf(project, stages, (await this.snapshot(project, stages)).states)
   }
 
   /**
@@ -369,6 +369,23 @@ export class ProjectStageService {
     return (await this.snapshot(project, stages)).states[index]!
   }
 
+  /** Each stage without its handler config, with its state and what its checkpoint takes. */
+  private viewsOf(
+    project: Project,
+    stages: readonly ProjectStage[],
+    states: readonly ProjectStageState[],
+  ): ProjectStageView[] {
+    return stages.map((stage, i) => {
+      const { config: _config, ...shown } = stage
+      const revision = this.deps.modules.handlerOf(project.kind, stage.taskType)?.checkpointRevision
+      return {
+        stage: shown,
+        state: states[i]!,
+        revision: revision ? (revision.required ? 'required' : 'optional') : 'none',
+      }
+    })
+  }
+
   /** The stages of the definition the project pinned, refused when that definition changed. */
   private async stagesOf(project: Project): Promise<readonly ProjectStage[]> {
     const pin = await this.deps.records.getPin(project.id)
@@ -430,17 +447,6 @@ export class ProjectStageService {
     }
     return false
   }
-}
-
-/** Each stage without its handler config, with its state. */
-function viewsOf(
-  stages: readonly ProjectStage[],
-  states: readonly ProjectStageState[],
-): ProjectStageView[] {
-  return stages.map((stage, i) => {
-    const { config: _config, ...shown } = stage
-    return { stage: shown, state: states[i]! }
-  })
 }
 
 /** The accepted result of each upstream stage, by stage id, which `stale` later compares. */

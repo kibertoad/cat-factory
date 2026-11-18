@@ -56,9 +56,10 @@ async function loadPolicy() {
 
 // The storage tiers are board configuration, read and set only by who may manage settings.
 onModalOpen(open, () => {
-  tab.value = 'view'
+  // A staged project opens on its stages, where the next thing to do is: decided from the cached
+  // view when there is one, and once the first read lands otherwise.
+  tab.value = view.value?.stages.length ? 'stages' : 'view'
   void load().then(() => {
-    // A staged project opens on its stages, where the next thing to do is.
     if (open.value && tab.value === 'view' && view.value?.stages.length) tab.value = 'stages'
   })
   if (access.canManageSettings.value) void loadPolicy()

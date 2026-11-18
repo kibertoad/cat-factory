@@ -9433,8 +9433,11 @@
           "loadFailed": "Die vorgeschlagenen Entscheidungen konnten nicht geladen werden",
           "choice": "Oder gib eine eigene Wahl ein",
           "note": "Notiz (optional)",
-          "accept": "Festlegen und annehmen"
-        }
+          "accept": "Festlegen und annehmen",
+          "retry": "Erneut versuchen",
+          "unanswered": "Der Vorschlag lässt erforderliche Frage(n) aus: {questions}"
+        },
+        "revisionElsewhere": "Das Ergebnis dieser Phase wird bei der Annahme festgelegt, was diese Ansicht für ihren Aufgabentyp nicht kann. Nimm es über die API mit seiner Festlegung an."
       }
     }
   },

@@ -9433,8 +9433,11 @@
           "loadFailed": "Impossibile caricare le decisioni proposte",
           "choice": "Oppure scrivi una tua scelta",
           "note": "Nota (facoltativa)",
-          "accept": "Decidi e accetta"
-        }
+          "accept": "Decidi e accetta",
+          "retry": "Riprova",
+          "unanswered": "La proposta tralascia domande obbligatorie: {questions}"
+        },
+        "revisionElsewhere": "Il risultato di questa fase si decide all'accettazione, cosa che questa vista non può fare per il suo tipo di attività. Accettalo tramite l'API con la sua revisione."
       }
     }
   },

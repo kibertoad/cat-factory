@@ -9433,8 +9433,11 @@
           "loadFailed": "No se pudieron cargar las decisiones propuestas",
           "choice": "O escribe tu propia elección",
           "note": "Nota (opcional)",
-          "accept": "Decidir y aceptar"
-        }
+          "accept": "Decidir y aceptar",
+          "retry": "Reintentar",
+          "unanswered": "La propuesta omite pregunta(s) obligatoria(s): {questions}"
+        },
+        "revisionElsewhere": "El resultado de esta etapa se decide al aceptarlo, y esta vista no puede hacerlo para su tipo de tarea. Acéptalo a través de la API con su revisión."
       }
     }
   },

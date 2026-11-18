@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import type {
+  Block,
   OutcomeStoragePolicy,
   OutcomeStoragePolicyView,
   ProjectBoardView,
@@ -33,10 +34,12 @@ export const useProjectViewsStore = defineStore('projectViews', () => {
     }
   }
 
-  /** Start a stage's task, then re-read the project so the rail shows it in progress. */
-  async function startStage(projectId: string, stageId: string): Promise<void> {
-    await api.startProjectStage(useWorkspaceStore().requireId(), projectId, stageId)
-    await load(projectId)
+  /**
+   * Create a stage's task and answer it. The caller starts its run and re-reads the project: a
+   * failed re-read is not a failed start.
+   */
+  function startStage(projectId: string, stageId: string): Promise<Block> {
+    return api.startProjectStage(useWorkspaceStore().requireId(), projectId, stageId)
   }
 
   /** Accept a stage's result at its checkpoint, with a settlement where its task type takes one. */
@@ -46,7 +49,6 @@ export const useProjectViewsStore = defineStore('projectViews', () => {
     revision?: unknown,
   ): Promise<void> {
     await api.acceptProjectStage(useWorkspaceStore().requireId(), projectId, stageId, revision)
-    await load(projectId)
   }
 
   function outcome(projectId: string, outcomeId: string): Promise<ProjectOutcomeDetail> {

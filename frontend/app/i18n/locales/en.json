@@ -9767,8 +9767,11 @@
           "loadFailed": "Couldn't load the proposed decisions",
           "choice": "Or type your own choice",
           "note": "Note (optional)",
-          "accept": "Settle and accept"
-        }
+          "accept": "Settle and accept",
+          "retry": "Try again",
+          "unanswered": "The proposal leaves out required question(s): {questions}"
+        },
+        "revisionElsewhere": "This stage's result is settled as it is accepted, which this view cannot do for its task type. Accept it through the API with its revision."
       }
     }
   },
