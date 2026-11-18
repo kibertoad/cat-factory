@@ -8,6 +8,7 @@ import { ProjectOutcomeStore } from './ProjectOutcomeStore.js'
 import type { ProjectStageService } from './ProjectStageService.js'
 import { ProjectStepController } from './ProjectStepController.js'
 import type { ProjectEngineTask } from './stageSpawner.js'
+import { createStageAcceptanceAssessor } from '../../container/inline-producers.js'
 
 /**
  * The project step's engine half, when the facade wires projects and their records. Absent
@@ -27,6 +28,7 @@ export function createProjectStepController(
   const { projectRepository, projectRecordRepository } = deps
   if (!projectRepository || !projectRecordRepository) return undefined
   const outcomes = createProjectOutcomeStore(deps, projectRecordRepository)
+  const acceptance = createStageAcceptanceAssessor(deps)
   return new ProjectStepController({
     blockRepository: deps.blockRepository,
     projectRepository,
@@ -38,6 +40,7 @@ export function createProjectStepController(
     clock: deps.clock,
     ...(sources.stages ? { stages: sources.stages } : {}),
     ...(sources.engineTasks ? { engineTasks: sources.engineTasks } : {}),
+    ...(acceptance ? { acceptance } : {}),
     logger: deps.logger,
   })
 }

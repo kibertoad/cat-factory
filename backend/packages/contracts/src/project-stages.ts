@@ -1,5 +1,14 @@
 import * as v from 'valibot'
 import { taskTypeSchema } from './primitives.js'
+import { projectSlugSchema } from './project-slug.js'
+import {
+  type StageAcceptanceReport,
+  stageAcceptanceReportSchema,
+  stageAcceptanceSchema,
+  unassessedStageAcceptance,
+} from './stage-acceptance.js'
+
+export { projectSlugSchema }
 
 // ---------------------------------------------------------------------------
 // Project stages: the ordered steps a project definition may declare, each running one task type
@@ -9,12 +18,6 @@ import { taskTypeSchema } from './primitives.js'
 // cleared its checkpoint); nothing else about a stage is stored. Design:
 // `docs/initiatives/staged-project-definitions.md`.
 // ---------------------------------------------------------------------------
-
-/** The slug project stages, outcome streams and outcome intents are named with. */
-export const projectSlugSchema = v.pipe(
-  v.string(),
-  v.regex(/^[a-z][a-z0-9-]{0,39}$/, 'must be a lowercase slug'),
-)
 
 export const PROJECT_STAGES_MAX = 30
 export const PROJECT_STAGE_TITLE_MAX = 200
@@ -53,6 +56,11 @@ export const projectStageSchema = v.object({
    * hashes as it always did.
    */
   writes: v.optional(v.boolean()),
+  /**
+   * What the stage's result must show. Each result is assessed against them and the report shown
+   * at the checkpoint, which a stage with criteria must declare. Left out rather than defaulted.
+   */
+  acceptance: v.optional(stageAcceptanceSchema),
   /** What the stage's task handler is configured with, validated by that handler. */
   config: v.optional(v.unknown()),
 })
@@ -84,6 +92,12 @@ export function projectStageIssues(stages: readonly ProjectStage[]): string[] {
     const checkpointed = new Set(stages.filter((s) => s.checkpoint).map((s) => s.id))
     for (const stage of stages) {
       const ancestry = ancestorsOf(stages, stage.id)
+      if (stage.acceptance && !stage.checkpoint) {
+        issues.push(
+          `stage '${stage.id}' declares acceptance criteria, so it must declare a checkpoint ` +
+            'where a person reads the report',
+        )
+      }
       if (stage.writes === true) {
         const unreviewed = stage.consumes.filter((c) => !checkpointed.has(c.stage))
         if (stage.consumes.length === 0 || unreviewed.length > 0) {
@@ -179,6 +193,8 @@ export const projectStageTaskSchema = v.object({
    * by stage id: the outcome id, or null for a stage with none. What `stale` compares against.
    */
   basis: v.record(v.string(), v.nullable(v.string())),
+  /** Whether its result meets the stage's acceptance criteria; null until assessed. */
+  acceptance: v.optional(v.nullable(stageAcceptanceReportSchema)),
 })
 export type ProjectStageTask = v.InferOutput<typeof projectStageTaskSchema>
 
@@ -214,6 +230,8 @@ export const projectStageStateSchema = v.object({
   latest: v.nullable(stageOutcomeRefSchema),
   /** The newest result a person accepted, or its newest one when it has no checkpoint. */
   accepted: v.nullable(stageOutcomeRefSchema),
+  /** How its newest result meets the stage's acceptance criteria; null when not assessed. */
+  acceptance: v.nullable(stageAcceptanceReportSchema),
 })
 export type ProjectStageState = v.InferOutput<typeof projectStageStateSchema>
 
@@ -285,8 +303,32 @@ export function deriveProjectStageStates(input: ProjectStageStateInput): Project
       activeTaskId: own.activeTaskId,
       latest: own.latest,
       accepted: own.accepted,
+      acceptance: acceptanceOf(stage, own.latest, input.stageTasks),
     }
   })
+}
+
+/**
+ * The report on a stage's newest result: null for a stage with no criteria or no result, and a
+ * `pending` one for a result nothing has assessed yet, so it never reads like a stage with none.
+ */
+function acceptanceOf(
+  stage: ProjectStage,
+  latest: { id: string; taskId: string } | null,
+  stageTasks: readonly ProjectStageTask[],
+): StageAcceptanceReport | null {
+  if (!stage.acceptance || !latest) return null
+  const report = stageTasks.find((t) => t.taskId === latest.taskId)?.acceptance
+  return (
+    report ??
+    unassessedStageAcceptance({
+      outcomeId: latest.id,
+      assessedAt: 0,
+      criteria: stage.acceptance,
+      state: 'pending',
+      note: 'The result has not been assessed yet.',
+    })
+  )
 }
 
 /** The stages whose accepted result a stage's task starts from: what it runs after and reads. */

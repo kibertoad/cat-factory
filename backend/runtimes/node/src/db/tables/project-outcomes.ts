@@ -87,6 +87,8 @@ export const projectStageTasks = pgTable(
     cleared_by: text('cleared_by'),
     /** The outcome the acceptance accepted: a settled revision, or null for the result as recorded. */
     accepted_outcome_id: text('accepted_outcome_id'),
+    /** JSON: how the task's result meets its stage's acceptance criteria; null until assessed. */
+    acceptance: text('acceptance'),
   },
   (t) => [
     index('idx_project_stage_tasks_project').on(t.project_id),

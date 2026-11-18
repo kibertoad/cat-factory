@@ -192,6 +192,7 @@ type ConformanceAppOpts = {
   judgeRegistry?: CoreDependencies['judgeRegistry']
   delegatedExecutorRegistry?: CoreDependencies['delegatedExecutorRegistry']
   judgeAssessor?: CoreDependencies['judgeAssessor']
+  stageAcceptanceAssessor?: CoreDependencies['stageAcceptanceAssessor']
   bugHuntAssessor?: CoreDependencies['bugHuntAssessor']
   monorepoAdoptionAdvisor?: CoreDependencies['monorepoAdoptionAdvisor']
   repoBootstrapper?: CoreDependencies['repoBootstrapper']
@@ -320,6 +321,8 @@ function buildConformanceOverrides(
       // The judge's verdict producer: a deterministic fake, so the pass / park / bounce / fail
       // loop drives with no model — and a DISABLED one proves the unwired pass-through.
       judgeAssessor: o.judgeAssessor,
+      // The producer that argues a stage's acceptance criteria: a deterministic fake.
+      stageAcceptanceAssessor: o.stageAcceptanceAssessor,
       // The bug hunt's ranking producer: a deterministic fake, so the hunt's ranked/unranked
       // outcomes drive with no model on every runtime.
       bugHuntAssessor: o.bugHuntAssessor,

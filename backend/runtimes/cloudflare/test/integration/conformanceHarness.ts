@@ -135,6 +135,8 @@ function buildWorkerConformanceDeps(recorder: RecordingEventPublisher, opts: Wor
       //   pass-through) is driven against real D1 with no model.
       judgeRegistry: o.judgeRegistry,
       judgeAssessor: o.judgeAssessor,
+      // - stageAcceptanceAssessor: a deterministic producer for a stage's acceptance report.
+      stageAcceptanceAssessor: o.stageAcceptanceAssessor,
       // - delegatedExecutorRegistry: a deployment-registered EXTERNAL executor, so the delegated
       //   arm's dispatch / poll / settle / teardown is driven against real D1. The agent executor
       //   above is wrapped in the production composite for the same suite (see `withDelegatedArm`),

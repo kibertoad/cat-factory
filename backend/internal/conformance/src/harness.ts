@@ -24,6 +24,7 @@ import type {
   ExecutionRepository,
   GateRegistry,
   JudgeAssessor,
+  StageAcceptanceAssessor,
   BugHuntAssessor,
   MonorepoAdoptionAdvisor,
   RepoBootstrapper,
@@ -807,6 +808,11 @@ export interface ConformanceAppOptions {
    * the facade's model-derived assessor (a pass-through with no model wired).
    */
   judgeAssessor?: JudgeAssessor
+  /**
+   * Inject the producer that argues a project stage's acceptance criteria (a deterministic fake in
+   * the suite), so the computed report is asserted on every runtime without a real model.
+   */
+  stageAcceptanceAssessor?: StageAcceptanceAssessor
   /**
    * Inject the bug hunt's ranking producer (a deterministic fake in the suite) so both hunt
    * outcomes — a RANKED board and the unranked degradation when no model is wired — are driven

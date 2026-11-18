@@ -624,6 +624,12 @@ export {
   stubResolverContext,
 } from './domain/step-resolver-registry.js'
 
+export {
+  STAGE_ACCEPTANCE_KIND,
+  type StageAcceptanceAssessor,
+  type StageAcceptanceSubject,
+} from './ports/stage-acceptance.js'
+
 // Installation-level extension point for JUDGES — the fourth step-taxonomy bucket (an LLM
 // assessment against a rubric, compared to a per-task threshold, disposed as
 // advance/park/bounce/fail). A deployment registers its own judge on the app-owned registry

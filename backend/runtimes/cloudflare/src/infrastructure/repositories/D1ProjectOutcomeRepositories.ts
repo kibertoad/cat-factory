@@ -7,6 +7,8 @@ import {
   type OutcomeStoragePolicy,
   type ProjectPin,
   type ProjectStageTask,
+  type StageAcceptanceReport,
+  parseStageAcceptanceReport,
 } from '@cat-factory/contracts'
 import type {
   OutcomeStoragePolicyRepository,
@@ -152,6 +154,7 @@ interface StageTaskRow {
   cleared_at: number | null
   cleared_by: string | null
   accepted_outcome_id: string | null
+  acceptance: string | null
 }
 
 function rowToStageTask(row: StageTaskRow): ProjectStageTask {
@@ -165,6 +168,7 @@ function rowToStageTask(row: StageTaskRow): ProjectStageTask {
     clearedAt: row.cleared_at,
     clearedBy: row.cleared_by,
     acceptedOutcomeId: row.accepted_outcome_id,
+    acceptance: row.acceptance ? parseStageAcceptanceReport(row.acceptance) : null,
   }
 }
 
@@ -417,6 +421,22 @@ export class D1ProjectRecordRepository implements ProjectRecordRepository {
       tasks.push(...results.map(rowToStageTask))
     }
     return tasks
+  }
+
+  async setStageTaskAcceptance(
+    projectId: string,
+    taskId: string,
+    report: StageAcceptanceReport,
+  ): Promise<boolean> {
+    const result = await this.deps.db
+      .prepare(
+        `UPDATE project_stage_tasks SET acceptance = ?
+         WHERE project_id = ? AND task_id = ?
+           AND (acceptance IS NULL OR json_extract(acceptance, '$.state') <> 'assessed')`,
+      )
+      .bind(JSON.stringify(report), projectId, taskId)
+      .run()
+    return (result.meta.changes ?? 0) > 0
   }
 
   async markStageTaskRecorded(projectId: string, taskId: string, recordedAt: number) {

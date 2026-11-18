@@ -242,6 +242,7 @@ interface MothershipAppOptions {
   testerQualityReviewer?: CoreDependencies['testerQualityReviewer']
   judgeRegistry?: CoreDependencies['judgeRegistry']
   judgeAssessor?: CoreDependencies['judgeAssessor']
+  stageAcceptanceAssessor?: CoreDependencies['stageAcceptanceAssessor']
   detectionConventions?: CoreDependencies['detectionConventions']
   /**
    * The app-owned agent-kind registry, and the external-executor registry beside it.
@@ -357,6 +358,9 @@ function buildMothershipOverrides(
     // pass / park / bounce / fail loop — and the unwired pass-through — are driven through the
     // mothership composition root too, not only the Worker/Node/local-standalone ones.
     ...(opts?.judgeAssessor ? { judgeAssessor: opts.judgeAssessor } : {}),
+    ...(opts?.stageAcceptanceAssessor
+      ? { stageAcceptanceAssessor: opts.stageAcceptanceAssessor }
+      : {}),
     // The engine's PR verification-report publisher (+ the public app URL its observability
     // deep link is built from, and the public BACKEND url its artifact links are built from),
     // so the report hook is driven through the mothership composition root exactly as through

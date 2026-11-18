@@ -26,6 +26,7 @@ import {
 } from '../prompts/guided-review.js'
 import { GUIDED_REVIEW_INVESTIGATOR_SYSTEM_PROMPT } from './guided-review-investigator.js'
 import { JUDGE_SYSTEM_PROMPT } from '../prompts/judge.js'
+import { STAGE_ACCEPTANCE_SYSTEM_PROMPT } from '../prompts/stage-acceptance.js'
 import { isCompanionKind } from './companions.js'
 import { SPEC_WRITER_SYSTEM_PROMPT } from './spec-blueprints.js'
 
@@ -147,6 +148,11 @@ export const PROMPT_VERSIONS = {
   // label attribute an outcome to); it does not re-key a Kaizen combo, because a judge is attached
   // to a step and is never a step's own `agentKind`, which is what `promptVersionForKind` reads.
   judge: { id: 'judge', version: 2, text: JUDGE_SYSTEM_PROMPT },
+  'stage-acceptance': {
+    id: 'stage-acceptance',
+    version: 1,
+    text: STAGE_ACCEPTANCE_SYSTEM_PROMPT,
+  },
   // v2: the two reasoning defects the first shipped verdict had. Ordering claims are now made
   // against ONE derived timeline the platform folds every timestamp it holds into (the route
   // proof's `checkedAt` included, which the v1 verdict contradicted), the role is told not to read
