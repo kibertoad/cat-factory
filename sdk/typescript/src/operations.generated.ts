@@ -10,6 +10,7 @@ import type { RequestOptions, Transport } from './http.ts'
 import { encodePathSegment } from './http.ts'
 import { repeatedCursorError } from './errors.ts'
 import type {
+  AcceptPublicProjectStageRequest,
   AcknowledgeKaizenEntry,
   ActPublicNotificationRequest,
   AddPublicTaskDependencyRequest,
@@ -74,6 +75,8 @@ import type {
   ListPublicKaizenEntriesAcknowledged,
   ListPublicMergeClassRollupsResponse,
   ListPublicModelPresetsResponse,
+  ListPublicProjectStagesResponse,
+  ListPublicProjectStagesResponseStageState,
   ListPublicReposResponse,
   ListPublicReposResponseRepo,
   ListPublicRiskPoliciesResponse,
@@ -2806,6 +2809,19 @@ export class ProjectsResource {
   }
 
   /**
+   * acceptPublicProjectStage
+   * `POST /api/v1/projects/{projectId}/stages/{stageId}/checkpoint` — operation `acceptPublicProjectStage`.
+   */
+  acceptStage(projectId: string, stageId: string, body: AcceptPublicProjectStageRequest = {}, options: RequestOptions = {}): Promise<ListPublicProjectStagesResponseStageState> {
+    return this.#transport.request<ListPublicProjectStagesResponseStageState>({
+      method: 'POST',
+      path: `/api/v1/projects/${encodePathSegment(projectId)}/stages/${encodePathSegment(stageId)}/checkpoint`,
+      body,
+      options,
+    })
+  }
+
+  /**
    * Create a project
    * Create a project homed on the key's workspace. A kind that pins a definition takes `definition` naming its key, an optional version (the highest by default) and the values for its `inputs`; the project pins that version and its content hash. Refusals are `422` with `details.reason`: `project_kind_unregistered`, `project_definition_required`, `project_definition_not_accepted`, `project_definition_not_found`, `project_definition_inputs_invalid`, `project_service_link_invalid`.
    * `POST /api/v1/projects` — operation `createPublicProject`.
@@ -2925,6 +2941,18 @@ export class ProjectsResource {
   }
 
   /**
+   * listPublicProjectStages
+   * `GET /api/v1/projects/{projectId}/stages` — operation `listPublicProjectStages`.
+   */
+  listStages(projectId: string, options: RequestOptions = {}): Promise<ListPublicProjectStagesResponse> {
+    return this.#transport.request<ListPublicProjectStagesResponse>({
+      method: 'GET',
+      path: `/api/v1/projects/${encodePathSegment(projectId)}/stages`,
+      options,
+    })
+  }
+
+  /**
    * List a project's tasks
    * `GET /api/v1/projects/{projectId}/tasks` — operation `listPublicProjectTasks`.
    */
@@ -2957,6 +2985,18 @@ export class ProjectsResource {
     return this.#transport.request<PublicProjectTask>({
       method: 'POST',
       path: `/api/v1/projects/${encodePathSegment(projectId)}/tasks/${encodePathSegment(taskId)}/retry`,
+      options,
+    })
+  }
+
+  /**
+   * startPublicProjectStage
+   * `POST /api/v1/projects/{projectId}/stages/{stageId}/tasks` — operation `startPublicProjectStage`.
+   */
+  startStage(projectId: string, stageId: string, options: RequestOptions = {}): Promise<PublicProjectTask> {
+    return this.#transport.request<PublicProjectTask>({
+      method: 'POST',
+      path: `/api/v1/projects/${encodePathSegment(projectId)}/stages/${encodePathSegment(stageId)}/tasks`,
       options,
     })
   }

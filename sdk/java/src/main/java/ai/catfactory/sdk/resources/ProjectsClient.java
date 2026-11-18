@@ -27,6 +27,22 @@ public final class ProjectsClient {
     }
 
     /**
+     * acceptPublicProjectStage (no body).
+     */
+    public ListPublicProjectStagesResponseStageState acceptStage(String projectId, String stageId) {
+        return acceptStage(projectId, stageId, AcceptPublicProjectStageRequest.builder().build());
+    }
+
+    /**
+     * acceptPublicProjectStage
+     * {@code POST /api/v1/projects/{projectId}/stages/{stageId}/checkpoint} (operation {@code
+     * acceptPublicProjectStage}).
+     */
+    public ListPublicProjectStagesResponseStageState acceptStage(String projectId, String stageId, AcceptPublicProjectStageRequest body) {
+        return transport.request("POST", "/api/v1/projects/" + Transport.pathSegment(projectId) + "/stages/" + Transport.pathSegment(stageId) + "/checkpoint", body, Map.of(), new TypeReference<ListPublicProjectStagesResponseStageState>() {});
+    }
+
+    /**
      * Create a project
      * Create a project homed on the key's workspace. A kind that pins a definition takes
      * `definition` naming its key, an optional version (the highest by default) and the values for
@@ -140,6 +156,14 @@ public final class ProjectsClient {
     }
 
     /**
+     * listPublicProjectStages
+     * {@code GET /api/v1/projects/{projectId}/stages} (operation {@code listPublicProjectStages}).
+     */
+    public ListPublicProjectStagesResponse listStages(String projectId) {
+        return transport.request("GET", "/api/v1/projects/" + Transport.pathSegment(projectId) + "/stages", null, Map.of(), new TypeReference<ListPublicProjectStagesResponse>() {});
+    }
+
+    /**
      * List a project's tasks
      * {@code GET /api/v1/projects/{projectId}/tasks} (operation {@code listPublicProjectTasks}).
      */
@@ -164,6 +188,15 @@ public final class ProjectsClient {
      */
     public PublicProjectTask retryTask(String projectId, String taskId) {
         return transport.request("POST", "/api/v1/projects/" + Transport.pathSegment(projectId) + "/tasks/" + Transport.pathSegment(taskId) + "/retry", null, Map.of(), new TypeReference<PublicProjectTask>() {});
+    }
+
+    /**
+     * startPublicProjectStage
+     * {@code POST /api/v1/projects/{projectId}/stages/{stageId}/tasks} (operation {@code
+     * startPublicProjectStage}).
+     */
+    public PublicProjectTask startStage(String projectId, String stageId) {
+        return transport.request("POST", "/api/v1/projects/" + Transport.pathSegment(projectId) + "/stages/" + Transport.pathSegment(stageId) + "/tasks", null, Map.of(), new TypeReference<PublicProjectTask>() {});
     }
 
     /**

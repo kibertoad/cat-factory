@@ -18,6 +18,7 @@ from .errors import _repeated_cursor
 from .models import (
     _encode,
     _enum,
+    AcceptPublicProjectStageRequest,
     AcknowledgeKaizenEntry,
     ActPublicNotificationRequest,
     AddPublicTaskDependencyRequest,
@@ -82,6 +83,8 @@ from .models import (
     ListPublicKaizenEntriesAcknowledged,
     ListPublicMergeClassRollupsResponse,
     ListPublicModelPresetsResponse,
+    ListPublicProjectStagesResponse,
+    ListPublicProjectStagesResponseStageState,
     ListPublicReposResponse,
     ListPublicReposResponseRepo,
     ListPublicRiskPoliciesResponse,
@@ -3331,6 +3334,20 @@ class ProjectsResource:
     def __init__(self, transport: Transport) -> None:
         self._transport = transport
 
+    def accept_stage(self, project_id: str, stage_id: str, body: AcceptPublicProjectStageRequest | None = None, *, timeout: float | None = None) -> ListPublicProjectStagesResponseStageState:
+        """acceptPublicProjectStage
+        `POST /api/v1/projects/{projectId}/stages/{stageId}/checkpoint` (operation
+        `acceptPublicProjectStage`).
+        """
+        raw = self._transport.request(
+            "POST",
+            f"/api/v1/projects/{_quote(project_id)}/stages/{_quote(stage_id)}/checkpoint",
+            body={} if body is None else _encode(body),
+            query=None,
+            timeout=timeout,
+        )
+        return ListPublicProjectStagesResponseStageState.from_dict(raw)
+
     def create(self, body: CreatePublicProject, *, timeout: float | None = None) -> PublicProject:
         """Create a project
         Create a project homed on the key's workspace. A kind that pins a definition takes
@@ -3478,6 +3495,18 @@ class ProjectsResource:
         )
         return PublicProjectOutcomeList.from_dict(raw)
 
+    def list_stages(self, project_id: str, *, timeout: float | None = None) -> ListPublicProjectStagesResponse:
+        """listPublicProjectStages
+        `GET /api/v1/projects/{projectId}/stages` (operation `listPublicProjectStages`).
+        """
+        raw = self._transport.request(
+            "GET",
+            f"/api/v1/projects/{_quote(project_id)}/stages",
+            query=None,
+            timeout=timeout,
+        )
+        return ListPublicProjectStagesResponse.from_dict(raw)
+
     def list_tasks(self, project_id: str, *, timeout: float | None = None) -> PublicProjectTaskList:
         """List a project's tasks
         `GET /api/v1/projects/{projectId}/tasks` (operation `listPublicProjectTasks`).
@@ -3512,6 +3541,19 @@ class ProjectsResource:
         raw = self._transport.request(
             "POST",
             f"/api/v1/projects/{_quote(project_id)}/tasks/{_quote(task_id)}/retry",
+            query=None,
+            timeout=timeout,
+        )
+        return PublicProjectTask.from_dict(raw)
+
+    def start_stage(self, project_id: str, stage_id: str, *, timeout: float | None = None) -> PublicProjectTask:
+        """startPublicProjectStage
+        `POST /api/v1/projects/{projectId}/stages/{stageId}/tasks` (operation
+        `startPublicProjectStage`).
+        """
+        raw = self._transport.request(
+            "POST",
+            f"/api/v1/projects/{_quote(project_id)}/stages/{_quote(stage_id)}/tasks",
             query=None,
             timeout=timeout,
         )

@@ -123,10 +123,15 @@ export class ProjectStageService {
     const stages = definition?.stages ?? []
     if (stages.length === 0) return []
     const { states } = await this.snapshot(project, stages, outcomes)
-    return stages.map((stage, i) => {
-      const { config: _config, ...shown } = stage
-      return { stage: shown, state: states[i]! }
-    })
+    return viewsOf(stages, states)
+  }
+
+  /** The stages of a project's pinned definition with where each stands, read from scratch. */
+  async list(workspaceId: string, projectId: string): Promise<ProjectStageView[]> {
+    const { project } = await this.deps.getMounted(workspaceId, projectId)
+    const stages = await this.stagesOf(project)
+    if (stages.length === 0) return []
+    return viewsOf(stages, (await this.snapshot(project, stages)).states)
   }
 
   /**
@@ -390,6 +395,17 @@ export class ProjectStageService {
     }
     return false
   }
+}
+
+/** Each stage without its handler config, with its state. */
+function viewsOf(
+  stages: readonly ProjectStage[],
+  states: readonly ProjectStageState[],
+): ProjectStageView[] {
+  return stages.map((stage, i) => {
+    const { config: _config, ...shown } = stage
+    return { stage: shown, state: states[i]! }
+  })
 }
 
 /** The accepted result of each upstream stage, by stage id, which `stale` later compares. */

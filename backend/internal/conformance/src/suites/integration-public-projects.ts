@@ -125,6 +125,8 @@ export function definePublicProjectsConformance(harness: ConformanceHarness): vo
         properties: { topics: { type: 'array' } },
       })
       expect(research.body.schemas.outcome).toMatchObject({ properties: { findings: {} } })
+      // The same body schema, keyed by the task type an outcome names.
+      expect(research.body.schemas.outcomes?.research).toEqual(research.body.schemas.outcome)
       expect(research.body.schemas.view).toMatchObject({ properties: { coverage: {} } })
       const unknown = await app.call('GET', '/api/v1/project-kinds/nonesuch', undefined, write)
       expect(unknown.status).toBe(404)
@@ -181,7 +183,9 @@ export function definePublicProjectsConformance(harness: ConformanceHarness): vo
           (d) => `${d.origin}:${d.definition.key}@${d.definition.version}`,
         ),
       ).toEqual(['registered:platform:vendor@1', 'stored:acme:crm@1'])
-      expect(listed.body.definitions[1]!.definition.spec).toEqual(publishedBody.spec)
+      expect(listed.body.definitions.find((d) => d.origin === 'stored')!.definition.spec).toEqual(
+        publishedBody.spec,
+      )
     })
 
     it('creates a research project, links services and serves it on a board that mounts it', async () => {

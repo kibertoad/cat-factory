@@ -4276,6 +4276,25 @@ type ProjectsService struct {
 	client *Client
 }
 
+// AcceptStage acceptPublicProjectStage
+// POST /api/v1/projects/{projectId}/stages/{stageId}/checkpoint (operation
+// acceptPublicProjectStage).
+func (s *ProjectsService) AcceptStage(ctx context.Context, projectID string, stageID string, body *AcceptPublicProjectStageRequest) (*ListPublicProjectStagesResponseStageState, error) {
+	if body == nil {
+		body = &AcceptPublicProjectStageRequest{}
+	}
+	req := requestSpec{
+		Method: "POST",
+		Path:   fmt.Sprintf("/api/v1/projects/%s/stages/%s/checkpoint", pathEscape(projectID), pathEscape(stageID)),
+		Body:   body,
+	}
+	var out ListPublicProjectStagesResponseStageState
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
 // Create create a project
 // Create a project homed on the key's workspace. A kind that pins a definition takes `definition`
 // naming its key, an optional version (the highest by default) and the values for its `inputs`;
@@ -4435,6 +4454,20 @@ func (s *ProjectsService) ListOutcomes(ctx context.Context, projectID string, qu
 	return &out, nil
 }
 
+// ListStages listPublicProjectStages
+// GET /api/v1/projects/{projectId}/stages (operation listPublicProjectStages).
+func (s *ProjectsService) ListStages(ctx context.Context, projectID string) (*ListPublicProjectStagesResponse, error) {
+	req := requestSpec{
+		Method: "GET",
+		Path:   fmt.Sprintf("/api/v1/projects/%s/stages", pathEscape(projectID)),
+	}
+	var out ListPublicProjectStagesResponse
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
 // ListTasks list a project's tasks
 // GET /api/v1/projects/{projectId}/tasks (operation listPublicProjectTasks).
 func (s *ProjectsService) ListTasks(ctx context.Context, projectID string) (*PublicProjectTaskList, error) {
@@ -4471,6 +4504,20 @@ func (s *ProjectsService) RetryTask(ctx context.Context, projectID string, taskI
 	req := requestSpec{
 		Method: "POST",
 		Path:   fmt.Sprintf("/api/v1/projects/%s/tasks/%s/retry", pathEscape(projectID), pathEscape(taskID)),
+	}
+	var out PublicProjectTask
+	if err := s.client.request(ctx, req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// StartStage startPublicProjectStage
+// POST /api/v1/projects/{projectId}/stages/{stageId}/tasks (operation startPublicProjectStage).
+func (s *ProjectsService) StartStage(ctx context.Context, projectID string, stageID string) (*PublicProjectTask, error) {
+	req := requestSpec{
+		Method: "POST",
+		Path:   fmt.Sprintf("/api/v1/projects/%s/stages/%s/tasks", pathEscape(projectID), pathEscape(stageID)),
 	}
 	var out PublicProjectTask
 	if err := s.client.request(ctx, req, &out); err != nil {

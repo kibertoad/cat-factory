@@ -11,6 +11,7 @@ import org.jspecify.annotations.Nullable;
 /**
  * The {@code PublicProjectKindDetailSchemas} wire model.
  * @param outcome Always present; {@code null} when the server has no value for it.
+ * @param outcomes the {@code outcomes} field.
  * @param spec Always present; {@code null} when the server has no value for it.
  * @param view Always present; {@code null} when the server has no value for it.
  */
@@ -18,6 +19,8 @@ import org.jspecify.annotations.Nullable;
 public record PublicProjectKindDetailSchemas(
     /** Always present; {@code null} when the server has no value for it. */
     @JsonProperty("outcome") @Nullable Map<String, Object> outcome,
+
+    @JsonProperty("outcomes") Map<String, Map<String, Object>> outcomes,
 
     /** Always present; {@code null} when the server has no value for it. */
     @JsonProperty("spec") @Nullable Map<String, Object> spec,
@@ -39,12 +42,19 @@ public record PublicProjectKindDetailSchemas(
      */
     public static final class Builder {
         private @Nullable Map<String, Object> outcome;
+        private @Nullable Map<String, Map<String, Object>> outcomes;
         private @Nullable Map<String, Object> spec;
         private @Nullable Map<String, Object> view;
 
         /** Set {@code outcome}. */
         public Builder outcome(@Nullable Map<String, Object> outcome) {
             this.outcome = outcome;
+            return this;
+        }
+
+        /** Set {@code outcomes}. */
+        public Builder outcomes(@Nullable Map<String, Map<String, Object>> outcomes) {
+            this.outcomes = outcomes;
             return this;
         }
 
@@ -62,7 +72,7 @@ public record PublicProjectKindDetailSchemas(
 
         /** Build the {@link PublicProjectKindDetailSchemas}. */
         public PublicProjectKindDetailSchemas build() {
-            return new PublicProjectKindDetailSchemas(outcome, spec, view);
+            return new PublicProjectKindDetailSchemas(outcome, outcomes, spec, view);
         }
     }
 }

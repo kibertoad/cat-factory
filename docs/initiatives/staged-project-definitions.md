@@ -157,10 +157,14 @@ bucket for every new repository method in the same PR.
       the artifacts it may reference through `ProjectTaskInput.upstreamArtifacts`, derived from
       the same rows the upstream rendering reads and only on a first dispatch; a writeup stage
       must read at least one stage (`stageRequires.consumes`). PR: [#2532](https://github.com/kibertoad/cat-factory/pull/2532)
-- [ ] **9. Surfaces.** The stage rail in the project takeover (status, stale, waiting on whom), a
-      checkpoint notification, and additive public API routes to list stages, start one and clear
-      a checkpoint, each with its `scripts/sdk/surface.mjs` entry. Website PR for the user-facing
-      behaviour.
+- [x] **9a. Public stage routes.** `GET /api/v1/projects/{projectId}/stages`, `POST
+      .../stages/{stageId}/tasks` (`write`) and `POST .../stages/{stageId}/checkpoint`
+      (`decide`), each with its `scripts/sdk/surface.mjs` entry; the public outcome names its
+      `taskType`, and a kind serves each task type's outcome schema (`schemas.outcomes`). PR:
+      _pending_
+- [ ] **9b. Stage rail.** The stage rail in the project takeover (status, stale, waiting on
+      whom, the acceptance report, starting a stage and accepting its checkpoint) and a
+      checkpoint notification. Website PR for the user-facing behaviour.
 
 ## Out of scope
 
@@ -176,12 +180,11 @@ bucket for every new repository method in the same PR.
   and recording read it back from there, so all three agree on the handler.
 - An outcome with no recorded task type (a deleted task the backfill could not attribute, or a
   node one build behind) is decoded by the kind's handler when the kind has exactly one. A kind
-  with several handlers serves such a body as stored.
+  with several handlers serves such a body as stored. The public outcome names its task type the
+  same way, and `GET /api/v1/project-kinds/{kind}` serves each task type's body schema under
+  `schemas.outcomes`; `schemas.outcome` is null for a kind with several.
 - A kind's descriptor and its module list task types separately. A task type the descriptor offers
   with no handler in the module is refused at dispatch with `task_type_not_offered_by_project`.
-- `GET /api/v1/project-kinds/{kind}` serves one outcome schema, its single handler's. A kind
-  offering several handlers serves null there until slice 9 adds per-task-type schemas.
-- The outcome row's `taskType` is internal: the public outcome envelope does not carry it yet.
 
 - A staged project's task belongs to the stage that started it (`project_stage_tasks`). A task
   created under a staged project any other way is refused at dispatch with

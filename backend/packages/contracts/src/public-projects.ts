@@ -51,8 +51,13 @@ export const publicProjectKindDetailSchema = v.object({
   schemas: v.object({
     /** A definition's `spec`. */
     spec: v.nullable(jsonSchemaSchema),
-    /** An outcome's `body`, in the schema version the deployment writes. */
+    /**
+     * An outcome's `body`, in the schema version the deployment writes, for a kind with one task
+     * type; null for a kind with several, whose bodies `outcomes` states per task type.
+     */
     outcome: v.nullable(jsonSchemaSchema),
+    /** Each task type's outcome `body`, keyed by the `taskType` an outcome carries. */
+    outcomes: v.optional(v.record(v.string(), v.nullable(jsonSchemaSchema)), {}),
     /** A project's `view`. */
     view: v.nullable(jsonSchemaSchema),
   }),
@@ -192,8 +197,16 @@ export const createPublicProjectTaskSchema = v.object({
 export type CreatePublicProjectTaskInput = v.InferOutput<typeof createPublicProjectTaskSchema>
 
 /** A project's outcomes without their bodies, `seq` ascending. */
+/** An outcome as the API serves it, with the task type whose handler wrote and decodes it. */
+export const publicProjectOutcomeMetaSchema = v.object({
+  ...projectOutcomeMetaSchema.entries,
+  /** Names the shape of `body` among the kind's `schemas.outcomes`; null when not recorded. */
+  taskType: v.nullable(v.string()),
+})
+export type PublicProjectOutcomeMeta = v.InferOutput<typeof publicProjectOutcomeMetaSchema>
+
 export const publicProjectOutcomeListSchema = v.object({
-  outcomes: v.array(projectOutcomeMetaSchema),
+  outcomes: v.array(publicProjectOutcomeMetaSchema),
 })
 export type PublicProjectOutcomeList = v.InferOutput<typeof publicProjectOutcomeListSchema>
 
@@ -204,7 +217,7 @@ export const publicProjectOutcomeListQuerySchema = v.object({
 
 /** One outcome with its body, in the schema its kind serves. */
 export const publicProjectOutcomeSchema = v.object({
-  ...projectOutcomeMetaSchema.entries,
+  ...publicProjectOutcomeMetaSchema.entries,
   body: v.unknown(),
 })
 export type PublicProjectOutcome = v.InferOutput<typeof publicProjectOutcomeSchema>
