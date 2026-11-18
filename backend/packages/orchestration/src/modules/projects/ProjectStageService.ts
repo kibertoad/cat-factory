@@ -356,27 +356,21 @@ export class ProjectStageService {
         acceptedOutcomeId,
       )
     }
-    if (cleared && latest) {
-      const settled = latest.taskId
-      await runBestEffort(
-        this.log,
-        'projects.stages.settleCheckpointCard',
-        async () => {
-          await this.deps.notifications?.clearOnBlock(
-            homeWorkspaceId,
-            settled,
-            'stage_checkpoint',
-            'act',
-          )
-        },
-        { projectId, stageId },
-      )
-    }
-    if (!cleared) {
+    if (!cleared || !latest) {
       throw new ConflictError(
         'This stage has no result waiting for its checkpoint',
         'project_stage_checkpoint_not_pending',
         { stageId, status: before.status },
+      )
+    }
+    const notifications = this.deps.notifications
+    if (notifications) {
+      const settled = latest.taskId
+      await runBestEffort(
+        this.log,
+        'projects.stages.settleCheckpointCard',
+        () => notifications.clearOnBlock(homeWorkspaceId, settled, 'stage_checkpoint', 'act'),
+        { projectId, stageId },
       )
     }
     await runBestEffort(
@@ -407,20 +401,26 @@ export class ProjectStageService {
 
   /**
    * Tell the board that homes the project a stage's result awaits acceptance at its checkpoint.
-   * Called when a staged task records its result; a stage without a checkpoint raises nothing.
-   * Best-effort for the caller: the result is on record whether or not a person is told.
+   * Called when a staged task records its result, and again by the recovery of a completion that
+   * died after the write; a stage without a checkpoint raises nothing. Best-effort for the
+   * caller: the result is on record whether or not a person is told.
    */
   async announceCheckpoint(
     workspaceId: string,
-    projectId: string,
+    project: Project,
+    stages: readonly ProjectStage[],
     stageId: string,
     taskId: string,
   ): Promise<void> {
     const notifications = this.deps.notifications
-    if (!notifications) return
-    const mounted = await this.deps.getMounted(workspaceId, projectId)
-    const stage = (await this.stagesOf(mounted.project)).find((s) => s.id === stageId)
-    if (!stage?.checkpoint) return
+    const index = stages.findIndex((s) => s.id === stageId)
+    const stage = stages[index]
+    if (!notifications || !stage?.checkpoint) return
+    // Raised only while this task's result is the one awaiting acceptance, so a replay or a
+    // recovery may call again (the open card is unique per task) and a late one raises nothing.
+    const state = (await this.snapshot(project, stages)).states[index]!
+    if (state.status !== 'awaiting-checkpoint' || state.latest?.taskId !== taskId) return
+    const mounted = await this.deps.getMounted(workspaceId, project.id)
     await notifications.raise(mounted.homeWorkspaceId, {
       type: 'stage_checkpoint',
       blockId: taskId,

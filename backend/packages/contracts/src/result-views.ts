@@ -47,6 +47,9 @@ export const RESULT_VIEW_IDS = [
   'pr-review',
   'bug-fishing',
   'ralph-loop',
+  // A project's takeover opened on its stages from outside its board node (a stage checkpoint
+  // card). Opened for a stage's task, so no agent kind declares it.
+  'project-stages',
 ] as const
 
 export type ResultViewId = (typeof RESULT_VIEW_IDS)[number]

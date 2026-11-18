@@ -80,7 +80,9 @@ writing stage's run is given it. A writing stage reads only stages a person acce
 checkpoint, and is not repeatable, so every write follows a person's acceptance.
 
 **Surfaces.** The project takeover opens a staged project on its Stages tab, where a person starts a
-stage and accepts a result. A `stage_checkpoint` notification tells them a result awaits acceptance.
+stage and accepts a result. A `stage_checkpoint` notification tells them a result awaits acceptance
+and opens the project on its stages; it is raised from the derived stage state, so a replay raises
+it again safely, and it stays out of review debt, which would refuse an automatic stage's start.
 The public API lists stages, starts one (`write`) and accepts one (`decide`); an outcome names its
 `taskType`, and a kind serves each task type's body schema under `schemas.outcomes`.
 

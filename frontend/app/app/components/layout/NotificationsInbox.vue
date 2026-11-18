@@ -72,7 +72,7 @@ const META: Record<Notification['type'], { icon: string; color: Accent }> = {
   fork_decision_pending: { icon: 'i-lucide-git-fork', color: 'warning' },
   judge_review: { icon: 'i-lucide-scale', color: 'warning' },
   // A project stage's result awaits a person's acceptance at its checkpoint. Clicking the title
-  // selects the stage's task on the board; "act" just marks it read.
+  // opens the project on its stages, where it is accepted; "act" just marks it read.
   stage_checkpoint: { icon: 'i-lucide-flag', color: 'warning' },
   // The PR reviewer surfaced findings to triage. Clicking the title opens the PR-review window
   // (see `reveal`); "act" just marks it read (findings are selected in that window, not here).
@@ -155,6 +155,7 @@ const routeDeps: NotificationRouteDeps = {
   openRequirementReview: (id) => ui.openRequirementReview(id),
   openClarityReview: (id) => ui.openClarityReview(id),
   openInitiativeTracker: (id) => ui.openInitiativeTracker(id),
+  openProjectStages: (id) => ui.openProjectStages(id),
   openOperatorDashboard: () => ui.openOperatorDashboard(),
 }
 

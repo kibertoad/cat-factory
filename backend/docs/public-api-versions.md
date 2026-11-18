@@ -674,6 +674,6 @@ Additive: new routes, a new field on the outcome envelope, and a new member of a
 
 ## 1.106.0
 
-The notification type vocabulary gains `stage_checkpoint`: a project stage's result awaits a person's acceptance at its checkpoint. The card names the stage's task (`blockId`) and is settled when the stage is accepted. It counts toward review debt like the other review parks.
+The notification type vocabulary gains `stage_checkpoint`: a project stage's result awaits a person's acceptance at its checkpoint. The card names the stage's task (`blockId`) and is settled when the stage is accepted. It does not count toward review debt: an automatic stage's task is created by the engine, which the debt guard must not refuse.
 
 Additive. A consumer that maps notification types through an exhaustive table gains a member to name.

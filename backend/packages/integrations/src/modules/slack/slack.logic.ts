@@ -90,7 +90,9 @@ const MENTION_AUDIENCE: Record<NotificationType, MentionAudience> = {
   // A rubric verdict the run parked on: the task's creator decides whether to proceed, send
   // it back, or stop — the engineers are who a rework round lands on, so mention both.
   judge_review: { roles: ['engineering'], includeCreator: true },
-  stage_checkpoint: { roles: ['engineering'], includeCreator: true },
+  // Accepting a stage's result is a planning decision, and an automatic stage's task has no
+  // creator to mention, so it goes to product as well as engineering.
+  stage_checkpoint: { roles: ['product', 'engineering'], includeCreator: true },
   // The PR reviewer surfaced findings to triage: tell the task's creator (who selects which
   // findings to act on) and the engineers.
   pr_review_ready: { roles: ['engineering'], includeCreator: true },

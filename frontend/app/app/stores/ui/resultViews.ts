@@ -152,6 +152,10 @@ export function createUiResultViews() {
   function openServiceSpec(blockId: string) {
     resultView.value = { view: 'service-spec', blockId, instanceId: null, stepIndex: null }
   }
+  // Open the project a stage's task sits under, on its stages (a stage checkpoint card).
+  function openProjectStages(blockId: string) {
+    resultView.value = { view: 'project-stages', blockId, instanceId: null, stepIndex: null }
+  }
   // Open the initiative tracker window for an initiative block (board card / inspector).
   function openInitiativeTracker(blockId: string) {
     resultView.value = { view: 'initiative-tracker', blockId, instanceId: null, stepIndex: null }
@@ -214,6 +218,7 @@ export function createUiResultViews() {
     openServiceSpec,
     openInitiativeTracker,
     openInitiativePlanning,
+    openProjectStages,
     openFollowUps,
     openForkDecision,
     openBinaryCandidates,
