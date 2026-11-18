@@ -32,6 +32,8 @@ export function createProjectsModule(
     projectDefinitions: ProjectDefinitionSource
     registeredProjectDefinitions: RegisteredProjectDefinitionSource
     projectKindModules: ProjectKindModuleRegistry
+    /** Absent where notifications are not wired: no checkpoint card is raised. */
+    notifications?: Pick<NotificationService, 'raise' | 'clearOnBlock'>
   },
   events: ExecutionEventPublisher,
   /**
@@ -41,8 +43,6 @@ export function createProjectsModule(
   late: {
     board: () => StageTaskBoard | undefined
     runStarter: () => StageRunStarter | undefined
-    /** Absent where notifications are not wired: no checkpoint card is raised. */
-    notifications?: Pick<NotificationService, 'raise' | 'clearOnBlock'>
   },
 ): ProjectsModule | undefined {
   const {
@@ -95,7 +95,7 @@ export function createProjectsModule(
     definitions: sources.projectDefinitions,
     board: late.board,
     runStarter: late.runStarter,
-    ...(late.notifications ? { notifications: late.notifications } : {}),
+    ...(sources.notifications ? { notifications: sources.notifications } : {}),
     clock: deps.clock,
     logger: deps.logger,
   })

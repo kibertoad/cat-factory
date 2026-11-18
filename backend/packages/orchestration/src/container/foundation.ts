@@ -129,13 +129,15 @@ export function createCoreFoundation(params: CoreFoundationParams): CoreFoundati
   modules.build('projects', () =>
     createProjectsModule(
       dependencies,
-      { projectKinds, projectDefinitions, registeredProjectDefinitions, projectKindModules },
-      executionEventPublisher,
       {
-        board: () => stageBoard,
-        runStarter: () => stageRunStarter,
+        projectKinds,
+        projectDefinitions,
+        registeredProjectDefinitions,
+        projectKindModules,
         ...(notifications?.service ? { notifications: notifications.service } : {}),
       },
+      executionEventPublisher,
+      { board: () => stageBoard, runStarter: () => stageRunStarter },
     ),
   )
   const settings = modules.build('settings', () =>
