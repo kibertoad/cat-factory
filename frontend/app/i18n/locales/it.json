@@ -9345,7 +9345,8 @@
         "latest": "Più recente",
         "outcomes": "Cronologia",
         "credentials": "Credenziali",
-        "storage": "Archiviazione"
+        "storage": "Archiviazione",
+        "stages": "Fasi"
       },
       "outcomes": {
         "empty": "Nessuna attività ha ancora registrato un risultato",
@@ -9396,6 +9397,44 @@
       "fallback": {
         "empty": "Questo progetto non ha ancora risultati",
         "stream": "Più recente in {stream}"
+      },
+      "stages": {
+        "status": {
+          "blocked": "Bloccata",
+          "ready": "Pronta",
+          "in-progress": "In corso",
+          "awaiting-checkpoint": "In attesa di accettazione",
+          "done": "Completata"
+        },
+        "stale": "Non aggiornata",
+        "staleHint": "Una fase su cui si basa questa ha un risultato accettato più recente. Eseguila di nuovo per usarlo.",
+        "waitingOn": "In attesa di: {stages}",
+        "activeTask": "In lavorazione: {task}",
+        "start": "Avvia",
+        "accept": "Accetta",
+        "startFailed": "Impossibile avviare la fase",
+        "acceptFailed": "Impossibile accettare la fase",
+        "acceptance": {
+          "state": {
+            "assessed": "Criteri di accettazione",
+            "unavailable": "Criteri di accettazione (non valutati: nessun modello configurato)",
+            "failed": "Criteri di accettazione (la valutazione non è riuscita)",
+            "pending": "Criteri di accettazione (non ancora valutati)"
+          },
+          "criterion": {
+            "met": "Soddisfatto",
+            "unmet": "Non soddisfatto",
+            "unverified": "Non verificato"
+          },
+          "unfound": "{count} passaggio/i citato/i non compaiono nel risultato"
+        },
+        "decisions": {
+          "loading": "Caricamento delle decisioni proposte",
+          "loadFailed": "Impossibile caricare le decisioni proposte",
+          "choice": "Oppure scrivi una tua scelta",
+          "note": "Nota (facoltativa)",
+          "accept": "Decidi e accetta"
+        }
       }
     }
   },

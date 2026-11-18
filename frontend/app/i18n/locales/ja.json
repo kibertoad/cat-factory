@@ -9345,7 +9345,8 @@
         "latest": "最新",
         "outcomes": "履歴",
         "credentials": "認証情報",
-        "storage": "ストレージ"
+        "storage": "ストレージ",
+        "stages": "ステージ"
       },
       "outcomes": {
         "empty": "まだ結果を記録したタスクはありません",
@@ -9396,6 +9397,44 @@
       "fallback": {
         "empty": "このプロジェクトにはまだ結果がありません",
         "stream": "{stream} の最新"
+      },
+      "stages": {
+        "status": {
+          "blocked": "ブロック中",
+          "ready": "開始可能",
+          "in-progress": "進行中",
+          "awaiting-checkpoint": "承認待ち",
+          "done": "完了"
+        },
+        "stale": "古い",
+        "staleHint": "このステージの前提となるステージに、より新しい承認済みの結果があります。それを使うにはこのステージを再実行してください。",
+        "waitingOn": "待機中: {stages}",
+        "activeTask": "作業中: {task}",
+        "start": "開始",
+        "accept": "承認",
+        "startFailed": "ステージを開始できませんでした",
+        "acceptFailed": "ステージを承認できませんでした",
+        "acceptance": {
+          "state": {
+            "assessed": "受け入れ基準",
+            "unavailable": "受け入れ基準(未評価: モデルが設定されていません)",
+            "failed": "受け入れ基準(評価に失敗しました)",
+            "pending": "受け入れ基準(まだ評価されていません)"
+          },
+          "criterion": {
+            "met": "満たしている",
+            "unmet": "満たしていない",
+            "unverified": "未確認"
+          },
+          "unfound": "引用された {count} 件の箇所が結果に含まれていません"
+        },
+        "decisions": {
+          "loading": "提案された決定事項を読み込んでいます",
+          "loadFailed": "提案された決定事項を読み込めませんでした",
+          "choice": "または独自の選択を入力",
+          "note": "メモ(任意)",
+          "accept": "決定して承認"
+        }
       }
     }
   },

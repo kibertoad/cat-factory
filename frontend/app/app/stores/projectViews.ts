@@ -33,6 +33,22 @@ export const useProjectViewsStore = defineStore('projectViews', () => {
     }
   }
 
+  /** Start a stage's task, then re-read the project so the rail shows it in progress. */
+  async function startStage(projectId: string, stageId: string): Promise<void> {
+    await api.startProjectStage(useWorkspaceStore().requireId(), projectId, stageId)
+    await load(projectId)
+  }
+
+  /** Accept a stage's result at its checkpoint, with a settlement where its task type takes one. */
+  async function acceptStage(
+    projectId: string,
+    stageId: string,
+    revision?: unknown,
+  ): Promise<void> {
+    await api.acceptProjectStage(useWorkspaceStore().requireId(), projectId, stageId, revision)
+    await load(projectId)
+  }
+
   function outcome(projectId: string, outcomeId: string): Promise<ProjectOutcomeDetail> {
     return api.getProjectOutcome(useWorkspaceStore().requireId(), projectId, outcomeId)
   }
@@ -56,5 +72,15 @@ export const useProjectViewsStore = defineStore('projectViews', () => {
     return loadPolicy(projectId)
   }
 
-  return { views, loading, policies, load, outcome, loadPolicy, setPolicy }
+  return {
+    views,
+    loading,
+    policies,
+    load,
+    startStage,
+    acceptStage,
+    outcome,
+    loadPolicy,
+    setPolicy,
+  }
 })

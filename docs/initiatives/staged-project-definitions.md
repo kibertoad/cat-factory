@@ -162,9 +162,12 @@ bucket for every new repository method in the same PR.
       (`decide`), each with its `scripts/sdk/surface.mjs` entry; the public outcome names its
       `taskType`, and a kind serves each task type's outcome schema (`schemas.outcomes`). PR:
       [#2533](https://github.com/kibertoad/cat-factory/pull/2533)
-- [ ] **9b. Stage rail.** The stage rail in the project takeover (status, stale, waiting on
-      whom, the acceptance report, starting a stage and accepting its checkpoint) and a
-      checkpoint notification. Website PR for the user-facing behaviour.
+- [x] **9b. Stage rail.** A Stages tab in the project takeover, opened first for a staged
+      project: each stage with its status, what it waits on, the task working on it, whether it
+      is stale, and the acceptance report; a person starts a ready stage and accepts a result
+      there, settling a decisions stage item by item as it is accepted. PR: _pending_
+- [ ] **9c. Checkpoint notification.** A notification when a stage's result awaits acceptance,
+      resolved when it is accepted, so a person learns of it without opening the project.
 
 ## Out of scope
 
