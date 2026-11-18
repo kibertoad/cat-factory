@@ -117,9 +117,16 @@ bucket for every new repository method in the same PR.
       evidence) from the stages it reads, and its handler requires every item settled at the
       checkpoint. Any kind lists the shipped `decisionTaskHandler` beside its own; the research
       kind does not. The stage rail renders the register (slice 9). PR: [#2528](https://github.com/kibertoad/cat-factory/pull/2528)
-- [ ] **6. Spawn stage.** Extract the initiative spawn and reconcile logic into a shared service;
-      a spawn stage creates tasks in the linked services it names, links the project, runs their
-      normal pipelines, and completes when they settle.
+- [x] **6a. Staged linked context.** A task that links a staged project reads each stage's
+      accepted result, rendered by its handler, in the definition's order; a stage with none yet
+      is stated. Such a project is linkable once some stage has an accepted result, only those
+      results' bodies are read, and the step records every accepted stage outcome as the
+      revision. The kind's own project-level rendering stays for an unstaged project. PR:
+      [#2529](https://github.com/kibertoad/cat-factory/pull/2529)
+- [ ] **6b. Spawn stage.** A stage that creates a task in each linked service (configurable title,
+      task type and brief), links the project so each reads the stages' results, starts their
+      runs, and records what it spawned; its checkpoint refuses acceptance until every spawned
+      task has settled. Reuses the initiative spawn and reconcile logic where it fits.
 - [ ] **7. Exit criteria.** Stage `acceptance` criteria judged through `JudgeRegistry` against the
       outcome and its evidence; each criterion reported met, unmet or unverified at the checkpoint.
 - [ ] **8. Document stage.** A handler that composes upstream streams and their artifacts into one
@@ -162,10 +169,11 @@ bucket for every new repository method in the same PR.
   result accepted at a checkpoint after the downstream task recorded still makes it stale.
 - A definition that declares no stages hashes without the `stages` key, so pins taken before
   definitions carried stages stay valid.
-- The research kind's project view and its linked-project rendering fold only its unstaged
-  `main` stream against the definition's topics. A research stage's findings reach a later stage
-  through `consumes`, rendered against that stage's own questions; a per-stage view on the board
-  comes with the stage rail (slice 9). A staged definition of the research kind still carries the
+- The research kind's project view folds only its unstaged `main` stream against the
+  definition's topics. A staged project reads as linked context through its stages instead, each
+  accepted result rendered by its handler against that stage's own questions, so the kind's
+  project-level rendering never sees a staged project. A per-stage view on the board comes with
+  the stage rail (slice 9). A staged definition of the research kind still carries the
   kind's top-level spec; a kind built for stages declares its own.
 
 - An automatic stage is started by the engine with no person behind it, like an initiative's

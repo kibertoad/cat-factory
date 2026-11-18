@@ -1,5 +1,5 @@
 import type { Project, ProjectBoardView, ProjectStageState } from '@cat-factory/contracts'
-import type { Block, ExecutionInstance } from '@cat-factory/kernel'
+import type { Block, ExecutionInstance, WorkspaceSnapshot } from '@cat-factory/kernel'
 import { RESEARCH_PIPELINE_ID, defaultProjectDefinitionRegistry } from '@cat-factory/kernel'
 import { describe, expect, it } from 'vitest'
 import type { ConformanceHarness } from '../harness.js'
@@ -150,6 +150,22 @@ export function defineCoreProjectStagesConformance(harness: ConformanceHarness):
         ['deepen', 'blocked'],
       ])
 
+      // A task links the project only once a stage has an ACCEPTED result: one still awaiting
+      // its checkpoint is not one.
+      const snap = (await app.call<WorkspaceSnapshot>('GET', `/workspaces/${wsId}`)).body
+      const frameId = snap.serviceCatalog?.[0]?.frameBlockId
+      const linking = await app.call<Block>('POST', `/workspaces/${wsId}/blocks/${frameId}/tasks`, {
+        title: 'Integrate the vendor',
+        description: 'Integrate the vendor API using what the staged study found.',
+      })
+      expect(linking.status).toBe(201)
+      const link = () =>
+        app.call('POST', `/workspaces/${wsId}/blocks/${linking.body.id}/projects`, {
+          projectIds: [project.id],
+        })
+      const unaccepted = await link()
+      expect(reasonOf(unaccepted.body)).toBe('project_has_no_result')
+
       const checkpoint = `/workspaces/${wsId}/projects/${project.id}/stages/discover/checkpoint`
       const cleared = await app.call<ProjectStageState>('POST', checkpoint, {})
       expect(cleared.status).toBe(200)
@@ -160,6 +176,22 @@ export function defineCoreProjectStagesConformance(harness: ConformanceHarness):
       expect(await stages()).toEqual([
         ['discover', 'done'],
         ['deepen', 'ready'],
+      ])
+
+      // Once accepted, the linking task reads the discovery result as the revision it reflects.
+      expect((await link()).status).toBe(200)
+      await app.call('POST', `/workspaces/${wsId}/blocks/${linking.body.id}/executions`, {
+        pipelineId: 'pl_spike_direct',
+      })
+      const read = (await app.drive(wsId))
+        .find((e) => e.blockId === linking.body.id)!
+        .steps.find((st) => st.contextProjects?.length)
+      expect(read?.contextProjects).toEqual([
+        expect.objectContaining({
+          projectId: project.id,
+          revisionId: `pout_${task.body.id}`,
+          seq: 1,
+        }),
       ])
 
       const deeper = await start('deepen')

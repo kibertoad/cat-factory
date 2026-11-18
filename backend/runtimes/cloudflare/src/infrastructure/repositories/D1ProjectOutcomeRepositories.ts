@@ -404,6 +404,21 @@ export class D1ProjectRecordRepository implements ProjectRecordRepository {
     return results.map(rowToStageTask)
   }
 
+  async listStageTasksOfProjects(projectIds: string[]): Promise<ProjectStageTask[]> {
+    const tasks: ProjectStageTask[] = []
+    for (const chunk of chunkForIn(projectIds)) {
+      const { results } = await this.deps.db
+        .prepare(
+          `SELECT * FROM project_stage_tasks WHERE project_id IN (${chunk.map(() => '?').join(', ')})
+           ORDER BY created_at ASC, task_id ASC`,
+        )
+        .bind(...chunk)
+        .all<StageTaskRow>()
+      tasks.push(...results.map(rowToStageTask))
+    }
+    return tasks
+  }
+
   async markStageTaskRecorded(projectId: string, taskId: string, recordedAt: number) {
     await this.deps.db
       .prepare(

@@ -59,6 +59,17 @@ export function defineStageTaskPersistence(
     ])
   })
 
+  it("reads several projects' stage tasks in one call, and nothing of another", async () => {
+    const repos = makeRepos()
+    const [a, b, other] = [unique('prj'), unique('prj'), unique('prj')]
+    await repos.records.insertStageTask(stageTaskRecord(a, unique('task'), 'discover'))
+    await repos.records.insertStageTask(stageTaskRecord(b, unique('task'), 'discover'))
+    await repos.records.insertStageTask(stageTaskRecord(other, unique('task'), 'discover'))
+    const read = await repos.records.listStageTasksOfProjects([a, b])
+    expect(read.map((t) => t.projectId).sort()).toEqual([a, b].sort())
+    expect(await repos.records.listStageTasksOfProjects([])).toEqual([])
+  })
+
   it('clears a checkpoint once, only on a recorded task, and frees a deleted task', async () => {
     const repos = makeRepos()
     const projectId = unique('prj')

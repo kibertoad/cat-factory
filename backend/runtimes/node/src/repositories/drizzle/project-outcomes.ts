@@ -323,6 +323,19 @@ export class DrizzleProjectRecordRepository implements ProjectRecordRepository {
     return rows.map(rowToStageTask)
   }
 
+  async listStageTasksOfProjects(projectIds: string[]): Promise<ProjectStageTask[]> {
+    const tasks: ProjectStageTask[] = []
+    for (let i = 0; i < projectIds.length; i += CHUNK) {
+      const rows = await this.db
+        .select()
+        .from(projectStageTasks)
+        .where(inArray(projectStageTasks.project_id, projectIds.slice(i, i + CHUNK)))
+        .orderBy(asc(projectStageTasks.created_at), asc(projectStageTasks.task_id))
+      tasks.push(...rows.map(rowToStageTask))
+    }
+    return tasks
+  }
+
   async markStageTaskRecorded(projectId: string, taskId: string, recordedAt: number) {
     await this.db
       .update(projectStageTasks)

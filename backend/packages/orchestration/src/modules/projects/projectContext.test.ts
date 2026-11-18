@@ -21,6 +21,8 @@ const research: Project = {
   createdAt: 1,
 }
 const notes: Project = { ...research, id: 'prj_notes', kind: 'notes', rootBlockId: 'blk_n' }
+const orphan: Project = { ...research, id: 'prj_orphan', rootBlockId: 'blk_o' }
+const staged: Project = { ...research, id: 'prj_staged', rootBlockId: 'blk_s' }
 
 const definition: ProjectDefinition = {
   kind: 'research',
@@ -56,10 +58,10 @@ function row(projectId: string, id: string, seq: number, body: unknown, stream =
     seq,
     intent: 'initial',
     schemaVersion: 1,
-    taskId: null,
-    taskType: projectId === research.id ? 'research' : 'notes',
-    definitionKey: projectId === research.id ? 'acme:vendor' : null,
-    definitionVersion: projectId === research.id ? 1 : null,
+    taskId: projectId === staged.id ? 'task_discover' : null,
+    taskType: projectId === notes.id ? 'notes' : 'research',
+    definitionKey: projectId === notes.id ? null : 'acme:vendor',
+    definitionVersion: projectId === notes.id ? null : 1,
     artifactRefs: [],
     createdAt: seq,
     body: { kind: 'inline', json },
@@ -88,7 +90,34 @@ const notesModule = {
   ],
 }
 
-function contributor() {
+const stagedDefinition: ProjectDefinition = {
+  ...definition,
+  key: 'acme:staged',
+  stages: [
+    {
+      id: 'discover',
+      title: 'Discover',
+      taskType: 'research',
+      after: [],
+      consumes: [],
+      produces: 'discover',
+      start: 'manual',
+      checkpoint: true,
+      repeatable: false,
+      config: definition.spec,
+    },
+  ],
+}
+
+const pin = (projectId: string, definitionKey: string) => ({
+  projectId,
+  definitionKey,
+  definitionVersion: 1,
+  definitionHash: 'h',
+  inputs: {},
+})
+
+function contributor(bodiesRead: string[] = []) {
   const modules = new ProjectKindModuleRegistry()
   modules.register(researchKindModule)
   modules.register(notesModule)
@@ -109,6 +138,8 @@ function contributor() {
         }),
       ],
     ],
+    [orphan.id, [row(orphan.id, 'pout_o1', 1, { summary: 'Orphaned.', findings: [] })]],
+    [staged.id, [row(staged.id, 'pout_s1', 1, { summary: 'Awaiting.', findings: [] }, 'discover')]],
     [
       notes.id,
       [
@@ -121,23 +152,51 @@ function contributor() {
   return projectContextContributor({
     records: {
       listPins: async () => [
-        {
-          projectId: research.id,
-          definitionKey: 'acme:vendor',
-          definitionVersion: 1,
-          definitionHash: 'h',
-          inputs: {},
-        },
+        pin(research.id, 'acme:vendor'),
+        pin(orphan.id, 'acme:gone'),
+        pin(staged.id, 'acme:staged'),
       ],
       projectsWithOutcomes: async (ids) => ids.filter((id) => stored.has(id)),
+      // The discover task finished and its checkpoint is still waiting for a human.
+      listStageTasksOfProjects: async (ids) =>
+        ids.includes(staged.id)
+          ? [
+              {
+                taskId: 'task_discover',
+                projectId: staged.id,
+                stageId: 'discover',
+                createdAt: 1,
+                basis: {},
+                recordedAt: 2,
+                clearedAt: null,
+                clearedBy: null,
+                acceptedOutcomeId: null,
+              },
+            ]
+          : [],
     },
-    outcomes: { listOfProjects: async () => stored },
+    outcomes: {
+      envelopesOfProjects: async (projects) =>
+        new Map(projects.map((p) => [p.id, (stored.get(p.id) ?? []).map((o) => o.row)])),
+      bodiesOfProjects: async (projects, rowsOf) =>
+        new Map(
+          projects.map((p) => {
+            const rows = rowsOf.get(p.id) ?? []
+            bodiesRead.push(...rows.map((r) => r.id))
+            return [p.id, rows.map((r) => stored.get(p.id)!.find((o) => o.row.id === r.id)!)]
+          }),
+        ),
+    },
     definitions: {
       get: async () => null,
       latest: async () => null,
       list: async (_account, kind) =>
         kind === 'research'
-          ? [{ definition, contentHash: 'h', origin: 'registered' as const }]
+          ? [definition, stagedDefinition].map((d) => ({
+              definition: d,
+              contentHash: 'h',
+              origin: 'registered' as const,
+            }))
           : [],
     },
     modules,
@@ -165,10 +224,29 @@ describe('projectContextContributor', () => {
     expect(rendered.revision).toEqual({ id: 'pout_n3', seq: 3 })
   })
 
-  it('counts a project with any outcome as having a result', async () => {
+  it('counts an unstaged project with any outcome as having a result', async () => {
     const empty = { ...notes, id: 'prj_empty' }
     expect(await contributor().withResult([research, notes, empty])).toEqual(
       new Set([research.id, notes.id]),
     )
+  })
+
+  it('counts no result for a staged project whose only outcome awaits its checkpoint', async () => {
+    const bodiesRead: string[] = []
+    const linked = contributor(bodiesRead)
+    expect(await linked.withResult([staged])).toEqual(new Set())
+    const rendered = (await linked.render([staged])).get(staged.id)!
+    expect(rendered.body).toContain('## Stage Discover\n\nNo accepted result yet.')
+    expect(rendered.revision).toBeNull()
+    expect(bodiesRead).toEqual([])
+  })
+
+  it('states a definition this deployment cannot resolve, reading no body', async () => {
+    const bodiesRead: string[] = []
+    const rendered = (await contributor(bodiesRead).render([orphan])).get(orphan.id)!
+    expect(rendered.body).toContain("pinned to definition 'acme:gone' version 1")
+    expect(rendered.coverage).toBe('definition unavailable')
+    expect(rendered.revision).toBeNull()
+    expect(bodiesRead).toEqual([])
   })
 })

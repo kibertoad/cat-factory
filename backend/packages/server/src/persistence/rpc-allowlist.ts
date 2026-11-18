@@ -352,6 +352,7 @@ export const REMOTE_PERSISTENCE_METHODS: PersistenceMethodTable = {
     listOutcomes: { scope: { kind: 'project', arg: 0 } },
     insertStageTask: { scope: { kind: 'projectField', arg: 0 } },
     listStageTasks: { scope: { kind: 'project', arg: 0 } },
+    listStageTasksOfProjects: { scope: { kind: 'projectList', arg: 0 } },
     markStageTaskRecorded: { scope: { kind: 'project', arg: 0 } },
     clearStageCheckpoint: { scope: { kind: 'project', arg: 0 } },
     deleteStageTasks: { scope: { kind: 'project', arg: 0 } },
