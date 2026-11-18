@@ -95,8 +95,9 @@ export interface ProjectRecordRepository {
   /** Note that the task recorded its outcome, freeing its stage. A repeated call changes nothing. */
   markStageTaskRecorded(projectId: string, taskId: string, recordedAt: number): Promise<void>
   /**
-   * Record how the task's result meets its stage's acceptance criteria. The first report stands:
-   * a replayed assessment answers false and changes nothing.
+   * Record how the task's result meets its stage's acceptance criteria. An `assessed` report
+   * stands: a later write answers false and changes nothing. One that assessed nothing (failed,
+   * unavailable) is replaced by the next.
    */
   setStageTaskAcceptance(
     projectId: string,

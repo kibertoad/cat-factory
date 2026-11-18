@@ -14,7 +14,8 @@ export const STAGE_ACCEPTANCE_SYSTEM_PROMPT =
   "You check a project stage's result against its acceptance criteria. For each criterion you " +
   'claim `met` or `unmet` and give a one or two sentence rationale. A claim of `met` must quote, ' +
   'word for word, the passages of the result that show it: copy them exactly, each at least a ' +
-  'full phrase, never paraphrased and never from anywhere but the result. The platform checks ' +
+  'full phrase, never paraphrased and never from anywhere but the result, at most 5 quotes per ' +
+  'criterion and each under 300 characters. The platform checks ' +
   'every quote against the result and treats a claim it cannot find as unverified, so when the ' +
   'result does not show a criterion, claim `unmet` rather than stretching a passage to fit. You ' +
   'judge only what the result states, not what the work probably did. Reply with ONLY a JSON ' +

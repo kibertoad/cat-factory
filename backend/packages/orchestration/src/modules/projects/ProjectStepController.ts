@@ -194,6 +194,8 @@ export class ProjectStepController {
           block.id,
           this.deps.clock.now(),
         )
+        // The report the interrupted completion never made, so the checkpoint shows one.
+        if (step.project) await this.assessAcceptance(task.project, step.project, block.id)
       }
       throw new ValidationError('This task already recorded its outcome on the project', {
         reason: 'project_task_already_recorded',
@@ -344,13 +346,6 @@ export class ProjectStepController {
     step.project = { ...state, outcomeId: id }
     if (state.stageId) {
       await this.deps.records.markStageTaskRecorded(state.projectId, taskId, this.deps.clock.now())
-      // The outcome is on record; a report that cannot be written is logged, never the run's end.
-      await runBestEffort(
-        this.log,
-        'projects.stages.assessAcceptance',
-        () => this.assessAcceptance(workspaceId, project, state, taskId),
-        { projectId: state.projectId, taskId },
-      )
       const stages = this.deps.stages
       if (stages) {
         // The outcome is on record whatever happens next: a later stage that fails to start
@@ -362,6 +357,7 @@ export class ProjectStepController {
           { projectId: state.projectId, taskId },
         )
       }
+      await this.assessAcceptance(project, state, taskId)
     }
     if (recorded.written) return { output: finished.output, outputIsRendered: true }
     // A replayed completion lost to the write that landed first: describe the outcome on record,
@@ -374,31 +370,54 @@ export class ProjectStepController {
     }
   }
 
-  /** Assess the result a staged task recorded against its stage's acceptance criteria, if any. */
+  /**
+   * Assess the result a staged task recorded against its stage's acceptance criteria, if any.
+   * Best-effort: the outcome is on record, so a report that cannot be made or written is logged and
+   * the stage shows it as pending, never the end of the run.
+   */
   private async assessAcceptance(
-    workspaceId: string,
     project: Project,
     state: ProjectStepState,
     taskId: string,
   ): Promise<void> {
-    const definition = await this.definitionOf(state)
-    const stage = definition?.stages.find((s) => s.id === state.stageId)
-    if (!definition || !stage?.acceptance) return
-    const [found, pin] = await Promise.all([
-      this.deps.blockRepository.findById(taskId),
-      this.deps.records.getPin(project.id),
-    ])
-    if (!found) return
+    await runBestEffort(
+      this.log,
+      'projects.stages.assessAcceptance',
+      async () => {
+        const definition = await this.definitionOf(state, project)
+        const stage = definition?.stages.find((s) => s.id === state.stageId)
+        if (!definition || !stage?.acceptance) return
+        const [found, pin] = await Promise.all([
+          this.deps.blockRepository.findById(taskId),
+          this.deps.records.getPin(project.id),
+        ])
+        if (!found) return
+        await this.assessFound(project, definition, stage, pin?.inputs ?? {}, found, state.seq)
+      },
+      { projectId: project.id, taskId },
+    )
+  }
+
+  private async assessFound(
+    project: Project,
+    definition: ProjectDefinition,
+    stage: ProjectStage,
+    inputs: Record<string, unknown>,
+    found: { workspaceId: string; block: Block },
+    seq: number,
+  ): Promise<void> {
+    const taskId = found.block.id
     await assessStageResult(
       { ...this.deps, ...(this.deps.acceptance ? { assessor: this.deps.acceptance } : {}) },
       {
-        workspaceId,
+        // The board that homes the task: its run's credentials are scoped there.
+        workspaceId: found.workspaceId,
         project,
         definition,
-        inputs: pin?.inputs ?? {},
+        inputs,
         stage,
         task: found.block,
-        outcome: { id: outcomeIdFor(taskId), seq: state.seq },
+        outcome: { id: outcomeIdFor(taskId), seq },
       },
     )
   }
@@ -486,9 +505,12 @@ export class ProjectStepController {
     }
   }
 
-  private async definitionOf(state: ProjectStepState): Promise<ProjectDefinition | undefined> {
+  private async definitionOf(
+    state: ProjectStepState,
+    known?: Project,
+  ): Promise<ProjectDefinition | undefined> {
     if (state.definitionKey === null || state.definitionVersion === null) return undefined
-    const project = await this.deps.projectRepository.get(state.projectId)
+    const project = known ?? (await this.deps.projectRepository.get(state.projectId))
     const resolved = await this.deps.definitions.get(
       project?.accountId ?? '',
       state.kind,

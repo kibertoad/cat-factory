@@ -47,7 +47,10 @@ export interface StageAcceptanceInput {
   outcome: { id: string; seq: number }
 }
 
-/** Assess and record the report, unless the task already has one (a replayed completion). */
+/**
+ * Assess and record the report, unless the task already has an `assessed` one (a replayed
+ * completion). A report that assessed nothing is tried again and replaced.
+ */
 export async function assessStageResult(
   deps: StageAcceptanceDeps,
   input: StageAcceptanceInput,
@@ -55,7 +58,7 @@ export async function assessStageResult(
   const criteria = input.stage.acceptance
   if (!criteria) return
   const records = await deps.records.listStageTasks(input.project.id)
-  if (records.find((r) => r.taskId === input.task.id)?.acceptance) return
+  if (records.find((r) => r.taskId === input.task.id)?.acceptance?.state === 'assessed') return
   const report = await reportFor(deps, input, records, criteria)
   await deps.records.setStageTaskAcceptance(input.project.id, input.task.id, report)
 }
@@ -90,14 +93,19 @@ async function reportFor(
   }
 }
 
-/** The stage's result up to and including the outcome, as its handler renders it for a reader. */
+/**
+ * This task's result as the handler of its task type renders it for a reader. Only the task's own
+ * outcomes, so a quote from an earlier run of the stage cannot verify this one.
+ */
 async function renderedResult(
   deps: StageAcceptanceDeps,
   input: StageAcceptanceInput,
   records: Awaited<ReturnType<StageAcceptanceDeps['records']['listStageTasks']>>,
 ): Promise<string> {
   const envelopes = await deps.records.listOutcomes(input.project.id)
-  const rows = stageResultRows(input.stage, records, envelopes, input.outcome)
+  const rows = stageResultRows(input.stage, records, envelopes, input.outcome).filter(
+    (row) => row.taskId === input.task.id,
+  )
   const outcomes = (await deps.outcomes.bodiesOf(input.project, rows)).flatMap(
     (stored) => tryDecodeOutcome(deps.modules, input.project.kind, stored) ?? [],
   )

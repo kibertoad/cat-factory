@@ -71,7 +71,7 @@ export function defineStageTaskPersistence(
     expect(await repos.records.listStageTasksOfProjects([])).toEqual([])
   })
 
-  it('keeps the first acceptance report of a task and reads it back', async () => {
+  it('keeps an assessed acceptance report, replaces one that assessed nothing', async () => {
     const repos = makeRepos()
     const projectId = unique('prj')
     const taskId = unique('task')
@@ -90,9 +90,12 @@ export function defineStageTaskPersistence(
           rationale: 'Named.',
           evidence: ['OAuth client credentials'],
           unfound: [],
+          dropped: 0,
         },
       ],
     }
+    const failed = { ...report, state: 'failed' as const, assessedAt: 3 }
+    expect(await repos.records.setStageTaskAcceptance(projectId, taskId, failed)).toBe(true)
     expect(await repos.records.setStageTaskAcceptance(projectId, taskId, report)).toBe(true)
     const later = { ...report, assessedAt: 9 }
     expect(await repos.records.setStageTaskAcceptance(projectId, taskId, later)).toBe(false)

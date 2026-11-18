@@ -1,7 +1,12 @@
 import * as v from 'valibot'
 import { taskTypeSchema } from './primitives.js'
 import { projectSlugSchema } from './project-slug.js'
-import { stageAcceptanceReportSchema, stageAcceptanceSchema } from './stage-acceptance.js'
+import {
+  type StageAcceptanceReport,
+  stageAcceptanceReportSchema,
+  stageAcceptanceSchema,
+  unassessedStageAcceptance,
+} from './stage-acceptance.js'
 
 export { projectSlugSchema }
 
@@ -298,11 +303,32 @@ export function deriveProjectStageStates(input: ProjectStageStateInput): Project
       activeTaskId: own.activeTaskId,
       latest: own.latest,
       accepted: own.accepted,
-      acceptance: own.latest
-        ? (input.stageTasks.find((t) => t.taskId === own.latest!.taskId)?.acceptance ?? null)
-        : null,
+      acceptance: acceptanceOf(stage, own.latest, input.stageTasks),
     }
   })
+}
+
+/**
+ * The report on a stage's newest result: null for a stage with no criteria or no result, and a
+ * `pending` one for a result nothing has assessed yet, so it never reads like a stage with none.
+ */
+function acceptanceOf(
+  stage: ProjectStage,
+  latest: { id: string; taskId: string } | null,
+  stageTasks: readonly ProjectStageTask[],
+): StageAcceptanceReport | null {
+  if (!stage.acceptance || !latest) return null
+  const report = stageTasks.find((t) => t.taskId === latest.taskId)?.acceptance
+  return (
+    report ??
+    unassessedStageAcceptance({
+      outcomeId: latest.id,
+      assessedAt: 0,
+      criteria: stage.acceptance,
+      state: 'pending',
+      note: 'The result has not been assessed yet.',
+    })
+  )
 }
 
 /** The stages whose accepted result a stage's task starts from: what it runs after and reads. */

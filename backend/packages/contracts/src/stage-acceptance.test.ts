@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { projectStageIssues, projectStageSchema } from './project-stages.js'
+import {
+  deriveProjectStageStates,
+  projectStageIssues,
+  projectStageSchema,
+} from './project-stages.js'
 import { computeStageAcceptance, unassessedStageAcceptance } from './stage-acceptance.js'
 import * as v from 'valibot'
 
@@ -62,6 +66,33 @@ describe('computeStageAcceptance', () => {
     expect(report.criteria[0]!.status).toBe('unverified')
   })
 
+  it('fails a reply that argues no criterion in the expected shape', () => {
+    for (const reply of [[], {}, { results: [] }, { criteria: [{ id: 'auth' }] }]) {
+      const report = computeStageAcceptance({
+        outcomeId: 'pout_1',
+        assessedAt: 5,
+        model: 'fake:model',
+        criteria,
+        result,
+        reply,
+      })
+      expect(report.state).toBe('failed')
+    }
+  })
+
+  it('does not verify a claim with quotes past the limit left unchecked', () => {
+    const quote = 'The API uses OAuth client credentials.'
+    const report = computeStageAcceptance({
+      outcomeId: 'pout_1',
+      assessedAt: 5,
+      model: 'fake:model',
+      criteria: [criteria[0]!],
+      result,
+      reply: { criteria: [{ id: 'auth', claim: 'met', evidence: Array(6).fill(quote) }] },
+    })
+    expect(report.criteria[0]).toMatchObject({ status: 'unverified', dropped: 1 })
+  })
+
   it('states an assessment that did not happen, every criterion unverified', () => {
     const report = unassessedStageAcceptance({
       outcomeId: 'pout_1',
@@ -91,5 +122,34 @@ describe('stage acceptance criteria', () => {
     ])
     expect(projectStageIssues([stage({ checkpoint: true })])).toEqual([])
     expect(() => stage({ acceptance: [criteria[0], criteria[0]] })).toThrow(/unique/)
+  })
+
+  it('reads a result nothing assessed yet as pending, never as a stage with no criteria', () => {
+    const stage = v.parse(projectStageSchema, {
+      id: 'discover',
+      title: 'Discover',
+      taskType: 'research',
+      produces: 'discovery',
+      checkpoint: true,
+      acceptance: [criteria[0]],
+    })
+    const record = {
+      taskId: 't1',
+      projectId: 'p1',
+      stageId: 'discover',
+      createdAt: 1,
+      recordedAt: 2,
+      clearedAt: null,
+      clearedBy: null,
+      acceptedOutcomeId: null,
+      basis: {},
+    }
+    const [state] = deriveProjectStageStates({
+      stages: [stage],
+      stageTasks: [record],
+      liveTaskIds: new Set(['t1']),
+      outcomes: [{ id: 'pout_t1', seq: 1, stream: 'discovery', taskId: 't1', intent: 'initial' }],
+    })
+    expect(state!.acceptance).toMatchObject({ state: 'pending', outcomeId: 'pout_t1' })
   })
 })

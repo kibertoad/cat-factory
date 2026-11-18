@@ -431,7 +431,8 @@ export class D1ProjectRecordRepository implements ProjectRecordRepository {
     const result = await this.deps.db
       .prepare(
         `UPDATE project_stage_tasks SET acceptance = ?
-         WHERE project_id = ? AND task_id = ? AND acceptance IS NULL`,
+         WHERE project_id = ? AND task_id = ?
+           AND (acceptance IS NULL OR json_extract(acceptance, '$.state') <> 'assessed')`,
       )
       .bind(JSON.stringify(report), projectId, taskId)
       .run()

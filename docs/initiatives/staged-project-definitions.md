@@ -143,7 +143,8 @@ bucket for every new repository method in the same PR.
       a passage the result does not hold, and `unmet` as claimed; a criterion the reply leaves
       out is `unverified`. The report rides the stage-task record and the stage's state, shown
       at the checkpoint; a person still decides. An unwired assessor or a failed assessment is
-      stated on the report, never read as a pass. The judges' own prompt fixes a score-shaped
+      stated on the report, never read as a pass, and is replaced by the next attempt; a result
+      with no report yet reads as `pending`. The judges' own prompt fixes a score-shaped
       reply over a clipped transcript, which cannot carry per-criterion claims, so the
       assessment shares their model resolution and credential scope but not their prompt. PR:
       [#2531](https://github.com/kibertoad/cat-factory/pull/2531)

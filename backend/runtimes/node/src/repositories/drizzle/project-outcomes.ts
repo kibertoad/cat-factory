@@ -350,7 +350,7 @@ export class DrizzleProjectRecordRepository implements ProjectRecordRepository {
         and(
           eq(projectStageTasks.project_id, projectId),
           eq(projectStageTasks.task_id, taskId),
-          isNull(projectStageTasks.acceptance),
+          sql`(${projectStageTasks.acceptance} IS NULL OR (${projectStageTasks.acceptance}::jsonb ->> 'state') <> 'assessed')`,
         ),
       )
       .returning({ taskId: projectStageTasks.task_id })
