@@ -9345,7 +9345,8 @@
         "latest": "Lo último",
         "outcomes": "Historial",
         "credentials": "Credenciales",
-        "storage": "Almacenamiento"
+        "storage": "Almacenamiento",
+        "stages": "Etapas"
       },
       "outcomes": {
         "empty": "Ninguna tarea ha registrado un resultado todavía",
@@ -9396,6 +9397,47 @@
       "fallback": {
         "empty": "Este proyecto aún no tiene ningún resultado",
         "stream": "Lo último en {stream}"
+      },
+      "stages": {
+        "status": {
+          "blocked": "Bloqueada",
+          "ready": "Lista",
+          "in-progress": "En curso",
+          "awaiting-checkpoint": "Esperando aceptación",
+          "done": "Hecha"
+        },
+        "stale": "Desactualizada",
+        "staleHint": "Una etapa en la que se basa esta tiene un resultado aceptado más reciente. Vuelve a ejecutarla para usarlo.",
+        "waitingOn": "Esperando a: {stages}",
+        "activeTask": "En curso: {task}",
+        "start": "Iniciar",
+        "accept": "Aceptar",
+        "startFailed": "No se pudo iniciar la etapa",
+        "acceptFailed": "No se pudo aceptar la etapa",
+        "acceptance": {
+          "state": {
+            "assessed": "Criterios de aceptación",
+            "unavailable": "Criterios de aceptación (sin evaluar: no hay ningún modelo configurado)",
+            "failed": "Criterios de aceptación (la evaluación falló)",
+            "pending": "Criterios de aceptación (aún sin evaluar)"
+          },
+          "criterion": {
+            "met": "Cumplido",
+            "unmet": "No cumplido",
+            "unverified": "Sin verificar"
+          },
+          "unfound": "{count} pasaje(s) citado(s) no están en el resultado"
+        },
+        "decisions": {
+          "loading": "Cargando las decisiones propuestas",
+          "loadFailed": "No se pudieron cargar las decisiones propuestas",
+          "choice": "O escribe tu propia elección",
+          "note": "Nota (opcional)",
+          "accept": "Decidir y aceptar",
+          "retry": "Reintentar",
+          "unanswered": "La propuesta omite pregunta(s) obligatoria(s): {questions}"
+        },
+        "revisionElsewhere": "El resultado de esta etapa se decide al aceptarlo, y esta vista no puede hacerlo para su tipo de tarea. Acéptalo a través de la API con su revisión."
       }
     }
   },

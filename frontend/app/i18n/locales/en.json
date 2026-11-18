@@ -9679,7 +9679,8 @@
         "latest": "Latest",
         "outcomes": "History",
         "credentials": "Credentials",
-        "storage": "Storage"
+        "storage": "Storage",
+        "stages": "Stages"
       },
       "outcomes": {
         "empty": "No task has recorded an outcome yet",
@@ -9730,6 +9731,47 @@
       "fallback": {
         "empty": "This project has no outcome yet",
         "stream": "Latest in {stream}"
+      },
+      "stages": {
+        "status": {
+          "blocked": "Blocked",
+          "ready": "Ready",
+          "in-progress": "In progress",
+          "awaiting-checkpoint": "Awaiting acceptance",
+          "done": "Done"
+        },
+        "stale": "Stale",
+        "staleHint": "A stage this one built on has a newer accepted result. Run it again to use it.",
+        "waitingOn": "Waiting on: {stages}",
+        "activeTask": "Working: {task}",
+        "start": "Start",
+        "accept": "Accept",
+        "startFailed": "Couldn't start the stage",
+        "acceptFailed": "Couldn't accept the stage",
+        "acceptance": {
+          "state": {
+            "assessed": "Acceptance criteria",
+            "unavailable": "Acceptance criteria (not assessed: no model is configured)",
+            "failed": "Acceptance criteria (the assessment failed)",
+            "pending": "Acceptance criteria (not assessed yet)"
+          },
+          "criterion": {
+            "met": "Met",
+            "unmet": "Not met",
+            "unverified": "Unverified"
+          },
+          "unfound": "{count} quoted passage(s) are not in the result"
+        },
+        "decisions": {
+          "loading": "Loading the proposed decisions",
+          "loadFailed": "Couldn't load the proposed decisions",
+          "choice": "Or type your own choice",
+          "note": "Note (optional)",
+          "accept": "Settle and accept",
+          "retry": "Try again",
+          "unanswered": "The proposal leaves out required question(s): {questions}"
+        },
+        "revisionElsewhere": "This stage's result is settled as it is accepted, which this view cannot do for its task type. Accept it through the API with its revision."
       }
     }
   },

@@ -9345,7 +9345,8 @@
         "latest": "Najnowsze",
         "outcomes": "Historia",
         "credentials": "Poświadczenia",
-        "storage": "Przechowywanie"
+        "storage": "Przechowywanie",
+        "stages": "Etapy"
       },
       "outcomes": {
         "empty": "Żadne zadanie nie zapisało jeszcze wyniku",
@@ -9396,6 +9397,47 @@
       "fallback": {
         "empty": "Ten projekt nie ma jeszcze żadnego wyniku",
         "stream": "Najnowsze w {stream}"
+      },
+      "stages": {
+        "status": {
+          "blocked": "Zablokowany",
+          "ready": "Gotowy",
+          "in-progress": "W toku",
+          "awaiting-checkpoint": "Czeka na akceptację",
+          "done": "Ukończony"
+        },
+        "stale": "Nieaktualny",
+        "staleHint": "Etap, na którym opiera się ten, ma nowszy zaakceptowany wynik. Uruchom ten etap ponownie, aby go użyć.",
+        "waitingOn": "Czeka na: {stages}",
+        "activeTask": "W pracy: {task}",
+        "start": "Uruchom",
+        "accept": "Zaakceptuj",
+        "startFailed": "Nie udało się uruchomić etapu",
+        "acceptFailed": "Nie udało się zaakceptować etapu",
+        "acceptance": {
+          "state": {
+            "assessed": "Kryteria akceptacji",
+            "unavailable": "Kryteria akceptacji (nieocenione: nie skonfigurowano modelu)",
+            "failed": "Kryteria akceptacji (ocena się nie powiodła)",
+            "pending": "Kryteria akceptacji (jeszcze nieocenione)"
+          },
+          "criterion": {
+            "met": "Spełnione",
+            "unmet": "Niespełnione",
+            "unverified": "Niepotwierdzone"
+          },
+          "unfound": "Cytowane fragmenty, których nie ma w wyniku: {count}"
+        },
+        "decisions": {
+          "loading": "Wczytywanie proponowanych decyzji",
+          "loadFailed": "Nie udało się wczytać proponowanych decyzji",
+          "choice": "Albo wpisz własny wybór",
+          "note": "Notatka (opcjonalnie)",
+          "accept": "Rozstrzygnij i zaakceptuj",
+          "retry": "Spróbuj ponownie",
+          "unanswered": "Propozycja pomija wymagane pytania: {questions}"
+        },
+        "revisionElsewhere": "Wynik tego etapu rozstrzyga się przy akceptacji, czego ten widok nie potrafi dla jego typu zadania. Zaakceptuj go przez API wraz z rozstrzygnięciem."
       }
     }
   },

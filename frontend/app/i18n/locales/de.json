@@ -9345,7 +9345,8 @@
         "latest": "Neueste",
         "outcomes": "Verlauf",
         "credentials": "Zugangsdaten",
-        "storage": "Speicherung"
+        "storage": "Speicherung",
+        "stages": "Phasen"
       },
       "outcomes": {
         "empty": "Noch keine Aufgabe hat ein Ergebnis erfasst",
@@ -9396,6 +9397,47 @@
       "fallback": {
         "empty": "Dieses Projekt hat noch kein Ergebnis",
         "stream": "Neuestes in {stream}"
+      },
+      "stages": {
+        "status": {
+          "blocked": "Blockiert",
+          "ready": "Bereit",
+          "in-progress": "In Arbeit",
+          "awaiting-checkpoint": "Wartet auf Annahme",
+          "done": "Erledigt"
+        },
+        "stale": "Veraltet",
+        "staleHint": "Eine Phase, auf der diese aufbaut, hat ein neueres angenommenes Ergebnis. Führe diese Phase erneut aus, um es zu nutzen.",
+        "waitingOn": "Wartet auf: {stages}",
+        "activeTask": "In Arbeit: {task}",
+        "start": "Starten",
+        "accept": "Annehmen",
+        "startFailed": "Die Phase konnte nicht gestartet werden",
+        "acceptFailed": "Die Phase konnte nicht angenommen werden",
+        "acceptance": {
+          "state": {
+            "assessed": "Abnahmekriterien",
+            "unavailable": "Abnahmekriterien (nicht bewertet: kein Modell konfiguriert)",
+            "failed": "Abnahmekriterien (die Bewertung ist fehlgeschlagen)",
+            "pending": "Abnahmekriterien (noch nicht bewertet)"
+          },
+          "criterion": {
+            "met": "Erfüllt",
+            "unmet": "Nicht erfüllt",
+            "unverified": "Nicht belegt"
+          },
+          "unfound": "{count} zitierte Stelle(n) stehen nicht im Ergebnis"
+        },
+        "decisions": {
+          "loading": "Die vorgeschlagenen Entscheidungen werden geladen",
+          "loadFailed": "Die vorgeschlagenen Entscheidungen konnten nicht geladen werden",
+          "choice": "Oder gib eine eigene Wahl ein",
+          "note": "Notiz (optional)",
+          "accept": "Festlegen und annehmen",
+          "retry": "Erneut versuchen",
+          "unanswered": "Der Vorschlag lässt erforderliche Frage(n) aus: {questions}"
+        },
+        "revisionElsewhere": "Das Ergebnis dieser Phase wird bei der Annahme festgelegt, was diese Ansicht für ihren Aufgabentyp nicht kann. Nimm es über die API mit seiner Festlegung an."
       }
     }
   },

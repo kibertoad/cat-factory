@@ -2,6 +2,8 @@ import {
   createProjectContract,
   getOutcomeStoragePolicyContract,
   getProjectBoardViewContract,
+  clearProjectStageCheckpointContract,
+  createProjectStageTaskContract,
   getProjectOutcomeContract,
   listPinnableProjectDefinitionsContract,
   listProjectCatalogContract,
@@ -75,6 +77,24 @@ export function projectsApi({ send, ws }: ApiContext) {
       send(getProjectOutcomeContract, {
         pathPrefix: ws(workspaceId),
         pathParams: { projectId, outcomeId },
+      }),
+
+    startProjectStage: (workspaceId: string, projectId: string, stageId: string) =>
+      send(createProjectStageTaskContract, {
+        pathPrefix: ws(workspaceId),
+        pathParams: { projectId, stageId },
+      }),
+
+    acceptProjectStage: (
+      workspaceId: string,
+      projectId: string,
+      stageId: string,
+      revision?: unknown,
+    ) =>
+      send(clearProjectStageCheckpointContract, {
+        pathPrefix: ws(workspaceId),
+        pathParams: { projectId, stageId },
+        body: revision === undefined ? {} : { revision },
       }),
 
     getOutcomeStoragePolicy: (workspaceId: string, projectId?: string) =>

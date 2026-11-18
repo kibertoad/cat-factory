@@ -9345,7 +9345,8 @@
         "latest": "En son",
         "outcomes": "Geçmiş",
         "credentials": "Kimlik bilgileri",
-        "storage": "Depolama"
+        "storage": "Depolama",
+        "stages": "Aşamalar"
       },
       "outcomes": {
         "empty": "Henüz hiçbir görev bir sonuç kaydetmedi",
@@ -9396,6 +9397,47 @@
       "fallback": {
         "empty": "Bu projenin henüz bir sonucu yok",
         "stream": "{stream} içinde en son"
+      },
+      "stages": {
+        "status": {
+          "blocked": "Engellendi",
+          "ready": "Hazır",
+          "in-progress": "Sürüyor",
+          "awaiting-checkpoint": "Kabul bekliyor",
+          "done": "Tamamlandı"
+        },
+        "stale": "Eski",
+        "staleHint": "Bu aşamanın dayandığı bir aşamanın daha yeni kabul edilmiş bir sonucu var. Kullanmak için bu aşamayı yeniden çalıştırın.",
+        "waitingOn": "Bekleniyor: {stages}",
+        "activeTask": "Üzerinde çalışılıyor: {task}",
+        "start": "Başlat",
+        "accept": "Kabul et",
+        "startFailed": "Aşama başlatılamadı",
+        "acceptFailed": "Aşama kabul edilemedi",
+        "acceptance": {
+          "state": {
+            "assessed": "Kabul ölçütleri",
+            "unavailable": "Kabul ölçütleri (değerlendirilmedi: yapılandırılmış model yok)",
+            "failed": "Kabul ölçütleri (değerlendirme başarısız oldu)",
+            "pending": "Kabul ölçütleri (henüz değerlendirilmedi)"
+          },
+          "criterion": {
+            "met": "Karşılandı",
+            "unmet": "Karşılanmadı",
+            "unverified": "Doğrulanmadı"
+          },
+          "unfound": "Alıntılanan {count} pasaj sonuçta yok"
+        },
+        "decisions": {
+          "loading": "Önerilen kararlar yükleniyor",
+          "loadFailed": "Önerilen kararlar yüklenemedi",
+          "choice": "Ya da kendi seçiminizi yazın",
+          "note": "Not (isteğe bağlı)",
+          "accept": "Karar ver ve kabul et",
+          "retry": "Yeniden dene",
+          "unanswered": "Öneri zorunlu soruları atlıyor: {questions}"
+        },
+        "revisionElsewhere": "Bu aşamanın sonucu kabul edilirken karara bağlanır; bu görünüm bunu görev türü için yapamaz. API üzerinden kararıyla birlikte kabul edin."
       }
     }
   },

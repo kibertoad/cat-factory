@@ -7,6 +7,7 @@ import TakeoverShell from '~/components/common/TakeoverShell.vue'
 import ProjectCredentialReadiness from '~/components/projects/view/ProjectCredentialReadiness.vue'
 import ProjectOutcomeFallback from '~/components/projects/view/ProjectOutcomeFallback.vue'
 import ProjectOutcomeHistory from '~/components/projects/view/ProjectOutcomeHistory.vue'
+import ProjectStageRail from '~/components/projects/view/ProjectStageRail.vue'
 import ProjectStoragePolicy from '~/components/projects/view/ProjectStoragePolicy.vue'
 import type { AppSlots, ProjectViewContribution } from '~/modular/slots'
 import { showOverrideField } from '~/utils/uiMode'
@@ -55,8 +56,12 @@ async function loadPolicy() {
 
 // The storage tiers are board configuration, read and set only by who may manage settings.
 onModalOpen(open, () => {
-  tab.value = 'view'
-  void load()
+  // A staged project opens on its stages, where the next thing to do is: decided from the cached
+  // view when there is one, and once the first read lands otherwise.
+  tab.value = view.value?.stages.length ? 'stages' : 'view'
+  void load().then(() => {
+    if (open.value && tab.value === 'view' && view.value?.stages.length) tab.value = 'stages'
+  })
   if (access.canManageSettings.value) void loadPolicy()
 })
 
@@ -83,7 +88,20 @@ const showStorage = computed(
     showOverrideField(uiMode.isAdvanced, policy.value?.workspace, policy.value?.project),
 )
 
+const awaiting = computed(
+  () => view.value?.stages.filter((s) => s.state.status === 'awaiting-checkpoint').length ?? 0,
+)
+
 const tabs = computed(() => [
+  ...(view.value?.stages.length
+    ? [
+        {
+          label: t('projects.view.tabs.stages'),
+          value: 'stages',
+          ...(awaiting.value ? { badge: awaiting.value } : {}),
+        },
+      ]
+    : []),
   {
     label: reader.value ? t(reader.value.labelKey) : t('projects.view.tabs.latest'),
     value: 'view',
@@ -187,7 +205,8 @@ const tabs = computed(() => [
           />
           <UTabs v-model="tab" :items="tabs" :content="false" class="mb-4" />
 
-          <template v-if="tab === 'view'">
+          <ProjectStageRail v-if="tab === 'stages'" :project="project" :board="view" />
+          <template v-else-if="tab === 'view'">
             <component :is="reader.component" v-if="reader" :project="project" :board="view" />
             <ProjectOutcomeFallback v-else :project="project" :board="view" />
           </template>

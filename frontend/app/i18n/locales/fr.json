@@ -9345,7 +9345,8 @@
         "latest": "Dernier",
         "outcomes": "Historique",
         "credentials": "Identifiants",
-        "storage": "Stockage"
+        "storage": "Stockage",
+        "stages": "Étapes"
       },
       "outcomes": {
         "empty": "Aucune tâche n'a encore enregistré de résultat",
@@ -9396,6 +9397,47 @@
       "fallback": {
         "empty": "Ce projet n'a encore aucun résultat",
         "stream": "Dernier dans {stream}"
+      },
+      "stages": {
+        "status": {
+          "blocked": "Bloquée",
+          "ready": "Prête",
+          "in-progress": "En cours",
+          "awaiting-checkpoint": "En attente d'acceptation",
+          "done": "Terminée"
+        },
+        "stale": "Obsolète",
+        "staleHint": "Une étape sur laquelle celle-ci s'appuie a un résultat accepté plus récent. Relancez-la pour l'utiliser.",
+        "waitingOn": "En attente de : {stages}",
+        "activeTask": "En cours : {task}",
+        "start": "Démarrer",
+        "accept": "Accepter",
+        "startFailed": "Impossible de démarrer l'étape",
+        "acceptFailed": "Impossible d'accepter l'étape",
+        "acceptance": {
+          "state": {
+            "assessed": "Critères d'acceptation",
+            "unavailable": "Critères d'acceptation (non évalués : aucun modèle n'est configuré)",
+            "failed": "Critères d'acceptation (l'évaluation a échoué)",
+            "pending": "Critères d'acceptation (pas encore évalués)"
+          },
+          "criterion": {
+            "met": "Rempli",
+            "unmet": "Non rempli",
+            "unverified": "Non vérifié"
+          },
+          "unfound": "{count} passage(s) cité(s) ne figurent pas dans le résultat"
+        },
+        "decisions": {
+          "loading": "Chargement des décisions proposées",
+          "loadFailed": "Impossible de charger les décisions proposées",
+          "choice": "Ou saisissez votre propre choix",
+          "note": "Note (facultative)",
+          "accept": "Trancher et accepter",
+          "retry": "Réessayer",
+          "unanswered": "La proposition omet des questions obligatoires : {questions}"
+        },
+        "revisionElsewhere": "Le résultat de cette étape se tranche au moment de l'accepter, ce que cette vue ne sait pas faire pour son type de tâche. Acceptez-le par l'API avec sa révision."
       }
     }
   },
