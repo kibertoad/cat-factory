@@ -653,3 +653,9 @@ Additive. A consumer built against 1.100.0 keeps parsing, and one that maps task
 The task-type vocabulary gains `spawn`: a project stage that creates a task in each service the project links, with the project linked to it as context, and starts each task's run, on the new `pl_spawn` pipeline. Its result records the tasks it created, and its checkpoint is accepted once every one of them is done. Like `research`, it belongs under a project and is refused under a service. The pipeline-purpose vocabulary gains `project-spawn`, and the conflict reasons gain `project_stage_work_unsettled`.
 
 Additive. A consumer built against 1.101.0 keeps parsing, and one that maps task types, purposes or reasons through an exhaustive table gains a member to name.
+
+## 1.103.0
+
+A project definition's stage may declare `acceptance`: up to 20 criteria, each an `id` slug and a `statement`, ids unique. A stage that declares them must declare a `checkpoint`. Each result the stage records is assessed against them, and the report is shown where the stage's state is read.
+
+Additive, and the field is optional with no default, so a definition that names none hashes as before.

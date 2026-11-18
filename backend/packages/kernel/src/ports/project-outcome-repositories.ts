@@ -5,6 +5,7 @@ import type {
   ProjectOutcomeMeta,
   ProjectPin,
   ProjectStageTask,
+  StageAcceptanceReport,
 } from '@cat-factory/contracts'
 
 // Persistence for what projects of any kind keep: the definitions an account publishes, the
@@ -93,6 +94,15 @@ export interface ProjectRecordRepository {
   listStageTasksOfProjects(projectIds: string[]): Promise<ProjectStageTask[]>
   /** Note that the task recorded its outcome, freeing its stage. A repeated call changes nothing. */
   markStageTaskRecorded(projectId: string, taskId: string, recordedAt: number): Promise<void>
+  /**
+   * Record how the task's result meets its stage's acceptance criteria. The first report stands:
+   * a replayed assessment answers false and changes nothing.
+   */
+  setStageTaskAcceptance(
+    projectId: string,
+    taskId: string,
+    report: StageAcceptanceReport,
+  ): Promise<boolean>
   /**
    * Accept the task's result at its stage's checkpoint, naming the outcome accepted (a settled
    * revision, or null for the result as recorded). The claim two concurrent acceptances race on:

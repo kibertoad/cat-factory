@@ -478,6 +478,10 @@ export {
 } from './agents/prompts/fork-decision.js'
 export { JUDGE_SYSTEM_PROMPT, renderJudgePrompt } from './agents/prompts/judge.js'
 export {
+  STAGE_ACCEPTANCE_SYSTEM_PROMPT,
+  renderStageAcceptancePrompt,
+} from './agents/prompts/stage-acceptance.js'
+export {
   ENVIRONMENT_INVESTIGATION_PROMPT,
   ENVIRONMENT_INVESTIGATION_SYSTEM_PROMPT,
   renderEnvironmentInvestigationPrompt,

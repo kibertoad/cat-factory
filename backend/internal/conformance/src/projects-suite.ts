@@ -4,6 +4,7 @@ import { defineCoreResearchRunsConformance } from './suites/core-research-runs.j
 import { defineCoreProjectStagesConformance } from './suites/core-project-stages.js'
 import { defineCoreProjectDecisionsConformance } from './suites/core-project-decisions.js'
 import { defineCoreProjectSpawnConformance } from './suites/core-project-spawn.js'
+import { defineCoreProjectAcceptanceConformance } from './suites/core-project-acceptance.js'
 import { defineCoreProjectViewsConformance } from './suites/core-project-views.js'
 import { defineCoreTaskProjectLinksConformance } from './suites/core-task-project-links.js'
 
@@ -20,6 +21,7 @@ export function defineProjectsSuite(harness: ConformanceHarness): void {
   defineCoreProjectStagesConformance(harness)
   defineCoreProjectDecisionsConformance(harness)
   defineCoreProjectSpawnConformance(harness)
+  defineCoreProjectAcceptanceConformance(harness)
   defineCoreProjectViewsConformance(harness)
   defineCoreTaskProjectLinksConformance(harness)
 }

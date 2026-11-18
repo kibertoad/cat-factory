@@ -1,0 +1,1 @@
+ALTER TABLE "project_stage_tasks" ADD COLUMN "acceptance" text;

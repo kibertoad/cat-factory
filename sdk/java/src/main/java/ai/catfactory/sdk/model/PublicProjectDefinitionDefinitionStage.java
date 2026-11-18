@@ -11,6 +11,7 @@ import org.jspecify.annotations.Nullable;
 
 /**
  * The {@code PublicProjectDefinitionDefinitionStage} wire model.
+ * @param acceptance May be absent entirely.
  * @param after the {@code after} field.
  * @param checkpoint the {@code checkpoint} field.
  * @param config May be absent entirely.
@@ -26,6 +27,9 @@ import org.jspecify.annotations.Nullable;
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record PublicProjectDefinitionDefinitionStage(
+    /** May be absent entirely. */
+    @JsonInclude(JsonInclude.Include.NON_NULL) @JsonProperty("acceptance") @Nullable List<PublicProjectDefinitionDefinitionStageAcceptance> acceptance,
+
     @JsonProperty("after") List<String> after,
 
     @JsonProperty("checkpoint") Boolean checkpoint,
@@ -67,6 +71,7 @@ public record PublicProjectDefinitionDefinitionStage(
      * shape that reads naturally from both languages.
      */
     public static final class Builder {
+        private @Nullable List<PublicProjectDefinitionDefinitionStageAcceptance> acceptance;
         private @Nullable List<String> after;
         private @Nullable Boolean checkpoint;
         private @Nullable Object config;
@@ -79,6 +84,12 @@ public record PublicProjectDefinitionDefinitionStage(
         private @Nullable String taskType;
         private @Nullable String title;
         private @Nullable Boolean writes;
+
+        /** Set {@code acceptance}. */
+        public Builder acceptance(@Nullable List<PublicProjectDefinitionDefinitionStageAcceptance> acceptance) {
+            this.acceptance = acceptance;
+            return this;
+        }
 
         /** Set {@code after}. */
         public Builder after(@Nullable List<String> after) {
@@ -154,7 +165,7 @@ public record PublicProjectDefinitionDefinitionStage(
 
         /** Build the {@link PublicProjectDefinitionDefinitionStage}. */
         public PublicProjectDefinitionDefinitionStage build() {
-            return new PublicProjectDefinitionDefinitionStage(after, checkpoint, config, consumes, description, id, produces, repeatable, start, taskType, title, writes);
+            return new PublicProjectDefinitionDefinitionStage(acceptance, after, checkpoint, config, consumes, description, id, produces, repeatable, start, taskType, title, writes);
         }
     }
 }

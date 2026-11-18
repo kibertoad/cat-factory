@@ -86,6 +86,7 @@ import type {
   DelegatedExecutorRegistry,
   EnvironmentInvestigator,
   JudgeAssessor,
+  StageAcceptanceAssessor,
   JudgeRegistry,
   KaizenGradingRepository,
   KaizenVerifiedComboRepository,
@@ -396,6 +397,13 @@ export interface CoreDependencies extends ContentLibraryDependencies {
    * deterministic verdict. Absent/disabled ⇒ every judge step is a pass-through.
    */
   judgeAssessor?: JudgeAssessor
+  /**
+   * Override for a project stage's exit-criteria assessment, the seam beside
+   * {@link CoreDependencies.judgeAssessor}: `createCore` builds `StageAcceptanceService` from the
+   * model-provider dependencies the facade already wires; a harness injects a deterministic
+   * reply through this instead. Absent and unbuildable: each report states it was not assessed.
+   */
+  stageAcceptanceAssessor?: StageAcceptanceAssessor
   /**
    * Override for the inline environment investigation, the seam beside
    * {@link CoreDependencies.judgeAssessor}: `createCore` builds

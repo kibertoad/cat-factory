@@ -7,6 +7,8 @@ import {
   type OutcomeStoragePolicy,
   type ProjectPin,
   type ProjectStageTask,
+  type StageAcceptanceReport,
+  parseStageAcceptanceReport,
 } from '@cat-factory/contracts'
 import type {
   OutcomeStoragePolicyRepository,
@@ -336,6 +338,25 @@ export class DrizzleProjectRecordRepository implements ProjectRecordRepository {
     return tasks
   }
 
+  async setStageTaskAcceptance(
+    projectId: string,
+    taskId: string,
+    report: StageAcceptanceReport,
+  ): Promise<boolean> {
+    const updated = await this.db
+      .update(projectStageTasks)
+      .set({ acceptance: JSON.stringify(report) })
+      .where(
+        and(
+          eq(projectStageTasks.project_id, projectId),
+          eq(projectStageTasks.task_id, taskId),
+          isNull(projectStageTasks.acceptance),
+        ),
+      )
+      .returning({ taskId: projectStageTasks.task_id })
+    return updated.length > 0
+  }
+
   async markStageTaskRecorded(projectId: string, taskId: string, recordedAt: number) {
     await this.db
       .update(projectStageTasks)
@@ -403,6 +424,7 @@ function rowToStageTask(row: typeof projectStageTasks.$inferSelect): ProjectStag
     clearedAt: row.cleared_at,
     clearedBy: row.cleared_by,
     acceptedOutcomeId: row.accepted_outcome_id,
+    acceptance: row.acceptance ? parseStageAcceptanceReport(row.acceptance) : null,
   }
 }
 

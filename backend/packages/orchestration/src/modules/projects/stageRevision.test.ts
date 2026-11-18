@@ -133,6 +133,7 @@ function harness(
     activeTaskId: null,
     latest: { id: proposal.id, seq: 1, taskId: 'task_1' },
     accepted: null,
+    acceptance: null,
   } satisfies ProjectStageState
   const settle = (revision: unknown) =>
     settleStageRevision(deps, {

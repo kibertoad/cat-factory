@@ -18,6 +18,7 @@ export function stageTaskRecord(projectId: string, taskId: string, stageId: stri
     clearedAt: null,
     clearedBy: null,
     acceptedOutcomeId: null,
+    acceptance: null,
   }
 }
 
@@ -68,6 +69,35 @@ export function defineStageTaskPersistence(
     const read = await repos.records.listStageTasksOfProjects([a, b])
     expect(read.map((t) => t.projectId).sort()).toEqual([a, b].sort())
     expect(await repos.records.listStageTasksOfProjects([])).toEqual([])
+  })
+
+  it('keeps the first acceptance report of a task and reads it back', async () => {
+    const repos = makeRepos()
+    const projectId = unique('prj')
+    const taskId = unique('task')
+    await repos.records.insertStageTask(stageTaskRecord(projectId, taskId, 'discover'))
+    const report = {
+      outcomeId: `pout_${taskId}`,
+      assessedAt: 7,
+      state: 'assessed' as const,
+      model: 'fake:model',
+      criteria: [
+        {
+          id: 'auth',
+          statement: 'The auth scheme is named.',
+          status: 'met' as const,
+          claim: 'met' as const,
+          rationale: 'Named.',
+          evidence: ['OAuth client credentials'],
+          unfound: [],
+        },
+      ],
+    }
+    expect(await repos.records.setStageTaskAcceptance(projectId, taskId, report)).toBe(true)
+    const later = { ...report, assessedAt: 9 }
+    expect(await repos.records.setStageTaskAcceptance(projectId, taskId, later)).toBe(false)
+    const [read] = await repos.records.listStageTasks(projectId)
+    expect(read?.acceptance).toEqual(report)
   })
 
   it('clears a checkpoint once, only on a recorded task, and frees a deleted task', async () => {

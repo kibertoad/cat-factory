@@ -21,12 +21,14 @@ import type {
   EnvironmentInvestigator,
   JudgeAssessor,
   MonorepoAdoptionAdvisor,
+  StageAcceptanceAssessor,
 } from '@cat-factory/kernel'
 import { BugHuntAssessorService } from '../modules/bugHunt/BugHuntAssessorService.js'
 import { MonorepoAdoptionAdvisorService } from '../modules/bootstrap/MonorepoAdoptionAdvisorService.js'
 import { EnvironmentInvestigationService } from '../modules/execution/EnvironmentInvestigationService.js'
 import { ForkChatService } from '../modules/execution/ForkChatService.js'
 import { JudgeService } from '../modules/execution/JudgeService.js'
+import { StageAcceptanceService } from '../modules/projects/StageAcceptanceService.js'
 import { TesterQualityReviewService } from '../modules/execution/TesterQualityReviewService.js'
 import { resolveBlockRunContext } from './blockRunContext.js'
 import { inlineModelResolutionDeps } from './inline-model-deps.js'
@@ -113,6 +115,23 @@ export function createJudgeAssessor(deps: CoreDependencies): JudgeAssessor | und
     modelProvider: deps.modelProvider,
     // The routing default, the block-model resolver, the local-mode inline predicate, and the
     // preset's per-kind default model + route order, wired as ONE slice (see the factory).
+    ...inlineModelResolutionDeps(deps),
+    resolveRunContext: resolveBlockRunContext(deps),
+  })
+}
+
+/**
+ * The default {@link StageAcceptanceAssessor}, built from the same model-provider dependencies as
+ * the judges' assessor. Undefined when no provider is wired; a harness may inject its own.
+ */
+export function createStageAcceptanceAssessor(
+  deps: CoreDependencies,
+): StageAcceptanceAssessor | undefined {
+  if (deps.stageAcceptanceAssessor) return deps.stageAcceptanceAssessor
+  if (!deps.modelProviderResolver && !deps.modelProvider) return undefined
+  return new StageAcceptanceService({
+    modelProviderResolver: deps.modelProviderResolver,
+    modelProvider: deps.modelProvider,
     ...inlineModelResolutionDeps(deps),
     resolveRunContext: resolveBlockRunContext(deps),
   })

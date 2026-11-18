@@ -135,8 +135,17 @@ bucket for every new repository method in the same PR.
       also makes its stage need a checkpoint. A handler may require its stage to run after
       another (`stageRequires.after`), as spawn does. The initiative loop and the spawner
       share `modules/spawn/spawnedTask.ts`. PR: [#2530](https://github.com/kibertoad/cat-factory/pull/2530)
-- [ ] **7. Exit criteria.** Stage `acceptance` criteria judged through `JudgeRegistry` against the
-      outcome and its evidence; each criterion reported met, unmet or unverified at the checkpoint.
+- [x] **7. Exit criteria.** A stage may declare `acceptance` criteria. Once its task records a
+      result, an inline assessor (the `StageAcceptanceAssessor` port, beside the judges'
+      `JudgeAssessor`) argues each criterion: met or unmet, with passages quoted from the stage's
+      rendered result as evidence. The platform computes the report: a criterion claimed met is
+      `met` only when every quoted passage is in the result, `unverified` when it quotes none or
+      a passage the result does not hold, and `unmet` as claimed; a criterion the reply leaves
+      out is `unverified`. The report rides the stage-task record and the stage's state, shown
+      at the checkpoint; a person still decides. An unwired assessor or a failed assessment is
+      stated on the report, never read as a pass. The judges' own prompt fixes a score-shaped
+      reply over a clipped transcript, which cannot carry per-criterion claims, so the
+      assessment shares their model resolution and credential scope but not their prompt. PR: _pending_
 - [ ] **8. Document stage.** A handler that composes upstream streams and their artifacts into one
       Markdown document with its referenced artifacts.
 - [ ] **9. Surfaces.** The stage rail in the project takeover (status, stale, waiting on whom), a

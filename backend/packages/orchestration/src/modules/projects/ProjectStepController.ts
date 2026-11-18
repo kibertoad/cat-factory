@@ -28,6 +28,7 @@ import {
   type ProjectUpstreamContext,
   type Logger,
   type ServiceRepository,
+  type StageAcceptanceAssessor,
   noopLogger,
   outcomesOf,
   runBestEffort,
@@ -36,6 +37,7 @@ import type { ProjectOutcomeStore } from './ProjectOutcomeStore.js'
 import type { ProjectStageService } from './ProjectStageService.js'
 import { decodeOutcome, outcomeTaskType } from './outcomeDecoding.js'
 import { resolvePinnedDefinition } from './pinnedDefinition.js'
+import { assessStageResult } from './stageAcceptance.js'
 import type { ProjectEngineTask } from './stageSpawner.js'
 import { renderStageUpstream } from './stageUpstream.js'
 
@@ -59,6 +61,8 @@ export interface ProjectStepControllerDeps {
   clock: Clock
   /** Starts the stages a recorded outcome made ready. Absent where projects are not wired. */
   stages?: Pick<ProjectStageService, 'advance'>
+  /** Argues a stage result's acceptance criteria. Absent: each report says nothing assessed it. */
+  acceptance?: StageAcceptanceAssessor
   /** The task types the engine performs itself rather than dispatching an agent, by task type. */
   engineTasks?: readonly ProjectEngineTask[]
   logger?: Logger
@@ -340,6 +344,13 @@ export class ProjectStepController {
     step.project = { ...state, outcomeId: id }
     if (state.stageId) {
       await this.deps.records.markStageTaskRecorded(state.projectId, taskId, this.deps.clock.now())
+      // The outcome is on record; a report that cannot be written is logged, never the run's end.
+      await runBestEffort(
+        this.log,
+        'projects.stages.assessAcceptance',
+        () => this.assessAcceptance(workspaceId, project, state, taskId),
+        { projectId: state.projectId, taskId },
+      )
       const stages = this.deps.stages
       if (stages) {
         // The outcome is on record whatever happens next: a later stage that fails to start
@@ -361,6 +372,35 @@ export class ProjectStepController {
       output: handler.describe({ plan: state.plan, seq: state.seq, body }),
       outputIsRendered: true,
     }
+  }
+
+  /** Assess the result a staged task recorded against its stage's acceptance criteria, if any. */
+  private async assessAcceptance(
+    workspaceId: string,
+    project: Project,
+    state: ProjectStepState,
+    taskId: string,
+  ): Promise<void> {
+    const definition = await this.definitionOf(state)
+    const stage = definition?.stages.find((s) => s.id === state.stageId)
+    if (!definition || !stage?.acceptance) return
+    const [found, pin] = await Promise.all([
+      this.deps.blockRepository.findById(taskId),
+      this.deps.records.getPin(project.id),
+    ])
+    if (!found) return
+    await assessStageResult(
+      { ...this.deps, ...(this.deps.acceptance ? { assessor: this.deps.acceptance } : {}) },
+      {
+        workspaceId,
+        project,
+        definition,
+        inputs: pin?.inputs ?? {},
+        stage,
+        task: found.block,
+        outcome: { id: outcomeIdFor(taskId), seq: state.seq },
+      },
+    )
   }
 
   private taskInput(task: ResolvedTask, block: Block): ProjectTaskInput<unknown> {
