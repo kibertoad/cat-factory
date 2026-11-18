@@ -93,6 +93,7 @@ function harness(opts: { stages: ProjectStage[]; vendor?: string; startFails?: b
       write: async () => ({ written: true, json: '{}' }),
     },
     blocks: { getMany: async () => [] },
+    workspaces: { listByAccount: async () => [] },
     modules: new ProjectKindModuleRegistry(),
     definitions: {
       get: async () => ({ definition, contentHash: 'h1', origin: 'registered' as const }),

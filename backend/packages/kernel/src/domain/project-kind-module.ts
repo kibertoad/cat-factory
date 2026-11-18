@@ -68,6 +68,12 @@ export interface ProjectTaskHandler<Body = unknown> {
   taskType: TaskType
   /** The agent kind a task of this type dispatches: the step the engine plans and records. */
   agentKind: string
+  /**
+   * Who performs a task of this type: an agent the step dispatches (the default), or the engine
+   * itself, through the engine task a process wires for the type. A step whose engine task is not
+   * wired refuses rather than dispatching an agent that does not exist.
+   */
+  performedBy?: 'agent' | 'engine'
   /** The body schema version this build writes outcomes in. */
   outcomeSchemaVersion: number
   /** Decode a stored or replied body, or undefined when it does not parse. */
@@ -118,11 +124,10 @@ export interface ProjectTaskHandler<Body = unknown> {
    */
   checkpointAwaits?(body: Body): readonly { workspaceId: string; taskId: string }[]
   /**
-   * What a stage running this task type must declare: a `checkpoint`, or at least one stage it
-   * runs `after`. A handler with a required revision or with {@link checkpointAwaits} needs a
-   * checkpoint whether or not it says so here.
+   * Whether a stage running this task type must run `after` at least one other stage. A checkpoint
+   * is implied by a required revision or by {@link checkpointAwaits}, and needs no flag here.
    */
-  stageRequires?: { checkpoint?: boolean; after?: boolean }
+  stageRequires?: { after?: boolean }
   /**
    * Validate and normalize the `config` a definition's stage gives this task type. Absent: the
    * task type takes no config, and a stage that gives one is refused.

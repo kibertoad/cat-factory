@@ -49,14 +49,14 @@ export function projectStepHandler(d: ProjectRegistrationDeps): StepHandler {
     order: 179,
     canHandle: ({ step }) => !!d.projectStep?.handles(step.agentKind),
     handle: async (ctx) => {
-      const project = await d.projectStep!.prepare(ctx.step, ctx.block, {
-        reattach: liveJobId(ctx.step) !== undefined,
-      })
       // A task type the engine performs (a spawn stage) completes here, with no agent to dispatch.
       if (d.projectStep!.runsInEngine(ctx.step.agentKind)) {
         const result = await d.projectStep!.runInEngine(ctx.workspaceId, ctx.step, ctx.block)
         return d.recordStepResult(ctx.workspaceId, ctx.instance, ctx.step, ctx.isFinalStep, result)
       }
+      const project = await d.projectStep!.prepare(ctx.step, ctx.block, {
+        reattach: liveJobId(ctx.step) !== undefined,
+      })
       return d.handleAgentStep(ctx, undefined, (context) => {
         context.project = project
         // An upstream stage's result reaches the agent the way a linked project's does: a

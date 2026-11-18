@@ -88,9 +88,7 @@ function parseStageConfig(
     }
   }
   const needsCheckpoint =
-    handler.checkpointRevision?.required ||
-    handler.checkpointAwaits !== undefined ||
-    handler.stageRequires?.checkpoint
+    handler.checkpointRevision?.required || handler.checkpointAwaits !== undefined
   if (needsCheckpoint && !stage.checkpoint) {
     return {
       ok: false,

@@ -4,7 +4,7 @@ import type { TaskProjectLinkService } from '../projects/TaskProjectLinkService.
 // What every path that creates a task on the board's behalf and starts it does to the projects
 // the task reads, shared by an initiative's spawned items and a project's spawn stage.
 
-export type SpawnedTaskLinks = Pick<TaskProjectLinkService, 'link' | 'unlinkAll'>
+export type SpawnedTaskLinks = Pick<TaskProjectLinkService, 'link' | 'linkMany' | 'unlinkAll'>
 
 /**
  * Link the projects a spawned task reads, under the rules a link made on the board meets.
@@ -12,7 +12,7 @@ export type SpawnedTaskLinks = Pick<TaskProjectLinkService, 'link' | 'unlinkAll'
  * the context it was created to read.
  */
 export async function linkSpawnedTask(
-  links: SpawnedTaskLinks | undefined,
+  links: Pick<SpawnedTaskLinks, 'link'> | undefined,
   workspaceId: string,
   blockId: string,
   projectIds: readonly string[] | undefined,
@@ -31,7 +31,7 @@ export async function linkSpawnedTask(
  */
 export async function rollbackSpawnedTask(
   deps: {
-    links?: SpawnedTaskLinks
+    links?: Pick<SpawnedTaskLinks, 'unlinkAll'>
     removeTask: (workspaceId: string, blockId: string) => Promise<void>
     log: Logger
   },

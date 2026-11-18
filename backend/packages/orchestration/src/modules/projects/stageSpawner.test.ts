@@ -18,7 +18,7 @@ const project: Project = {
 const stageTask = { id: 'task_stage' } as Block
 const frame = { id: 'frame_api', title: 'Api' } as Block
 
-function harness() {
+function harness(opts: { frame?: Block } = {}) {
   const created = new Map<string, Block>()
   const addTask = vi.fn(async (_ws: string, _frame: string, input: { title: string }, ..._rest) => {
     const id = (_rest[2] as { id: string }).id
@@ -30,6 +30,8 @@ function harness() {
     created.set(blockId, { ...created.get(blockId)!, executionId: 'exec_1' })
   })
   const link = vi.fn(async () => [])
+  const linkMany = vi.fn(async () => {})
+  const removeTask = vi.fn(async () => {})
   const spawner = stageSpawner({
     serviceRepository: {
       listByIds: async () => [
@@ -44,12 +46,14 @@ function harness() {
       ],
     },
     blockRepository: {
-      findByIds: async () => [{ workspaceId: 'ws_home', ownerId: 'svc_api', block: frame }],
+      findByIds: async () => [
+        { workspaceId: 'ws_home', ownerId: 'svc_api', block: opts.frame ?? frame },
+      ],
       getMany: async (_ws, ids) => ids.flatMap((id) => created.get(id) ?? []),
     },
-    board: () => ({ addTask, removeTask: async () => {} }),
+    board: () => ({ addTask, removeTask }),
     runStarter: () => ({ individualVendorsForBlock: async () => [], start }),
-    links: { link, unlinkAll: async () => {} },
+    links: { link, linkMany, unlinkAll: async () => {} },
     logger: createRecordingLogger(),
   })
   const run = () =>
@@ -59,7 +63,7 @@ function harness() {
       task: stageTask,
       plan: { title: 'Integrate {service}', description: '', taskType: 'feature' },
     }) as Promise<SpawnRecord>
-  return { run, addTask, start, link }
+  return { run, addTask, start, linkMany, removeTask }
 }
 
 describe('stageSpawner', () => {
@@ -86,5 +90,43 @@ describe('stageSpawner', () => {
     expect(addTask).toHaveBeenCalledTimes(1)
     // The task's run had started, so the replay starts nothing either.
     expect(start).toHaveBeenCalledTimes(1)
+  })
+
+  it('removes nothing when the board refuses to create the task', async () => {
+    const { run, addTask, removeTask } = harness()
+    addTask.mockRejectedValueOnce(new Error('Task type suppressed here'))
+    const record = await run()
+    expect(record.tasks).toEqual([])
+    expect(record.skipped).toContainEqual(
+      expect.objectContaining({ serviceId: 'svc_api', reason: 'Task type suppressed here' }),
+    )
+    expect(removeTask).not.toHaveBeenCalled()
+  })
+
+  it('keeps a task an earlier attempt made when linking now fails, so the checkpoint waits on it', async () => {
+    const { run, linkMany, start } = harness()
+    await run()
+    start.mockClear()
+    linkMany.mockRejectedValueOnce(new Error('The project cannot be read just now'))
+    const replay = await run()
+    expect(replay.tasks).toEqual([
+      expect.objectContaining({
+        taskId: spawnedTaskId(stageTask.id, 'svc_api'),
+        started: true,
+        note: 'The project cannot be read just now',
+      }),
+    ])
+    expect(start).not.toHaveBeenCalled()
+  })
+
+  it('skips an archived service rather than putting work into a subtree no board shows', async () => {
+    const { run, addTask } = harness({ frame: { ...frame, archived: true } as Block })
+    const record = await run()
+    expect(record.skipped[0]).toEqual({
+      serviceId: 'svc_api',
+      serviceName: 'Api',
+      reason: 'The service is archived.',
+    })
+    expect(addTask).not.toHaveBeenCalled()
   })
 })

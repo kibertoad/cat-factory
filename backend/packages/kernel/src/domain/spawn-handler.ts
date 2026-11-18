@@ -50,6 +50,7 @@ function describe(record: SpawnRecord): string {
 export const spawnTaskHandler: ProjectTaskHandler<SpawnRecord> = {
   taskType: SPAWN_TASK_TYPE,
   agentKind: PROJECT_SPAWNER_AGENT_KIND,
+  performedBy: 'engine',
   outcomeSchemaVersion: SPAWN_RECORD_SCHEMA_VERSION,
 
   parseOutcome: (schemaVersion, value) => {
@@ -90,7 +91,7 @@ export const spawnTaskHandler: ProjectTaskHandler<SpawnRecord> = {
     record.tasks.map((t) => ({ workspaceId: t.workspaceId, taskId: t.taskId })),
 
   // Each created task links the project, and a link reads the stages a person already accepted.
-  stageRequires: { checkpoint: true, after: true },
+  stageRequires: { after: true },
 
   schemas: { outcome: spawnRecordSchema },
 }

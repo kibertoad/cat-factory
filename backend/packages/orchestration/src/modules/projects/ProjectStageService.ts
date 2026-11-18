@@ -77,8 +77,9 @@ export interface ProjectStageServiceDeps {
   >
   /** Where a revised result is written, and the handlers that apply a revision. */
   outcomes: StageRevisionDeps['outcomes'] & StageAwaitsDeps['outcomes']
-  /** Reads the tasks a result awaits before it may be accepted. */
+  /** Reads the tasks a result awaits before it may be accepted, on whichever board holds them. */
   blocks: StageAwaitsDeps['blocks']
+  workspaces: StageAwaitsDeps['workspaces']
   modules: StageRevisionDeps['modules']
   definitions: ProjectDefinitionSource
   /** Late-bound: the board is built after the projects module. */

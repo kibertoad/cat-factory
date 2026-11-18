@@ -87,6 +87,7 @@ export function createProjectsModule(
     records: projectRecordRepository,
     outcomes,
     blocks: deps.blockRepository,
+    workspaces: deps.workspaceRepository,
     modules: sources.projectKindModules,
     definitions: sources.projectDefinitions,
     board: late.board,

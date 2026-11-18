@@ -124,14 +124,16 @@ bucket for every new repository method in the same PR.
       revision. The kind's own project-level rendering stays for an unstaged project. PR:
       [#2529](https://github.com/kibertoad/cat-factory/pull/2529)
 - [x] **6b. Spawn stage.** The built-in `spawn` task type on `pl_spawn`, whose one
-      `project-spawner` step the engine performs itself (a handler's task type listed among the
-      engine tasks completes without an agent). Its run creates a task in each linked service
+      `project-spawner` step the engine performs itself: its handler declares
+      `performedBy: 'engine'`, and the project step runs the engine task wired for the type, or
+      refuses when none is. Its run creates a task in each linked service
       (title and description templated with `{service}`, task type, optional pipeline), links the
       project so each task reads the accepted stages, starts each run, and records what it
       created and every service it skipped. A handler may name the tasks its result awaits
       (`checkpointAwaits`): the checkpoint refuses with `project_stage_work_unsettled` until each
-      is done or removed. A handler may also require its stage to declare a checkpoint or to run
-      after another (`stageRequires`); spawn requires both. The initiative loop and the spawner
+      is done or removed (a task moved to another board of the account is still awaited), which
+      also makes its stage need a checkpoint. A handler may require its stage to run after
+      another (`stageRequires.after`), as spawn does. The initiative loop and the spawner
       share `modules/spawn/spawnedTask.ts`. PR: [#2530](https://github.com/kibertoad/cat-factory/pull/2530)
 - [ ] **7. Exit criteria.** Stage `acceptance` criteria judged through `JudgeRegistry` against the
       outcome and its evidence; each criterion reported met, unmet or unverified at the checkpoint.
