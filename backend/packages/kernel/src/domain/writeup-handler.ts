@@ -19,7 +19,7 @@ import type { ProjectTaskHandler, ProjectTaskInput } from './project-kind-module
 // results of the stages it reads into one Markdown document referencing their artifacts; the
 // platform drops an artifact no result it read holds and names the outline sections the document
 // lacks. Any project kind may offer it beside its own handlers. Design:
-// `docs/initiatives/staged-project-definitions.md`.
+// `backend/docs/adr/0070-staged-project-definitions.md`.
 // ---------------------------------------------------------------------------
 
 /** What a planned writeup carries: its config, and the artifacts it may reference. */

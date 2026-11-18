@@ -6,7 +6,7 @@ import { type DefinitionParseResult, describeValibotIssues } from './project-def
 // needs (each a question with options, a recommended default, the trade-off and the evidence) from
 // what earlier stages found; a person settles every item at the stage's checkpoint, and the settled
 // register is what later stages read. The model argues, the person decides. Design:
-// `docs/initiatives/staged-project-definitions.md`.
+// `backend/docs/adr/0070-staged-project-definitions.md`.
 // ---------------------------------------------------------------------------
 
 /** The built-in task type a decision register runs as. */

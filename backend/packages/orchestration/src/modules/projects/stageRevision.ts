@@ -21,7 +21,7 @@ import { tryDecodeOutcome } from './outcomeDecoding.js'
 // NEW outcome on the stage's stream, so the model's proposal stays on record. A revision counts
 // only once the checkpoint's acceptance NAMES it (`acceptedOutcomeId`), so a revision written by
 // an acceptance that then loses the claim changes nothing. Design:
-// `docs/initiatives/staged-project-definitions.md`.
+// `backend/docs/adr/0070-staged-project-definitions.md`.
 
 export interface StageRevisionDeps {
   records: Pick<ProjectRecordRepository, 'getPin' | 'reserveSeq'>

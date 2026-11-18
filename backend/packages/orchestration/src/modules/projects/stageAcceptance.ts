@@ -23,7 +23,7 @@ import { stageResultRows } from './stageUpstream.js'
 // it. The assessor argues each criterion and the report computes its status from the passages it
 // quotes; the report rides the stage-task record and is shown at the checkpoint, where a person
 // decides. One that could not be made says why, so it never reads as a pass. Design:
-// `docs/initiatives/staged-project-definitions.md`.
+// `backend/docs/adr/0070-staged-project-definitions.md`.
 
 export interface StageAcceptanceDeps {
   records: Pick<

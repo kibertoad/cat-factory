@@ -20,7 +20,7 @@ import type { ProjectTaskHandler, ProjectTaskInput } from './project-kind-module
 // decisions a body of work needs from the stages it reads; a person settles every item at the
 // stage's checkpoint (the revision is REQUIRED), and the settled register is what later stages
 // read. Any project kind may offer it: the platform ships the mechanism, a deployment's kind lists
-// it beside its other handlers. Design: `docs/initiatives/staged-project-definitions.md`.
+// it beside its other handlers. Design: `backend/docs/adr/0070-staged-project-definitions.md`.
 // ---------------------------------------------------------------------------
 
 function configOf(input: ProjectTaskInput<DecisionRegister>): DecisionStageConfig {

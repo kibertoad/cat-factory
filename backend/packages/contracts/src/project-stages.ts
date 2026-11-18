@@ -16,7 +16,7 @@ export { projectSlugSchema }
 // stages runs its tasks in any order. A stage's state is DERIVED from the project's
 // outcomes and the stage-task records (which task belongs to which stage, and when a person
 // cleared its checkpoint); nothing else about a stage is stored. Design:
-// `docs/initiatives/staged-project-definitions.md`.
+// `backend/docs/adr/0070-staged-project-definitions.md`.
 // ---------------------------------------------------------------------------
 
 export const PROJECT_STAGES_MAX = 30

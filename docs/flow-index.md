@@ -26,8 +26,8 @@ the kind's rendering of it at every dispatch. Traps: the claim is per task, so a
 read it back rather than take another; and a linked project that cannot be read must break the run,
 never reach the agent as nothing. A task of a STAGED project runs the stage that started it and
 writes that stage's stream; stage state is derived, never stored, so a status written anywhere is a
-bug. [ADR 0069](../backend/docs/adr/0069-projects-and-research-projects.md), [staged
-definitions](./initiatives/staged-project-definitions.md).
+bug. [ADR 0069](../backend/docs/adr/0069-projects-and-research-projects.md), [ADR
+0070](../backend/docs/adr/0070-staged-project-definitions.md).
 
 **Repo bootstrap** mirrors the execution pattern: `BootstrapService` → `bootstrap_jobs` →
 `BootstrapWorkflow` polling the idempotent `pollBootstrapJob()`, then links the repo and flips the frame

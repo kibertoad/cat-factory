@@ -65,7 +65,6 @@ a tracker document](../../AGENTS.md).
 - [Service acceptance criteria](./service-acceptance-criteria.md)
 - [Shared clarification-item abstraction](./clarification-items.md)
 - [Spike task support (research, no code)](./spike-task-support.md)
-- [Staged project definitions](./staged-project-definitions.md)
 
 ### Runtime, infrastructure and environments
 

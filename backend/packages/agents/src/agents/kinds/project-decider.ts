@@ -8,7 +8,7 @@ import type { AgentKindDefinition, AgentKindRegistry } from './registry.js'
 // proposes the decisions its stage asks for, from what the stages it reads found (materialised as
 // `.cat-context/` files, which the project job's prompt indexes), each with options, a recommended
 // default, the trade-off and the evidence. A person settles every item at the stage's checkpoint;
-// the agent decides nothing itself. Design: `docs/initiatives/staged-project-definitions.md`.
+// the agent decides nothing itself. Design: `backend/docs/adr/0070-staged-project-definitions.md`.
 // ---------------------------------------------------------------------------
 
 export const PROJECT_DECIDER_KIND = PROJECT_DECIDER_AGENT_KIND
