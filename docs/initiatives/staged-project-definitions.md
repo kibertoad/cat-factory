@@ -145,7 +145,7 @@ bucket for every new repository method in the same PR.
       at the checkpoint; a person still decides. An unwired assessor or a failed assessment is
       stated on the report, never read as a pass. The judges' own prompt fixes a score-shaped
       reply over a clipped transcript, which cannot carry per-criterion claims, so the
-      assessment shares their model resolution and credential scope but not their prompt. PR: _pending_
+      assessment shares their model resolution and credential scope but not their prompt. PR: [#  - Event subscriptions are in preview and may not be enabled for your account.](  - Event subscriptions are in preview and may not be enabled for your account.)
 - [ ] **8. Document stage.** A handler that composes upstream streams and their artifacts into one
       Markdown document with its referenced artifacts.
 - [ ] **9. Surfaces.** The stage rail in the project takeover (status, stale, waiting on whom), a
