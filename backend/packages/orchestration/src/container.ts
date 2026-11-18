@@ -1,3 +1,4 @@
+import type { ProjectEngineTask } from './modules/projects/stageSpawner.js'
 import type {} from '@cat-factory/kernel'
 import type {
   AppCaches,
@@ -777,6 +778,8 @@ export interface ProjectsModule {
   publisher?: ProjectDefinitionPublisher
   /** Projects linked to tasks as context. Absent when the facade wires no link store. */
   taskLinks?: TaskProjectLinkService
+  /** The project task types the engine performs itself (a spawn stage's run). */
+  engineTasks: ProjectEngineTask[]
 }
 
 /** Assemble the in-org service-sharing module when its repositories are wired. */

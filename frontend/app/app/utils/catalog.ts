@@ -753,6 +753,18 @@ export const SYSTEM_AGENT_META: Record<string, AgentArchetype> = {
     description:
       'Pulls one matching open issue from the configured tracker board, marks it in-progress, and seeds the run from it.',
   },
+  // A spawn stage's one step: the engine creates a task in each service the project links and
+  // starts its run. Runs no model; seeded only into `pl_spawn`, so it is a display-metadata
+  // system kind (like `tracker`), not a palette archetype.
+  'project-spawner': {
+    kind: 'project-spawner',
+    tier: 'advanced',
+    label: 'Project Spawner',
+    icon: 'i-lucide-git-fork',
+    color: 'var(--app-hue-teal)',
+    description:
+      "Creates a task in each service the project links, with the project linked, and starts each task's run.",
+  },
   conflicts: {
     kind: 'conflicts',
     tier: 'intermediate',
@@ -1080,6 +1092,12 @@ export const TASK_TYPE_META: Record<string, TaskTypeMeta> = {
     icon: 'i-lucide-list-checks',
     color: 'var(--app-hue-cyan)',
     labelKey: 'board.addTask.types.decisions',
+  },
+  spawn: {
+    taskType: 'spawn',
+    icon: 'i-lucide-git-fork',
+    color: 'var(--app-hue-teal)',
+    labelKey: 'board.addTask.types.spawn',
   },
   recurring: {
     taskType: 'recurring',

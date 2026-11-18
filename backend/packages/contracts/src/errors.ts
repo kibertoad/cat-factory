@@ -269,6 +269,8 @@ export const CONFLICT_REASONS = [
   'project_stage_not_repeatable',
   // A person accepted a stage's result that is not waiting at its checkpoint.
   'project_stage_checkpoint_not_pending',
+  // A person accepted a stage's result while tasks it created have not finished.
+  'project_stage_work_unsettled',
   // A key resumed a wait on a lapsed PERSONAL credential, which only the run's initiator renews,
   // with their password, in the app.
   'credential_wait_personal_in_app',

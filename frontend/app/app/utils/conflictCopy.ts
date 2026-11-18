@@ -132,6 +132,10 @@ export const CONFLICT_INFO: Record<Exclude<ConflictReason, BespokeConflictReason
     titleKey: 'errors.conflict.title.project_stage_checkpoint_not_pending',
     descriptionKey: 'errors.conflict.description.project_stage_checkpoint_not_pending',
   },
+  project_stage_work_unsettled: {
+    titleKey: 'errors.conflict.title.project_stage_work_unsettled',
+    descriptionKey: 'errors.conflict.description.project_stage_work_unsettled',
+  },
   input_gate_parked: {
     titleKey: 'errors.conflict.title.input_gate_parked',
     descriptionKey: 'errors.conflict.description.input_gate_parked',

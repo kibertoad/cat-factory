@@ -142,6 +142,13 @@ export interface BlockRepository {
   listByOwners(ownerIds: string[]): Promise<Block[]>
   get(workspaceId: string, id: string): Promise<Block | null>
   /**
+   * The blocks among `ids` that live in the workspace, in one (chunked) read; an id with no block
+   * there is absent. The workspace-scoped batch of {@link get}, for a caller asking which of the
+   * ids it derived exist yet, which `findByIds` cannot answer on a mothership node: its scope
+   * refuses an id that resolves to no block.
+   */
+  getMany(workspaceId: string, ids: string[]): Promise<Block[]>
+  /**
    * The block currently running `executionId`, read off the `execution_id` REVERSE LINK a run
    * start/retry stamps on it, or null when no block in this workspace carries that run.
    *

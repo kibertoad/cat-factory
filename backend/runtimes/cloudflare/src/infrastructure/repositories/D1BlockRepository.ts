@@ -52,6 +52,20 @@ export class D1BlockRepository implements BlockRepository {
     return row ? rowToBlock(row) : null
   }
 
+  async getMany(workspaceId: string, ids: string[]): Promise<Block[]> {
+    const out: Block[] = []
+    for (const chunk of chunkForIn(ids)) {
+      const { results } = await this.db
+        .prepare(
+          `SELECT * FROM blocks WHERE workspace_id = ? AND id IN (${chunk.map(() => '?').join(', ')})`,
+        )
+        .bind(workspaceId, ...chunk)
+        .all<BlockRow>()
+      out.push(...(results ?? []).map(rowToBlock))
+    }
+    return out
+  }
+
   async getByExecution(workspaceId: string, executionId: string): Promise<Block | null> {
     const row = await this.db
       .prepare('SELECT * FROM blocks WHERE workspace_id = ? AND execution_id = ? LIMIT 1')

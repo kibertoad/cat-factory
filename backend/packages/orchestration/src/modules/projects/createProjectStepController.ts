@@ -7,6 +7,7 @@ import type { CoreDependencies } from '../../container/dependencies.js'
 import { ProjectOutcomeStore } from './ProjectOutcomeStore.js'
 import type { ProjectStageService } from './ProjectStageService.js'
 import { ProjectStepController } from './ProjectStepController.js'
+import type { ProjectEngineTask } from './stageSpawner.js'
 
 /**
  * The project step's engine half, when the facade wires projects and their records. Absent
@@ -19,6 +20,8 @@ export function createProjectStepController(
     modules: ProjectKindModuleRegistry
     /** The projects module's stages, so a recorded outcome starts what it made ready. */
     stages?: Pick<ProjectStageService, 'advance'>
+    /** The project task types the engine performs itself. */
+    engineTasks?: readonly ProjectEngineTask[]
   },
 ): ProjectStepController | undefined {
   const { projectRepository, projectRecordRepository } = deps
@@ -34,6 +37,7 @@ export function createProjectStepController(
     modules: sources.modules,
     clock: deps.clock,
     ...(sources.stages ? { stages: sources.stages } : {}),
+    ...(sources.engineTasks ? { engineTasks: sources.engineTasks } : {}),
     logger: deps.logger,
   })
 }

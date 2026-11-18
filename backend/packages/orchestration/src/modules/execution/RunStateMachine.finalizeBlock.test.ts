@@ -20,6 +20,7 @@ function makeMachine(block: Block, onRaise?: () => void) {
   /** Interleaved log of both side effects, so a test can pin their ORDER (see F11). */
   const order: string[] = []
   const blockRepository: BlockRepository = {
+    getMany: async () => [],
     get: async () => block,
     update: async (_ws: string, id: string, patch: Record<string, unknown>) => {
       order.push('update')

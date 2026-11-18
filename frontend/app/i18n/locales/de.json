@@ -3182,7 +3182,8 @@
         "bugFishing": "Fehlersuche",
         "resolveConflicts": "Konflikte lösen",
         "research": "Recherche",
-        "decisions": "Entscheidungen"
+        "decisions": "Entscheidungen",
+        "spawn": "Verteilen"
       },
       "recurringWithFrame": "Eine wiederkehrende Aufgabe führt eine Pipeline in einem Takt aus. Fahren Sie fort, um Zeitplan + Prompt festzulegen.",
       "recurringNoFrame": "Eine wiederkehrende Aufgabe muss auf einem Service liegen. Fügen Sie sie aus einem Service-Frame (oder einem darin enthaltenen Modul) hinzu.",
@@ -4943,7 +4944,8 @@
         "media": "Medien",
         "maintenance": "PR-Pflege",
         "projectResearch": "Projektrecherche",
-        "projectDecisions": "Projektentscheidungen"
+        "projectDecisions": "Projektentscheidungen",
+        "projectSpawn": "Projektverteilung"
       },
       "strategyOption": {
         "specialist-panel": "Spezialisten-Panel",
@@ -6732,7 +6734,8 @@
         "project_stage_blocked": "Frühere Phase nicht abgeschlossen",
         "project_stage_awaiting_checkpoint": "Ergebnis wartet auf Prüfung",
         "project_stage_not_repeatable": "Phase bereits abgeschlossen",
-        "project_stage_checkpoint_not_pending": "Nichts anzunehmen"
+        "project_stage_checkpoint_not_pending": "Nichts anzunehmen",
+        "project_stage_work_unsettled": "Arbeit läuft noch"
       },
       "description": {
         "dependencies_unmet": "Diese Aufgabe hängt von anderen ab, die noch nicht abgeschlossen sind. Schließe sie ab oder gib sie frei und starte dann erneut.",
@@ -6807,6 +6810,7 @@
         "project_stage_blocked": "Diese Phase läuft nach Phasen, die noch kein angenommenes Ergebnis haben. Schließe diese zuerst ab.",
         "project_stage_awaiting_checkpoint": "Das neueste Ergebnis dieser Phase wartet darauf, dass jemand es am Kontrollpunkt annimmt. Prüfe und nimm es an, bevor du die Phase erneut ausführst.",
         "project_stage_not_repeatable": "Diese Phase hat ein angenommenes Ergebnis, und ihre Definition lässt keinen weiteren Durchlauf zu.",
+        "project_stage_work_unsettled": "Diese Phase hat Aufgaben erstellt, die noch nicht abgeschlossen sind. Nimm ihr Ergebnis an, sobald jede davon erledigt oder entfernt ist.",
         "project_stage_checkpoint_not_pending": "Diese Phase hat kein Ergebnis, das am Kontrollpunkt wartet. Es wurde vielleicht bereits angenommen, oder ihre Aufgabe hat noch keines festgehalten."
       },
       "action": {

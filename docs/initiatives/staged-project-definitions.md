@@ -123,10 +123,18 @@ bucket for every new repository method in the same PR.
       results' bodies are read, and the step records every accepted stage outcome as the
       revision. The kind's own project-level rendering stays for an unstaged project. PR:
       [#2529](https://github.com/kibertoad/cat-factory/pull/2529)
-- [ ] **6b. Spawn stage.** A stage that creates a task in each linked service (configurable title,
-      task type and brief), links the project so each reads the stages' results, starts their
-      runs, and records what it spawned; its checkpoint refuses acceptance until every spawned
-      task has settled. Reuses the initiative spawn and reconcile logic where it fits.
+- [x] **6b. Spawn stage.** The built-in `spawn` task type on `pl_spawn`, whose one
+      `project-spawner` step the engine performs itself: its handler declares
+      `performedBy: 'engine'`, and the project step runs the engine task wired for the type, or
+      refuses when none is. Its run creates a task in each linked service
+      (title and description templated with `{service}`, task type, optional pipeline), links the
+      project so each task reads the accepted stages, starts each run, and records what it
+      created and every service it skipped. A handler may name the tasks its result awaits
+      (`checkpointAwaits`): the checkpoint refuses with `project_stage_work_unsettled` until each
+      is done or removed (a task moved to another board of the account is still awaited), which
+      also makes its stage need a checkpoint. A handler may require its stage to run after
+      another (`stageRequires.after`), as spawn does. The initiative loop and the spawner
+      share `modules/spawn/spawnedTask.ts`. PR: [#2530](https://github.com/kibertoad/cat-factory/pull/2530)
 - [ ] **7. Exit criteria.** Stage `acceptance` criteria judged through `JudgeRegistry` against the
       outcome and its evidence; each criterion reported met, unmet or unverified at the checkpoint.
 - [ ] **8. Document stage.** A handler that composes upstream streams and their artifacts into one
@@ -176,6 +184,16 @@ bucket for every new repository method in the same PR.
   the stage rail (slice 9). A staged definition of the research kind still carries the
   kind's top-level spec; a kind built for stages declares its own.
 
+- A spawned task's id is derived from its stage task and service, so a replayed spawn run finds
+  the tasks it made instead of making them twice. It asks after them per board with
+  `BlockRepository.getMany`: a mothership node's `findByIds` refuses an id that resolves to no
+  block, and a block id alone does not name one board (seeded frames share ids across boards), so
+  a service's frame is matched through its owning service. A spawned task waits on its board
+  for a person when its task type pins no pipeline, when it runs on an individual-usage model,
+  or when its run fails to start; the result says which.
+  A service unlinked from the project after the spawn ran keeps its task: the result still names
+  it, and the checkpoint waits for it until it is done or a person removes it.
+
 - An automatic stage is started by the engine with no person behind it, like an initiative's
   spawned task: its task is created under the unattributed editor and its run is started with no
   initiator. It starts ONCE, when it first becomes ready with no task of it yet; after that a
@@ -189,4 +207,3 @@ bucket for every new repository method in the same PR.
 
 - Whether a stage's `produces` stream may be shared by a repeatable stage's reruns only, or by
   several stages. Starting position: one producing stage per stream.
-- How a spawn stage handles a linked service that is unlinked while its tasks run.

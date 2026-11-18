@@ -35,6 +35,7 @@ function makeMachine(block: Block | null) {
     },
   } as unknown as ExecutionEventPublisher
   const blockRepository: BlockRepository = {
+    getMany: async () => [],
     get: async () => block,
   } as unknown as BlockRepository
   const machine = new RunStateMachine({

@@ -238,7 +238,8 @@
         "bugFishing": "ציד באגים",
         "resolveConflicts": "פתרון קונפליקטים",
         "research": "מחקר",
-        "decisions": "החלטות"
+        "decisions": "החלטות",
+        "spawn": "פיצול"
       },
       "recurringWithFrame": "משימה מחזורית מריצה צינור במרווחים קבועים. המשך כדי להגדיר את התזמון והפרומפט.",
       "recurringNoFrame": "משימה מחזורית חייבת להתקיים על שירות. הוסף אותה ממסגרת שירות (או ממודול בתוכה).",
@@ -841,7 +842,8 @@
         "project_stage_blocked": "שלב קודם לא הסתיים",
         "project_stage_awaiting_checkpoint": "התוצאה ממתינה לבדיקה",
         "project_stage_not_repeatable": "השלב כבר הושלם",
-        "project_stage_checkpoint_not_pending": "אין מה לאשר"
+        "project_stage_checkpoint_not_pending": "אין מה לאשר",
+        "project_stage_work_unsettled": "עדיין יש עבודה בתהליך"
       },
       "description": {
         "dependencies_unmet": "משימה זו תלויה במשימות אחרות שטרם הושלמו. השלם או שחרר אותן, ולאחר מכן הפעל אותה שוב.",
@@ -916,6 +918,7 @@
         "project_stage_blocked": "השלב הזה רץ אחרי שלבים שעדיין אין להם תוצאה שאושרה. סיימו אותם קודם.",
         "project_stage_awaiting_checkpoint": "התוצאה האחרונה של השלב הזה ממתינה שמישהו יאשר אותה בנקודת הבקרה. בדקו ואשרו אותה לפני שתריצו את השלב שוב.",
         "project_stage_not_repeatable": "לשלב הזה יש תוצאה שאושרה, וההגדרה שלו לא מאפשרת להריץ אותו שוב.",
+        "project_stage_work_unsettled": "השלב הזה יצר משימות שעדיין לא הסתיימו. אשרו את התוצאה שלו לאחר שכל אחת מהן הושלמה או הוסרה.",
         "project_stage_checkpoint_not_pending": "לשלב הזה אין תוצאה שממתינה בנקודת הבקרה. ייתכן שהיא כבר אושרה, או שהמשימה שלו עדיין לא רשמה תוצאה."
       },
       "action": {
@@ -5549,7 +5552,8 @@
         "media": "מדיה",
         "maintenance": "תחזוקת PR",
         "projectResearch": "מחקר פרויקט",
-        "projectDecisions": "החלטות פרויקט"
+        "projectDecisions": "החלטות פרויקט",
+        "projectSpawn": "פיצול פרויקט"
       },
       "strategyOption": {
         "specialist-panel": "פאנל מומחים",

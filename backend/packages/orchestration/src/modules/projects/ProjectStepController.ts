@@ -25,6 +25,7 @@ import {
   type ProjectRepository,
   type ProjectRunContext,
   type ProjectTaskInput,
+  type ProjectUpstreamContext,
   type Logger,
   type ServiceRepository,
   noopLogger,
@@ -35,6 +36,7 @@ import type { ProjectOutcomeStore } from './ProjectOutcomeStore.js'
 import type { ProjectStageService } from './ProjectStageService.js'
 import { decodeOutcome, outcomeTaskType } from './outcomeDecoding.js'
 import { resolvePinnedDefinition } from './pinnedDefinition.js'
+import type { ProjectEngineTask } from './stageSpawner.js'
 import { renderStageUpstream } from './stageUpstream.js'
 
 // ---------------------------------------------------------------------------
@@ -57,6 +59,8 @@ export interface ProjectStepControllerDeps {
   clock: Clock
   /** Starts the stages a recorded outcome made ready. Absent where projects are not wired. */
   stages?: Pick<ProjectStageService, 'advance'>
+  /** The task types the engine performs itself rather than dispatching an agent, by task type. */
+  engineTasks?: readonly ProjectEngineTask[]
   logger?: Logger
 }
 
@@ -97,6 +101,41 @@ export class ProjectStepController {
     return this.deps.modules.forAgentKind(agentKind) !== undefined
   }
 
+  /** Whether a step of `agentKind` is a task type its handler says the engine performs. */
+  runsInEngine(agentKind: string): boolean {
+    return this.deps.modules.forAgentKind(agentKind)?.performedBy === 'engine'
+  }
+
+  /**
+   * Plan and perform an engine step: the reply its handler's `finish` reads, which the ordinary
+   * completion records as the task's outcome. Refuses when nothing in this process performs it.
+   */
+  async runInEngine(
+    workspaceId: string,
+    step: PipelineStep,
+    block: Block,
+  ): Promise<AgentRunResult> {
+    const task = await this.plan(step, block)
+    const engineTask = this.engineTaskOf(task.handler.taskType)
+    if (!engineTask) {
+      throw new Error(
+        `Task type '${task.handler.taskType}' is performed by the engine, and this process has ` +
+          'nothing wired to perform it',
+      )
+    }
+    const reply = await engineTask.run({
+      workspaceId,
+      project: task.project,
+      task: block,
+      plan: step.project!.plan,
+    })
+    return { output: '', custom: reply }
+  }
+
+  private engineTaskOf(taskType: string): ProjectEngineTask | undefined {
+    return this.deps.engineTasks?.find((t) => t.taskType === taskType)
+  }
+
   /**
    * Resolve a project step at dispatch. The first dispatch claims the task's outcome sequence and
    * fixes the kind's plan on the step; a replayed or resumed dispatch reads both back, so the
@@ -111,6 +150,29 @@ export class ProjectStepController {
     block: Block,
     opts: { reattach?: boolean } = {},
   ): Promise<ProjectRunContext> {
+    const task = await this.plan(step, block)
+    const upstream =
+      task.staged && task.definition && !opts.reattach
+        ? await renderStageUpstream(
+            { outcomes: this.deps.outcomes, modules: this.deps.modules },
+            {
+              project: task.project,
+              definition: task.definition,
+              inputs: task.inputs,
+              ...task.staged,
+              envelopes: task.envelopes,
+              decoded: task.outcomes,
+            },
+          )
+        : []
+    return this.agentContext(step, block, task, upstream, opts)
+  }
+
+  /**
+   * Resolve the task and fix its plan on the step: the first dispatch claims the task's outcome
+   * sequence, a replayed or resumed one reads both back.
+   */
+  private async plan(step: PipelineStep, block: Block): Promise<ResolvedTask> {
     const task = await this.resolveTask(block, step.agentKind)
     if (step.project?.taskType && step.project.taskType !== task.handler.taskType) {
       throw new ValidationError("The task's type changed after its run was planned", {
@@ -152,23 +214,21 @@ export class ProjectStepController {
       }
     }
     if (!step.project.taskType) step.project = { ...step.project, taskType: task.handler.taskType }
-    const upstream =
-      task.staged && task.definition && !opts.reattach
-        ? await renderStageUpstream(
-            { outcomes: this.deps.outcomes, modules: this.deps.modules },
-            {
-              project: task.project,
-              definition: task.definition,
-              inputs: task.inputs,
-              ...task.staged,
-              envelopes: task.envelopes,
-              decoded: task.outcomes,
-            },
-          )
-        : []
+    return task
+  }
+
+  /** What the agent of a planned step is given, with the upstream results it reads. */
+  private async agentContext(
+    step: PipelineStep,
+    block: Block,
+    task: ResolvedTask,
+    upstream: ProjectUpstreamContext[],
+    opts: { reattach?: boolean },
+  ): Promise<ProjectRunContext> {
+    const input = this.taskInput(task, block)
     if (task.staged && !opts.reattach) {
       step.project = {
-        ...step.project,
+        ...requireState(step),
         upstream: upstream.map((u) => ({
           stageId: u.stageId,
           outcomeId: u.revision?.id ?? null,
@@ -176,7 +236,7 @@ export class ProjectStepController {
         })),
       }
     }
-    const state = step.project
+    const state = requireState(step)
     const checkpoint = this.parse(task.handler, state.checkpoint)
     const services = task.project.serviceIds.length
       ? ((await this.deps.serviceRepository?.listByIds(task.project.serviceIds)) ?? [])

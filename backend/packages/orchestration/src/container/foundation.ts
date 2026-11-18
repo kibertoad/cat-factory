@@ -162,8 +162,8 @@ export function createCoreFoundation(params: CoreFoundationParams): CoreFoundati
     reviewFrictionNotifications: notifications?.service,
   })
   stageBoard = {
-    addTask: (workspaceId, rootBlockId, input, editor, createdBy) =>
-      boardService.addTask(workspaceId, rootBlockId, input, editor, createdBy),
+    addTask: (workspaceId, containerId, input, editor, createdBy, opts) =>
+      boardService.addTask(workspaceId, containerId, input, editor, createdBy, opts),
     removeTask: (homeWorkspaceId, blockId) => boardService.removeBlock(homeWorkspaceId, blockId),
   }
   const workspaceService = new WorkspaceService({

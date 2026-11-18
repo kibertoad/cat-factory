@@ -18,7 +18,6 @@ import type {
 import {
   ConflictError,
   DomainError,
-  ValidationError,
   describeError,
   getErrorMessage,
   noopLogger,
@@ -29,6 +28,7 @@ import { DEFAULT_DOCUMENT_STYLE_FRAGMENT_IDS } from '@cat-factory/prompt-fragmen
 import type { ExecutionService } from '../execution/ExecutionService.js'
 import type { NotificationService } from '../notifications/NotificationService.js'
 import type { InitiativeService } from './InitiativeService.js'
+import { linkSpawnedTask, rollbackSpawnedTask } from '../spawn/spawnedTask.js'
 import {
   type InitiativeRunHarvest,
   activeItemCount,
@@ -114,19 +114,6 @@ export class InitiativeLoopService {
 
   constructor(private readonly deps: InitiativeLoopServiceDependencies) {
     this.log = (deps.logger ?? noopLogger).child({ service: 'initiativeLoop' })
-  }
-
-  /** Link the projects a spawn names, refusing (so the item blocks) when linking is not wired. */
-  private async linkSpawnedProjects(
-    workspaceId: string,
-    blockId: string,
-    projectIds: readonly string[] | undefined,
-  ): Promise<void> {
-    if (!projectIds?.length) return
-    if (!this.deps.taskProjectLinks) {
-      throw new ValidationError('This item links projects, and linking projects is not configured')
-    }
-    await this.deps.taskProjectLinks.link(workspaceId, blockId, [...projectIds])
   }
 
   /**
@@ -484,7 +471,8 @@ export class InitiativeLoopService {
     const block = this.buildTaskBlock(spawnedBlockId, item, frame, entity.blockId)
     try {
       await this.deps.blockRepository.insert(workspaceId, block, serviceId)
-      await this.linkSpawnedProjects(workspaceId, block.id, item.spawn?.projects)
+      // A missing link wiring refuses, so the item blocks rather than spawning without its projects.
+      await linkSpawnedTask(this.deps.taskProjectLinks, workspaceId, block.id, item.spawn?.projects)
       // Thread the item's preset-authored per-run gate override (slice 2) into the spawned run:
       // a docs-refresh task with human-review off runs its gates disabled, on runs them enabled.
       // System-initiated (no initiator / activation), manual origin — hence the leading undefineds.
@@ -514,14 +502,16 @@ export class InitiativeLoopService {
       // retried forever.
       // A failed rollback leaves an orphan task block on the board with no run — the one drop here
       // whose evidence a human needs, since the board shows the symptom and nothing names the cause.
-      await runBestEffort(
-        this.log,
-        'initiative.rollbackSpawnedBlock',
-        async () => {
-          await this.deps.taskProjectLinks?.unlinkAll(workspaceId, block.id)
-          await this.deps.blockRepository.deleteMany(workspaceId, [block.id])
+      await rollbackSpawnedTask(
+        {
+          ...(this.deps.taskProjectLinks ? { links: this.deps.taskProjectLinks } : {}),
+          removeTask: (ws, id) => this.deps.blockRepository.deleteMany(ws, [id]),
+          log: this.log,
         },
-        { workspaceId, blockId: block.id, itemId: item.id },
+        'initiative.rollbackSpawnedBlock',
+        workspaceId,
+        block.id,
+        { itemId: item.id },
       )
       const reason = error instanceof DomainError ? error.details?.reason : undefined
       if (error instanceof ConflictError && reason === 'task_limit_reached') {

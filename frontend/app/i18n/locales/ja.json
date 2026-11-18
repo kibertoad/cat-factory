@@ -238,7 +238,8 @@
         "bugFishing": "バグ探索",
         "resolveConflicts": "コンフリクト解消",
         "research": "リサーチ",
-        "decisions": "決定"
+        "decisions": "決定",
+        "spawn": "展開"
       },
       "recurringWithFrame": "繰り返しタスクは一定の周期でパイプラインを実行します。続行してスケジュールとプロンプトを設定してください。",
       "recurringNoFrame": "繰り返しタスクはサービス上に配置する必要があります。サービスフレーム（またはその中のモジュール）から追加してください。",
@@ -841,7 +842,8 @@
         "project_stage_blocked": "前のステージが完了していません",
         "project_stage_awaiting_checkpoint": "結果がレビュー待ちです",
         "project_stage_not_repeatable": "ステージは完了済みです",
-        "project_stage_checkpoint_not_pending": "承認するものがありません"
+        "project_stage_checkpoint_not_pending": "承認するものがありません",
+        "project_stage_work_unsettled": "作業がまだ進行中です"
       },
       "description": {
         "dependencies_unmet": "このタスクは、まだ完了していない他のタスクに依存しています。それらを完了または解除してから、もう一度開始してください。",
@@ -916,6 +918,7 @@
         "project_stage_blocked": "このステージは、まだ承認された結果がないステージの後に実行されます。先にそれらを完了してください。",
         "project_stage_awaiting_checkpoint": "このステージの最新の結果は、チェックポイントで誰かが承認するのを待っています。ステージを再実行する前に、確認して承認してください。",
         "project_stage_not_repeatable": "このステージには承認済みの結果があり、その定義では再実行が許可されていません。",
+        "project_stage_work_unsettled": "このステージが作成したタスクがまだ完了していません。すべてのタスクが完了するか削除された後で、結果を承認してください。",
         "project_stage_checkpoint_not_pending": "このステージには、チェックポイントで待機している結果がありません。すでに承認されたか、タスクがまだ結果を記録していない可能性があります。"
       },
       "action": {
@@ -5549,7 +5552,8 @@
         "media": "メディア",
         "maintenance": "PR メンテナンス",
         "projectResearch": "プロジェクトリサーチ",
-        "projectDecisions": "プロジェクトの決定"
+        "projectDecisions": "プロジェクトの決定",
+        "projectSpawn": "プロジェクトの展開"
       },
       "strategyOption": {
         "specialist-panel": "専門家パネル",

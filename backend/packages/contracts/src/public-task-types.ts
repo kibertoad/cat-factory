@@ -196,9 +196,11 @@ export const BUILTIN_PUBLIC_TASK_FIELDS: Readonly<Record<string, readonly Descri
       type: 'select',
       options: RESEARCH_MODES.map((mode) => ({ value: mode, label: mode })),
     },
-  ], // A decision task's whole input is its stage's config and the stages it reads; it has no
-  // per-case fields.
+  ],
+  // A decision task's whole input is its stage's config and the stages it reads, and a spawn
+  // task's is its stage's config: neither has per-case fields.
   decisions: [],
+  spawn: [],
 }
 
 /**

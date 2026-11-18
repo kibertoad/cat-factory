@@ -67,6 +67,23 @@ export class TaskProjectLinkService {
     return this.list(workspaceId, blockId)
   }
 
+  /**
+   * Link projects to tasks the caller just created and whose homes it knows, admitting the
+   * projects once per board rather than once per task.
+   */
+  async linkMany(
+    tasks: readonly { workspaceId: string; blockId: string }[],
+    projectIds: string[],
+  ): Promise<void> {
+    for (const workspaceId of new Set(tasks.map((t) => t.workspaceId))) {
+      await this.assertLinkable(workspaceId, projectIds)
+    }
+    const now = this.deps.clock.now()
+    for (const task of tasks) {
+      await this.deps.links.link(task.workspaceId, task.blockId, projectIds, now)
+    }
+  }
+
   /** Unlink one project. Idempotent; the project itself is untouched. */
   async unlink(workspaceId: string, blockId: string, projectId: string): Promise<void> {
     const home = await this.requireTask(workspaceId, blockId)

@@ -170,6 +170,7 @@ export const BUILTIN_TASK_TYPES = [
   'media',
   'research',
   'decisions',
+  'spawn',
   'recurring',
 ] as const
 /**
@@ -189,6 +190,7 @@ export const BUILTIN_CREATE_TASK_TYPES = [
   'media',
   'research',
   'decisions',
+  'spawn',
 ] as const
 
 /**
@@ -238,8 +240,8 @@ export function taskTypeAttachesPullRequest(taskType: string | null | undefined)
 /**
  * Whether a task of this type belongs under a PROJECT and is refused under a service. A `research`
  * task answers a project's pinned research definition and writes the project's findings, and a
- * `decisions` task settles a decision register on the project, so a service has nothing for either
- * to answer and nowhere for it to write.
+ * `decisions` task settles a decision register on the project, and a `spawn` task puts work into the
+ * services the project links, so none of them has anything to do inside one service.
  */
 export function taskTypeRequiresProject(taskType: string | null | undefined): boolean {
   return taskType !== null && taskType !== undefined && PROJECT_TASK_TYPES.includes(taskType)
@@ -249,7 +251,7 @@ export function taskTypeRequiresProject(taskType: string | null | undefined): bo
  * The built-in task types that run only under a project, each with a pinned definition or stage as
  * its brief rather than the task's description. Every rule about them reads this one list.
  */
-export const PROJECT_TASK_TYPES: readonly string[] = ['research', 'decisions']
+export const PROJECT_TASK_TYPES: readonly string[] = ['research', 'decisions', 'spawn']
 
 /** The most ad-hoc questions one research task may add beside its definition's. */
 export const MAX_RESEARCH_ADHOC_QUESTIONS = 20

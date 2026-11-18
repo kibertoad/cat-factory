@@ -238,7 +238,8 @@
         "bugFishing": "Polowanie na błędy",
         "resolveConflicts": "Rozwiąż konflikty",
         "research": "Badanie",
-        "decisions": "Decyzje"
+        "decisions": "Decyzje",
+        "spawn": "Rozdzielenie"
       },
       "recurringWithFrame": "Zadanie cykliczne uruchamia pipeline w określonym rytmie. Kontynuuj, aby ustawić harmonogram i prompt.",
       "recurringNoFrame": "Zadanie cykliczne musi należeć do usługi. Dodaj je z ramki usługi (lub modułu w jej obrębie).",
@@ -841,7 +842,8 @@
         "project_stage_blocked": "Wcześniejszy etap niezakończony",
         "project_stage_awaiting_checkpoint": "Wynik czeka na przegląd",
         "project_stage_not_repeatable": "Etap już zakończony",
-        "project_stage_checkpoint_not_pending": "Nie ma czego zaakceptować"
+        "project_stage_checkpoint_not_pending": "Nie ma czego zaakceptować",
+        "project_stage_work_unsettled": "Praca wciąż trwa"
       },
       "description": {
         "dependencies_unmet": "To zadanie zależy od innych, które nie zostały jeszcze ukończone. Ukończ je lub odblokuj, a następnie uruchom je ponownie.",
@@ -916,6 +918,7 @@
         "project_stage_blocked": "Ten etap uruchamia się po etapach, które nie mają jeszcze zaakceptowanego wyniku. Najpierw je zakończ.",
         "project_stage_awaiting_checkpoint": "Najnowszy wynik tego etapu czeka, aż ktoś zaakceptuje go w punkcie kontrolnym. Przejrzyj go i zaakceptuj, zanim ponownie uruchomisz etap.",
         "project_stage_not_repeatable": "Ten etap ma zaakceptowany wynik, a jego definicja nie pozwala uruchomić go ponownie.",
+        "project_stage_work_unsettled": "Ten etap utworzył zadania, które jeszcze się nie zakończyły. Zaakceptuj jego wynik, gdy każde z nich zostanie ukończone lub usunięte.",
         "project_stage_checkpoint_not_pending": "Ten etap nie ma wyniku czekającego w punkcie kontrolnym. Mógł już zostać zaakceptowany albo jego zadanie jeszcze go nie zapisało."
       },
       "action": {
@@ -5549,7 +5552,8 @@
         "media": "Multimedia",
         "maintenance": "Utrzymanie PR",
         "projectResearch": "Badanie projektu",
-        "projectDecisions": "Decyzje projektu"
+        "projectDecisions": "Decyzje projektu",
+        "projectSpawn": "Rozdzielenie projektu"
       },
       "strategyOption": {
         "specialist-panel": "Panel specjalistów",

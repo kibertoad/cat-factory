@@ -76,6 +76,7 @@ function makeMachine(open: Notification[]) {
     },
   } as unknown as NotificationService
   const blockRepository: BlockRepository = {
+    getMany: async () => [],
     get: async () => ({ id: 'task_y', title: 'Auth' }) as unknown as Block,
   } as unknown as BlockRepository
   const machine = new RunStateMachine({

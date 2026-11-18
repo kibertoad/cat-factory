@@ -1,6 +1,8 @@
 import type {
   AgentRunContext,
+  AgentRunResult,
   ExecutionInstance,
+  PipelineStep,
   StepCompletionResolver,
 } from '@cat-factory/kernel'
 import type { AdvanceResult } from '../execution/advance.js'
@@ -25,6 +27,14 @@ export interface ProjectRegistrationDeps {
   ) => Promise<AdvanceResult>
   /** Persist and publish the run, so a step mutation survives the park that reloads it. */
   persistInstance: (workspaceId: string, instance: ExecutionInstance) => Promise<void>
+  /** Complete a step the engine performed itself, as an agent's reply would complete it. */
+  recordStepResult: (
+    workspaceId: string,
+    instance: ExecutionInstance,
+    step: PipelineStep,
+    isFinalStep: boolean,
+    result: AgentRunResult,
+  ) => Promise<AdvanceResult>
 }
 
 /**
@@ -39,6 +49,11 @@ export function projectStepHandler(d: ProjectRegistrationDeps): StepHandler {
     order: 179,
     canHandle: ({ step }) => !!d.projectStep?.handles(step.agentKind),
     handle: async (ctx) => {
+      // A task type the engine performs (a spawn stage) completes here, with no agent to dispatch.
+      if (d.projectStep!.runsInEngine(ctx.step.agentKind)) {
+        const result = await d.projectStep!.runInEngine(ctx.workspaceId, ctx.step, ctx.block)
+        return d.recordStepResult(ctx.workspaceId, ctx.instance, ctx.step, ctx.isFinalStep, result)
+      }
       const project = await d.projectStep!.prepare(ctx.step, ctx.block, {
         reattach: liveJobId(ctx.step) !== undefined,
       })

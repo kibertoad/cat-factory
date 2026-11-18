@@ -64,6 +64,11 @@ export function useTaskTypeOffer(container: Ref<Block | undefined>, taskType: Re
         label: t('board.addTask.types.decisions'),
         icon: 'i-lucide-list-checks',
       },
+      {
+        value: 'spawn',
+        label: t('board.addTask.types.spawn'),
+        icon: 'i-lucide-git-fork',
+      },
       { value: 'recurring', label: t('board.addTask.types.recurring'), icon: 'i-lucide-repeat' },
     ]
     const set = offered.value

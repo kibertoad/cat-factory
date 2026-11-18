@@ -24,6 +24,7 @@ import {
 } from '@cat-factory/kernel'
 import type { MountedProject } from './ProjectService.js'
 import { resolvePinnedDefinition } from './pinnedDefinition.js'
+import { type StageAwaitsDeps, assertAwaitedWorkSettled } from './stageAwaits.js'
 import { type StageRevisionDeps, settleStageRevision } from './stageRevision.js'
 
 // ---------------------------------------------------------------------------
@@ -34,14 +35,16 @@ import { type StageRevisionDeps, settleStageRevision } from './stageRevision.js'
 // `docs/initiatives/staged-project-definitions.md`.
 // ---------------------------------------------------------------------------
 
-/** Creates and removes a task block under a project root, on the board that homes it. */
+/** Creates and removes a task block under a container, on the board that homes it. */
 export interface StageTaskBoard {
   addTask(
     workspaceId: string,
-    rootBlockId: string,
+    containerId: string,
     input: { title: string; description?: string; taskType: string },
     editor: BlockEditAuthority,
     createdBy: string | null,
+    /** An id the caller derived, so a replayed creation finds the task it made before. */
+    opts?: { id?: string },
   ): Promise<Block>
   removeTask(homeWorkspaceId: string, blockId: string): Promise<void>
 }
@@ -73,7 +76,10 @@ export interface ProjectStageServiceDeps {
     | 'reserveSeq'
   >
   /** Where a revised result is written, and the handlers that apply a revision. */
-  outcomes: StageRevisionDeps['outcomes']
+  outcomes: StageRevisionDeps['outcomes'] & StageAwaitsDeps['outcomes']
+  /** Reads the tasks a result awaits before it may be accepted, on whichever board holds them. */
+  blocks: StageAwaitsDeps['blocks']
+  workspaces: StageAwaitsDeps['workspaces']
   modules: StageRevisionDeps['modules']
   definitions: ProjectDefinitionSource
   /** Late-bound: the board is built after the projects module. */
@@ -283,6 +289,7 @@ export class ProjectStageService {
     const latest = before.status === 'awaiting-checkpoint' ? before.latest : null
     let cleared = false
     if (latest) {
+      await assertAwaitedWorkSettled(this.deps, { project, stage: stages[index]!, state: before })
       // The person's settlement, written as a revision that counts only once the claim below
       // names it: an acceptance that loses the claim leaves the accepted result untouched.
       const acceptedOutcomeId = await settleStageRevision(this.deps, {
