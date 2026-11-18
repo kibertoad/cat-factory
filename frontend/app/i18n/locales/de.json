@@ -2655,7 +2655,8 @@
         "budget_threshold": "Als gelesen markieren",
         "key_drift": "Veraltete Zugangsdaten entfernen",
         "merge_tag_request": "Aufwand erfassen",
-        "bug_fishing_triage": "Als gelesen markieren"
+        "bug_fishing_triage": "Als gelesen markieren",
+        "stage_checkpoint": "Als gelesen markieren"
       },
       "failingRun": "{kind} · {at}",
       "failingRunsMore": "{count} weitere nicht angezeigt",
@@ -6904,7 +6905,8 @@
       "visual_confirmation_ready": "Bereit für visuelle Bestätigung",
       "pr_review_ready": "PR-Review-Befunde",
       "initiative": "Initiativen-Updates",
-      "merge_tag_request": "Review-Aufwand angefragt"
+      "merge_tag_request": "Review-Aufwand angefragt",
+      "stage_checkpoint": "Phasen, die auf Annahme warten"
     },
     "role": {
       "engineering": "Engineering",
@@ -6978,7 +6980,8 @@
       "budget_paused": "Läufe pausiert (Budget)",
       "budget_threshold": "Budgetwarnung",
       "key_drift": "Abweichung des Verschlüsselungsschlüssels",
-      "merge_tag_request": "Review-Aufwand angefragt"
+      "merge_tag_request": "Review-Aufwand angefragt",
+      "stage_checkpoint": "Projektphase wartet auf Annahme"
     }
   },
   "docInterview": {

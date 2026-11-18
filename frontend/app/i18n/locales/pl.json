@@ -2600,7 +2600,8 @@
         "budget_threshold": "Oznacz jako przeczytane",
         "key_drift": "Usuń nieaktualne poświadczenia",
         "merge_tag_request": "Zapisz nakład",
-        "bug_fishing_triage": "Oznacz jako przeczytane"
+        "bug_fishing_triage": "Oznacz jako przeczytane",
+        "stage_checkpoint": "Oznacz jako przeczytane"
       },
       "toast": {
         "acted": "Oznaczono jako obsłużone",
@@ -4903,7 +4904,8 @@
       "visual_confirmation_ready": "Gotowe do potwierdzenia wizualnego",
       "pr_review_ready": "Uwagi z przeglądu PR",
       "initiative": "Aktualizacje inicjatywy",
-      "merge_tag_request": "Prośba o nakład przeglądu"
+      "merge_tag_request": "Prośba o nakład przeglądu",
+      "stage_checkpoint": "Etapy czekające na akceptację"
     },
     "role": {
       "engineering": "Inzynieria",
@@ -4977,7 +4979,8 @@
       "budget_paused": "Uruchomienia wstrzymane (budżet)",
       "budget_threshold": "Ostrzeżenie o budżecie",
       "key_drift": "Rozbieżność klucza szyfrowania",
-      "merge_tag_request": "Prośba o nakład przeglądu"
+      "merge_tag_request": "Prośba o nakład przeglądu",
+      "stage_checkpoint": "Etap projektu czeka na akceptację"
     }
   },
   "docInterview": {

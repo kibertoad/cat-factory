@@ -2600,7 +2600,8 @@
         "budget_threshold": "סמן כנקרא",
         "key_drift": "מחק אישורים מיושנים",
         "merge_tag_request": "לתעד את המאמץ",
-        "bug_fishing_triage": "סימון כנקרא"
+        "bug_fishing_triage": "סימון כנקרא",
+        "stage_checkpoint": "סמן כנקרא"
       },
       "toast": {
         "acted": "סומן כטופל",
@@ -4903,7 +4904,8 @@
       "visual_confirmation_ready": "מוכן לאישור חזותי",
       "pr_review_ready": "ממצאי בדיקת PR",
       "initiative": "עדכוני יוזמה",
-      "merge_tag_request": "בקשה לתיוג מאמץ הסקירה"
+      "merge_tag_request": "בקשה לתיוג מאמץ הסקירה",
+      "stage_checkpoint": "שלבים שממתינים לאישור"
     },
     "role": {
       "engineering": "הנדסה",
@@ -4977,7 +4979,8 @@
       "budget_paused": "ריצות מושהות (תקציב)",
       "budget_threshold": "אזהרת תקציב",
       "key_drift": "סטיית מפתח ההצפנה",
-      "merge_tag_request": "בקשה לתיוג מאמץ הסקירה"
+      "merge_tag_request": "בקשה לתיוג מאמץ הסקירה",
+      "stage_checkpoint": "שלב בפרויקט ממתין לאישור"
     }
   },
   "docInterview": {

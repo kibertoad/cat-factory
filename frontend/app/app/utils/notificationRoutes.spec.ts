@@ -25,6 +25,7 @@ function deps(instances: ExecutionInstance[] = []): NotificationRouteDeps {
     openRequirementReview: vi.fn(),
     openClarityReview: vi.fn(),
     openInitiativeTracker: vi.fn(),
+    openProjectStages: vi.fn(),
     openOperatorDashboard: vi.fn(),
   }
 }
@@ -77,5 +78,11 @@ describe('notification routes', () => {
     const d = deps()
     notificationTarget(card('platform_health', { blockId: null }), d)!.open()
     expect(d.openOperatorDashboard).toHaveBeenCalled()
+  })
+
+  it("opens a stage checkpoint card's project on its stages, where it is accepted", () => {
+    const d = deps()
+    notificationTarget(card('stage_checkpoint', { executionId: null }), d)!.open()
+    expect(d.openProjectStages).toHaveBeenCalledWith('blk')
   })
 })

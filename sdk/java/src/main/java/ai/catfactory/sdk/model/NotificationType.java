@@ -38,6 +38,7 @@ public enum NotificationType {
     BUDGET_THRESHOLD("budget_threshold"),
     KEY_DRIFT("key_drift"),
     MERGE_TAG_REQUEST("merge_tag_request"),
+    STAGE_CHECKPOINT("stage_checkpoint"),
 
     /**
      * A value this SDK release does not know.

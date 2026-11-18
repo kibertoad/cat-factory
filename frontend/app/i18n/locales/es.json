@@ -2600,7 +2600,8 @@
         "budget_threshold": "Marcar como leída",
         "key_drift": "Descartar credenciales obsoletas",
         "merge_tag_request": "Registrar esfuerzo",
-        "bug_fishing_triage": "Marcar como leído"
+        "bug_fishing_triage": "Marcar como leído",
+        "stage_checkpoint": "Marcar como leído"
       },
       "toast": {
         "acted": "Marcado como resuelto",
@@ -4903,7 +4904,8 @@
       "visual_confirmation_ready": "Listo para confirmacion visual",
       "pr_review_ready": "Hallazgos de revisión de PR",
       "initiative": "Actualizaciones de la iniciativa",
-      "merge_tag_request": "Solicitud de esfuerzo de revisión"
+      "merge_tag_request": "Solicitud de esfuerzo de revisión",
+      "stage_checkpoint": "Etapas esperando aceptación"
     },
     "role": {
       "engineering": "Ingenieria",
@@ -4977,7 +4979,8 @@
       "budget_paused": "Ejecuciones en pausa (presupuesto)",
       "budget_threshold": "Aviso de presupuesto",
       "key_drift": "Desfase de la clave de cifrado",
-      "merge_tag_request": "Solicitud de esfuerzo de revisión"
+      "merge_tag_request": "Solicitud de esfuerzo de revisión",
+      "stage_checkpoint": "Etapa de proyecto esperando aceptación"
     }
   },
   "docInterview": {

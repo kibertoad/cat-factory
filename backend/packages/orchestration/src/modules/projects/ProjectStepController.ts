@@ -60,7 +60,7 @@ export interface ProjectStepControllerDeps {
   modules: ProjectKindModuleRegistry
   clock: Clock
   /** Starts the stages a recorded outcome made ready. Absent where projects are not wired. */
-  stages?: Pick<ProjectStageService, 'advance'>
+  stages?: Pick<ProjectStageService, 'advance' | 'announceCheckpoint'>
   /** Argues a stage result's acceptance criteria. Absent: each report says nothing assessed it. */
   acceptance?: StageAcceptanceAssessor
   /** The task types the engine performs itself rather than dispatching an agent, by task type. */
@@ -195,7 +195,7 @@ export class ProjectStepController {
           this.deps.clock.now(),
         )
         // The report the interrupted completion never made, so the checkpoint shows one.
-        if (step.project) await this.assessAcceptance(task.project, step.project, block.id)
+        if (step.project) await this.afterStagedRecord(task.project, step.project, block.id)
       }
       throw new ValidationError('This task already recorded its outcome on the project', {
         reason: 'project_task_already_recorded',
@@ -364,7 +364,7 @@ export class ProjectStepController {
           { projectId: state.projectId, taskId },
         )
       }
-      await this.assessAcceptance(project, state, taskId)
+      await this.afterStagedRecord(project, state, taskId)
     }
     if (recorded.written) return { output: finished.output, outputIsRendered: true }
     // A replayed completion lost to the write that landed first: describe the outcome on record,
@@ -378,31 +378,57 @@ export class ProjectStepController {
   }
 
   /**
-   * Assess the result a staged task recorded against its stage's acceptance criteria, if any.
-   * Best-effort: the outcome is on record, so a report that cannot be made or written is logged and
-   * the stage shows it as pending, never the end of the run.
+   * What follows a staged task's recorded result: the checkpoint card, and the assessment against
+   * the stage's acceptance criteria. One definition read serves both. Best-effort: the outcome is
+   * on record, so either failing is logged and never the end of the run.
    */
-  private async assessAcceptance(
+  private async afterStagedRecord(
     project: Project,
     state: ProjectStepState,
     taskId: string,
   ): Promise<void> {
-    await runBestEffort(
+    const fields = { projectId: project.id, taskId }
+    const read = await runBestEffort(
       this.log,
-      'projects.stages.assessAcceptance',
+      'projects.stages.readRecordedStage',
       async () => {
         const definition = await this.definitionOf(state, project)
         const stage = definition?.stages.find((s) => s.id === state.stageId)
-        if (!definition || !stage?.acceptance) return
-        const [found, pin] = await Promise.all([
-          this.deps.blockRepository.findById(taskId),
-          this.deps.records.getPin(project.id),
-        ])
-        if (!found) return
-        await this.assessFound(project, definition, stage, pin?.inputs ?? {}, found, state.seq)
+        const found = await this.deps.blockRepository.findById(taskId)
+        return definition && stage && found ? { definition, stage, found } : undefined
       },
-      { projectId: project.id, taskId },
+      fields,
     )
+    if (!read) return
+    const { definition, stage, found } = read
+    const stages = this.deps.stages
+    // A person learns the result awaits acceptance without opening the project.
+    if (stages && stage.checkpoint) {
+      await runBestEffort(
+        this.log,
+        'projects.stages.announceCheckpoint',
+        () =>
+          stages.announceCheckpoint(
+            found.workspaceId,
+            project,
+            definition.stages,
+            stage.id,
+            taskId,
+          ),
+        fields,
+      )
+    }
+    if (stage.acceptance) {
+      await runBestEffort(
+        this.log,
+        'projects.stages.assessAcceptance',
+        async () => {
+          const pin = await this.deps.records.getPin(project.id)
+          await this.assessFound(project, definition, stage, pin?.inputs ?? {}, found, state.seq)
+        },
+        fields,
+      )
+    }
   }
 
   private async assessFound(

@@ -167,8 +167,12 @@ bucket for every new repository method in the same PR.
       is stale, and the acceptance report; a person starts a ready stage and accepts a result
       there, settling a decisions stage item by item as it is accepted. PR:
       [#2534](https://github.com/kibertoad/cat-factory/pull/2534)
-- [ ] **9c. Checkpoint notification.** A notification when a stage's result awaits acceptance,
-      resolved when it is accepted, so a person learns of it without opening the project.
+- [x] **9c. Checkpoint notification.** A `stage_checkpoint` notification on the board that
+      homes the project while a stage's result awaits acceptance, naming the stage's task, and
+      settled when the stage is accepted. It is raised from the derived stage state, so a replayed
+      completion or the recovery of one that died after its write raises it again safely. It
+      routes to Slack and email, opens the project on its stages (the `project-stages` result
+      view), and stays out of review debt, which would refuse an automatic stage's task. PR: [#2535](https://github.com/kibertoad/cat-factory/pull/2535)
 
 ## Out of scope
 

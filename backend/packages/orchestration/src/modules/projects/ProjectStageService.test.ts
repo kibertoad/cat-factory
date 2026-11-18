@@ -80,12 +80,17 @@ function harness(opts: { stages: ProjectStage[]; vendor?: string; startFails?: b
     }),
   }
   const logger = createRecordingLogger()
+  const notifications = {
+    raise: vi.fn(async () => ({}) as never),
+    clearOnBlock: vi.fn(async () => null),
+  }
   const service = new ProjectStageService({
     getMounted: async () => ({
       project,
-      rootBlock: { id: 'root_1' } as Block,
+      rootBlock: { id: 'root_1', title: 'Vendor study' } as Block,
       homeWorkspaceId: 'ws_home',
     }),
+    notifications,
     listTasks: vi.fn(async () => tasks),
     records,
     outcomes: {
@@ -124,7 +129,7 @@ function harness(opts: { stages: ProjectStage[]; vendor?: string; startFails?: b
     clock: { now: () => 5 },
     logger,
   })
-  return { service, tasks, stageTasks, started, runs, records, logger }
+  return { service, tasks, stageTasks, started, runs, records, logger, notifications }
 }
 
 describe('ProjectStageService.advance', () => {
@@ -213,5 +218,38 @@ describe('ProjectStageService.list', () => {
         },
       ),
     ).rejects.toMatchObject({ details: { reason: 'project_homed_elsewhere' } })
+  })
+})
+
+describe('ProjectStageService.announceCheckpoint', () => {
+  it("raises the card only while this task's result awaits acceptance", async () => {
+    const discover = stage('discover', { checkpoint: true })
+    const { service, stageTasks, records, notifications } = harness({ stages: [discover] })
+    stageTasks.push({
+      taskId: 'task_1',
+      projectId: project.id,
+      stageId: 'discover',
+      createdAt: 1,
+      basis: {},
+      recordedAt: 2,
+      clearedAt: null,
+      clearedBy: null,
+      acceptedOutcomeId: null,
+    })
+    records.listOutcomes.mockResolvedValue([
+      { id: 'pout_task_1', seq: 1, stream: 'discover', taskId: 'task_1', intent: 'initial' },
+    ] as never)
+    await service.announceCheckpoint('ws_home', project, [discover], 'discover', 'task_other')
+    expect(notifications.raise).not.toHaveBeenCalled()
+    await service.announceCheckpoint('ws_home', project, [discover], 'discover', 'task_1')
+    expect(notifications.raise).toHaveBeenCalledWith(
+      'ws_home',
+      expect.objectContaining({ type: 'stage_checkpoint', blockId: 'task_1' }),
+    )
+    // Once accepted, a late replay raises nothing.
+    stageTasks[0]!.clearedAt = 3
+    notifications.raise.mockClear()
+    await service.announceCheckpoint('ws_home', project, [discover], 'discover', 'task_1')
+    expect(notifications.raise).not.toHaveBeenCalled()
   })
 })

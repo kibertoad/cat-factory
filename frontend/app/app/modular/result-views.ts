@@ -55,6 +55,9 @@ const MergerResultView = defineAsyncView(() => import('~/components/panels/Merge
 const InitiativeTrackerWindow = defineAsyncView(
   () => import('~/components/initiative/InitiativeTrackerWindow.vue'),
 )
+const ProjectStagesWindow = defineAsyncView(
+  () => import('~/components/projects/view/ProjectStagesWindow.vue'),
+)
 const InitiativePlanningWindow = defineAsyncView(
   () => import('~/components/initiative/InitiativePlanningWindow.vue'),
 )
@@ -131,6 +134,8 @@ const BUILT_IN_RESULT_VIEWS: Record<ResultViewId, Component> = {
   // The initiative tracker: phases, per-item status + PR links, decisions, deviations, caveats.
   'initiative-tracker': InitiativeTrackerWindow,
   'initiative-planning': InitiativePlanningWindow,
+  // A project's stages, opened from a stage checkpoint card in the inbox.
+  'project-stages': ProjectStagesWindow,
   // The interactive document-interview gate: clarifying questions + answer / continue / proceed.
   'doc-interview': DocInterviewWindow,
   // The Ralph loop: the retry-until-done iteration history + the validation command + its output.

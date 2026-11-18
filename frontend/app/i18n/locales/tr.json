@@ -2600,7 +2600,8 @@
         "budget_threshold": "Okundu işaretle",
         "key_drift": "Eski kimlik bilgilerini kaldır",
         "merge_tag_request": "Eforu kaydet",
-        "bug_fishing_triage": "Okundu işaretle"
+        "bug_fishing_triage": "Okundu işaretle",
+        "stage_checkpoint": "Okundu olarak işaretle"
       },
       "toast": {
         "acted": "İşlendi olarak işaretlendi",
@@ -4903,7 +4904,8 @@
       "visual_confirmation_ready": "Görsel onaya hazır",
       "pr_review_ready": "PR inceleme bulguları",
       "initiative": "Girisim guncellemeleri",
-      "merge_tag_request": "İnceleme eforu etiketi istendi"
+      "merge_tag_request": "İnceleme eforu etiketi istendi",
+      "stage_checkpoint": "Kabul bekleyen aşamalar"
     },
     "role": {
       "engineering": "Mühendislik",
@@ -4977,7 +4979,8 @@
       "budget_paused": "Çalışmalar duraklatıldı (bütçe)",
       "budget_threshold": "Bütçe uyarısı",
       "key_drift": "Şifreleme anahtarı sapması",
-      "merge_tag_request": "İnceleme eforu etiketi istendi"
+      "merge_tag_request": "İnceleme eforu etiketi istendi",
+      "stage_checkpoint": "Proje aşaması kabul bekliyor"
     }
   },
   "docInterview": {

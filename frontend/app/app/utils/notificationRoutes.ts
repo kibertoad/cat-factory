@@ -26,6 +26,7 @@ export interface NotificationRouteDeps {
   openRequirementReview: (blockId: string) => void
   openClarityReview: (blockId: string) => void
   openInitiativeTracker: (blockId: string) => void
+  openProjectStages: (blockId: string) => void
   openOperatorDashboard: () => void
 }
 
@@ -106,6 +107,10 @@ export const NOTIFICATION_ROUTES: Record<Notification['type'], NotificationRoute
   merge_review: { verbKey: null, resolve: selectTask },
   pipeline_complete: { verbKey: null, resolve: selectTask },
   merge_tag_request: { verbKey: null, resolve: selectTask },
+  stage_checkpoint: {
+    verbKey: verb('review'),
+    resolve: byBlock((deps, blockId) => deps.openProjectStages(blockId)),
+  },
   ci_failed: { verbKey: null, resolve: selectTask },
   test_failed: { verbKey: null, resolve: selectTask },
   deploy_blocked: { verbKey: null, resolve: selectTask },

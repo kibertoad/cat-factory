@@ -134,6 +134,7 @@ export const notificationTypeSchema = v.picklist([
   'budget_threshold',
   'key_drift',
   'merge_tag_request',
+  'stage_checkpoint',
 ])
 export type NotificationType = v.InferOutput<typeof notificationTypeSchema>
 

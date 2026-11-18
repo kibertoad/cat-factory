@@ -20,7 +20,7 @@ export function createProjectStepController(
     definitions: ProjectDefinitionSource
     modules: ProjectKindModuleRegistry
     /** The projects module's stages, so a recorded outcome starts what it made ready. */
-    stages?: Pick<ProjectStageService, 'advance'>
+    stages?: Pick<ProjectStageService, 'advance' | 'announceCheckpoint'>
     /** The project task types the engine performs itself. */
     engineTasks?: readonly ProjectEngineTask[]
   },
