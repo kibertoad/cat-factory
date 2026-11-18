@@ -665,3 +665,9 @@ Additive, and the field is optional with no default, so a definition that names 
 The task-type vocabulary gains `writeup`: a project stage that composes the results of the stages it reads into one Markdown document, referencing the artifacts those results hold, run on the new `pl_writeup` pipeline. The platform names the outline sections the document lacks and drops an artifact no result it read holds. Like `research`, it belongs under a project and is refused under a service. The pipeline-purpose vocabulary gains `project-writeup`.
 
 Additive. A consumer built against 1.103.0 keeps parsing, and one that maps task types or purposes through an exhaustive table gains a member to name.
+
+## 1.105.0
+
+A staged project's stages are served and driven through the API: `GET /api/v1/projects/{projectId}/stages` lists each stage of the pinned definition with its derived state (status, whether it is stale, what it waits on, the report on its newest result against its acceptance criteria); `POST /api/v1/projects/{projectId}/stages/{stageId}/tasks` starts a stage (`write`); `POST /api/v1/projects/{projectId}/stages/{stageId}/checkpoint` accepts its newest result, with a `revision` for a task type that settles one (`decide`). A refusal carries a `project_stage_*` reason. An outcome now names its `taskType`, and a project kind serves `schemas.outcomes`, each task type's body schema keyed by that name; `schemas.outcome` stays, and stays null for a kind with several task types.
+
+Additive: new routes, a new field on the outcome envelope, and a new member of a kind's `schemas`.

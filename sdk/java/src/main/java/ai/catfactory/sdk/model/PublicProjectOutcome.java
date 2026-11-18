@@ -22,6 +22,7 @@ import org.jspecify.annotations.Nullable;
  * @param seq Range 1..unbounded.
  * @param stream the {@code stream} field.
  * @param taskId Always present; {@code null} when the server has no value for it.
+ * @param taskType Always present; {@code null} when the server has no value for it.
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record PublicProjectOutcome(
@@ -52,7 +53,10 @@ public record PublicProjectOutcome(
     @JsonProperty("stream") String stream,
 
     /** Always present; {@code null} when the server has no value for it. */
-    @JsonProperty("taskId") @Nullable String taskId
+    @JsonProperty("taskId") @Nullable String taskId,
+
+    /** Always present; {@code null} when the server has no value for it. */
+    @JsonProperty("taskType") @Nullable String taskType
 ) {
 
     /** A new builder for {@link PublicProjectOutcome}. */
@@ -79,6 +83,7 @@ public record PublicProjectOutcome(
         private @Nullable Integer seq;
         private @Nullable String stream;
         private @Nullable String taskId;
+        private @Nullable String taskType;
 
         /** Set {@code artifactRefs}. */
         public Builder artifactRefs(@Nullable List<String> artifactRefs) {
@@ -152,9 +157,15 @@ public record PublicProjectOutcome(
             return this;
         }
 
+        /** Set {@code taskType}. */
+        public Builder taskType(@Nullable String taskType) {
+            this.taskType = taskType;
+            return this;
+        }
+
         /** Build the {@link PublicProjectOutcome}. */
         public PublicProjectOutcome build() {
-            return new PublicProjectOutcome(artifactRefs, body, createdAt, definitionKey, definitionVersion, id, intent, projectId, schemaVersion, seq, stream, taskId);
+            return new PublicProjectOutcome(artifactRefs, body, createdAt, definitionKey, definitionVersion, id, intent, projectId, schemaVersion, seq, stream, taskId, taskType);
         }
     }
 }

@@ -90,6 +90,23 @@ export interface ProjectStageServiceDeps {
   logger?: Logger
 }
 
+/**
+ * `homedOnly` refuses a board that only mounts the project, for a caller (an API key) whose board
+ * may act on a project's tasks only where the project is homed.
+ */
+export interface HomedOnly {
+  homedOnly?: boolean
+}
+
+function assertHomed(mounted: MountedProject, workspaceId: string, opts: HomedOnly): void {
+  if (!opts.homedOnly || mounted.homeWorkspaceId === workspaceId) return
+  throw new ConflictError(
+    "A project's tasks are created and run on the board that homes it",
+    'project_homed_elsewhere',
+    { projectId: mounted.project.id },
+  )
+}
+
 /** The outcome facts a stage's state reads. */
 type OutcomeFacts = ReadonlyArray<StageOutcomeFact>
 
@@ -123,10 +140,28 @@ export class ProjectStageService {
     const stages = definition?.stages ?? []
     if (stages.length === 0) return []
     const { states } = await this.snapshot(project, stages, outcomes)
-    return stages.map((stage, i) => {
-      const { config: _config, ...shown } = stage
-      return { stage: shown, state: states[i]! }
-    })
+    return viewsOf(stages, states)
+  }
+
+  /**
+   * The stages of a project's pinned definition with where each stands, read from scratch. A read
+   * serves the pinned version even when it changed since, and nothing when it is gone, as the
+   * board's view does; starting a stage or accepting one is what refuses a changed definition.
+   */
+  async list(workspaceId: string, projectId: string): Promise<ProjectStageView[]> {
+    const { project } = await this.deps.getMounted(workspaceId, projectId)
+    const pin = await this.deps.records.getPin(project.id)
+    const resolved = pin
+      ? await this.deps.definitions.get(
+          project.accountId ?? '',
+          project.kind,
+          pin.definitionKey,
+          pin.definitionVersion,
+        )
+      : null
+    const stages = resolved?.definition.stages ?? []
+    if (stages.length === 0) return []
+    return viewsOf(stages, (await this.snapshot(project, stages)).states)
   }
 
   /**
@@ -141,8 +176,10 @@ export class ProjectStageService {
     stageId: string,
     editor: BlockEditAuthority,
     createdBy: string | null,
+    opts: HomedOnly = {},
   ): Promise<Block> {
     const mounted = await this.deps.getMounted(workspaceId, projectId)
+    assertHomed(mounted, workspaceId, opts)
     const snapshot = await this.snapshot(mounted.project, await this.stagesOf(mounted.project))
     const index = snapshot.stages.findIndex((s) => s.id === stageId)
     const stage = snapshot.stages[index]
@@ -279,8 +316,11 @@ export class ProjectStageService {
     stageId: string,
     userId: string | null,
     revision?: unknown,
+    opts: HomedOnly = {},
   ): Promise<ProjectStageState> {
-    const { project, homeWorkspaceId } = await this.deps.getMounted(workspaceId, projectId)
+    const mounted = await this.deps.getMounted(workspaceId, projectId)
+    assertHomed(mounted, workspaceId, opts)
+    const { project, homeWorkspaceId } = mounted
     const stages = await this.stagesOf(project)
     const index = stages.findIndex((s) => s.id === stageId)
     if (index < 0) throw new NotFoundError('ProjectStage', stageId)
@@ -390,6 +430,17 @@ export class ProjectStageService {
     }
     return false
   }
+}
+
+/** Each stage without its handler config, with its state. */
+function viewsOf(
+  stages: readonly ProjectStage[],
+  states: readonly ProjectStageState[],
+): ProjectStageView[] {
+  return stages.map((stage, i) => {
+    const { config: _config, ...shown } = stage
+    return { stage: shown, state: states[i]! }
+  })
 }
 
 /** The accepted result of each upstream stage, by stage id, which `stale` later compares. */

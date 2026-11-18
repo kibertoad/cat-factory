@@ -61,6 +61,8 @@ export const stageCriterionReportSchema = v.object({
 export type StageCriterionReport = v.InferOutput<typeof stageCriterionReportSchema>
 
 /**
+ * Served on `/api/v1` as a stage's `acceptance`, so a change to it is a public API change.
+ *
  * Whether a stage's result meets its exit criteria. `assessed`: the assessor replied, and each
  * criterion carries its computed status. `unavailable`: no assessor is wired. `failed`: the
  * assessment could not run, or its reply named no criterion in the expected shape; `note` says

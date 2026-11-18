@@ -21,18 +21,22 @@ function convert(schema: v.GenericSchema | undefined): JsonSchema | null {
 
 /**
  * What `GET /api/v1/project-kinds/{kind}` serves for a kind's schemas: null where it has none.
- * The outcome schema is its task handler's; a kind offering several handlers writes bodies of
- * several shapes, which one schema cannot state, so it is null there.
+ * `outcomes` states each task handler's body by task type, which an outcome names. `outcome` is
+ * the single handler's for a kind with one, and null for a kind with several, since one schema
+ * cannot state bodies of several shapes.
  */
 export function kindSchemas(module: ProjectKindModule | undefined): {
   spec: JsonSchema | null
   outcome: JsonSchema | null
+  outcomes: Record<string, JsonSchema | null>
   view: JsonSchema | null
 } {
-  const only = module?.handlers.length === 1 ? module.handlers[0] : undefined
+  const handlers = module?.handlers ?? []
+  const only = handlers.length === 1 ? handlers[0] : undefined
   return {
     spec: convert(module?.schemas?.spec),
     outcome: convert(only?.schemas?.outcome),
+    outcomes: Object.fromEntries(handlers.map((h) => [h.taskType, convert(h.schemas?.outcome)])),
     view: convert(module?.schemas?.view),
   }
 }

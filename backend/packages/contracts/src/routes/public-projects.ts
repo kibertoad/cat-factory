@@ -22,6 +22,9 @@ import {
   publicProjectTaskSchema,
   publicProjectViewSchema,
   publishProjectDefinitionSchema,
+  acceptPublicProjectStageSchema,
+  publicProjectStageListSchema,
+  publicProjectStageStateSchema,
 } from '../public-projects.js'
 import { errorResponses, singleStringParam, withMinScope, withPersonalUnlock } from './_shared.js'
 
@@ -42,6 +45,7 @@ const definitionVersionParams = withObjectKeys(projectDefinitionVersionParamsSch
 const projectTaskParams = withObjectKeys(v.object({ projectId: v.string(), taskId: v.string() }))
 const runIdParams = singleStringParam('runId')
 const outcomeParams = withObjectKeys(v.object({ projectId: v.string(), outcomeId: v.string() }))
+const stageParams = withObjectKeys(v.object({ projectId: v.string(), stageId: v.string() }))
 
 /** The project kinds the deployment offers. */
 export const listPublicProjectKindsContract = withMinScope(
@@ -257,6 +261,55 @@ export const getPublicProjectOutcomeContract = withMinScope(
     pathResolver: ({ projectId, outcomeId }) =>
       `/api/v1/projects/${projectId}/outcomes/${outcomeId}`,
     responsesByStatusCode: { 200: publicProjectOutcomeSchema, ...errorResponses },
+  }),
+)
+
+/**
+ * The stages of the project's pinned definition, in its order, each with its derived state:
+ * blocked, ready, in progress, awaiting its checkpoint or done, whether it is stale, what it waits
+ * on, and the report on its newest result against its acceptance criteria. Empty for a
+ * definition with no stages.
+ */
+export const listPublicProjectStagesContract = withMinScope(
+  'read',
+  defineApiContract({
+    method: 'get',
+    requestPathParamsSchema: projectIdParams,
+    pathResolver: ({ projectId }) => `/api/v1/projects/${projectId}/stages`,
+    responsesByStatusCode: { 200: publicProjectStageListSchema, ...errorResponses },
+  }),
+)
+
+/**
+ * Start a stage: create its task under the project, bound to the stage. Refused with a
+ * `project_stage_*` reason unless the stage is ready (or done and repeatable). The task's run is
+ * started like any project task's.
+ */
+export const startPublicProjectStageContract = withMinScope(
+  'write',
+  defineApiContract({
+    method: 'post',
+    requestPathParamsSchema: stageParams,
+    pathResolver: ({ projectId, stageId }) =>
+      `/api/v1/projects/${projectId}/stages/${stageId}/tasks`,
+    requestBodySchema: ContractNoBody,
+    responsesByStatusCode: { 201: publicProjectTaskSchema, ...errorResponses },
+  }),
+)
+
+/**
+ * Accept a stage's newest result at its checkpoint, with a `revision` for a task type that
+ * settles one, so the stages after it count it. `decide` scope: it answers a checkpoint.
+ */
+export const acceptPublicProjectStageContract = withMinScope(
+  'decide',
+  defineApiContract({
+    method: 'post',
+    requestPathParamsSchema: stageParams,
+    pathResolver: ({ projectId, stageId }) =>
+      `/api/v1/projects/${projectId}/stages/${stageId}/checkpoint`,
+    requestBodySchema: v.optional(acceptPublicProjectStageSchema),
+    responsesByStatusCode: { 200: publicProjectStageStateSchema, ...errorResponses },
   }),
 )
 

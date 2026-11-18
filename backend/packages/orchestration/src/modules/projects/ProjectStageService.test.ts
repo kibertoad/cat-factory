@@ -1,3 +1,4 @@
+import { UNATTRIBUTED_BLOCK_EDIT_AUTHORITY } from '@cat-factory/contracts'
 import type {
   Project,
   ProjectDefinition,
@@ -172,5 +173,45 @@ describe('ProjectStageService.advance', () => {
     await h.service.advance('ws_home', project.id)
     expect(h.records.listStageTasks).not.toHaveBeenCalled()
     expect(h.tasks).toEqual([])
+  })
+})
+
+describe('ProjectStageService.list', () => {
+  it('serves the stages of a definition that changed since the pin, which a start refuses', async () => {
+    const { service, records } = harness({ stages: [stage('discover')] })
+    records.getPin.mockResolvedValue({
+      projectId: project.id,
+      definitionKey: 'acme:staged',
+      definitionVersion: 1,
+      definitionHash: 'an-older-hash',
+      inputs: {},
+    })
+    const listed = await service.list('ws_home', project.id)
+    expect(listed.map((v) => [v.stage.id, v.state.status])).toEqual([['discover', 'ready']])
+    await expect(
+      service.createTask(
+        'ws_home',
+        project.id,
+        'discover',
+        UNATTRIBUTED_BLOCK_EDIT_AUTHORITY,
+        null,
+      ),
+    ).rejects.toMatchObject({ details: { reason: 'project_definition_changed' } })
+  })
+
+  it('refuses a key-driven start on a board that only mounts the project', async () => {
+    const { service } = harness({ stages: [stage('discover')] })
+    await expect(
+      service.createTask(
+        'ws_other',
+        project.id,
+        'discover',
+        UNATTRIBUTED_BLOCK_EDIT_AUTHORITY,
+        null,
+        {
+          homedOnly: true,
+        },
+      ),
+    ).rejects.toMatchObject({ details: { reason: 'project_homed_elsewhere' } })
   })
 })

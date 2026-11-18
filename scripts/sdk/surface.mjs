@@ -236,6 +236,9 @@ const SURFACE = {
   listPublicProjectOutcomes: { group: 'projects', method: 'listOutcomes' },
   getPublicProjectOutcome: { group: 'projects', method: 'getOutcome' },
   getPublicProjectView: { group: 'projects', method: 'getView' },
+  listPublicProjectStages: { group: 'projects', method: 'listStages' },
+  startPublicProjectStage: { group: 'projects', method: 'startStage' },
+  acceptPublicProjectStage: { group: 'projects', method: 'acceptStage' },
   resumePublicRunCredential: { group: 'decisions', method: 'resumeCredential' },
 
   listPublicKaizenEntries: { group: 'kaizen', method: 'listEntries', paginates: 'entries' },

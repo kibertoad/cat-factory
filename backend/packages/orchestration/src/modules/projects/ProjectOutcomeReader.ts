@@ -5,7 +5,7 @@ import type {
   ProjectRecordRepository,
 } from '@cat-factory/kernel'
 import type { ProjectOutcomeStore } from './ProjectOutcomeStore.js'
-import { decodeOutcome, outcomeMetaOf } from './outcomeDecoding.js'
+import { decodeOutcome, outcomeMetaOf, outcomeTaskType } from './outcomeDecoding.js'
 
 export interface ProjectOutcomeReaderDeps {
   records: ProjectRecordRepository
@@ -30,20 +30,27 @@ type ReadableProject = Pick<Project, 'id' | 'rootBlockId' | 'kind' | 'accountId'
 export class ProjectOutcomeReader {
   constructor(private readonly deps: ProjectOutcomeReaderDeps) {}
 
-  /** The project's outcomes without their bodies, `seq` ascending; one stream's when given. */
-  async list(projectId: string, stream?: string): Promise<ProjectOutcomeMeta[]> {
-    return (await this.deps.records.listOutcomes(projectId, stream)).map(outcomeMetaOf)
+  /**
+   * The project's outcomes without their bodies, `seq` ascending; one stream's when given. Each
+   * names the task type whose handler wrote it, attributed as the decoder attributes it.
+   */
+  async list(
+    project: Pick<Project, 'id' | 'kind'>,
+    stream?: string,
+  ): Promise<(ProjectOutcomeMeta & { taskType: string | null })[]> {
+    return (await this.deps.records.listOutcomes(project.id, stream)).map((row) => ({
+      ...outcomeMetaOf(row),
+      taskType: outcomeTaskType(this.deps.modules, project.kind, row),
+    }))
   }
 
-  async get(project: ReadableProject, id: string): Promise<ProjectOutcome | null> {
+  async get(
+    project: ReadableProject,
+    id: string,
+  ): Promise<(ProjectOutcome & { taskType: string | null }) | null> {
     const stored = await this.deps.outcomes.get(project, id)
     if (!stored) return null
-    const { taskType: _taskType, ...outcome } = decodeOutcome(
-      this.deps.modules,
-      project.kind,
-      stored,
-    )
-    return outcome
+    return decodeOutcome(this.deps.modules, project.kind, stored)
   }
 
   /**

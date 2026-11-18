@@ -25,6 +25,10 @@ export const PROJECT_COMPONENT_SCHEMAS = {
   PublicProjectOutcomeList: 'publicProjectOutcomeListSchema',
   PublicProjectView: 'publicProjectViewSchema',
   PublicCredentialResume: 'publicCredentialResumeSchema',
+  PublicProjectStage: 'publicProjectStageSchema',
+  PublicProjectStageList: 'publicProjectStageListSchema',
+  PublicProjectStageState: 'publicProjectStageStateSchema',
+  AcceptPublicProjectStage: 'acceptPublicProjectStageSchema',
 }
 
 const OPAQUE =
@@ -42,7 +46,7 @@ export const PROJECT_OPERATION_DOCS = {
     tag: 'Projects',
     summary: 'Get a project kind with its schemas',
     description:
-      "One kind with the JSON Schemas of the shapes the rest of this surface leaves opaque: a definition's `spec`, an outcome's `body` (in the schema version the deployment writes) and a project's `view`. Each is null for a kind that declares none. A schema states the shape; a kind can enforce more when it parses (unique ids, say). An unknown kind is `404`.",
+      "One kind with the JSON Schemas of the shapes the rest of this surface leaves opaque: a definition's `spec`, an outcome's `body` (in the schema version the deployment writes) and a project's `view`. Each is null for a kind that declares none. `outcomes` states each task type's body, keyed by the `taskType` an outcome names; `outcome` is that body for a kind with one task type and null for a kind with several. A schema states the shape; a kind can enforce more when it parses (unique ids, say). An unknown kind is `404`.",
   },
   listPublicProjectDefinitions: {
     tag: 'Projects',
@@ -113,7 +117,7 @@ export const PROJECT_OPERATION_DOCS = {
     tag: 'Projects',
     summary: "List a project's outcomes",
     description:
-      "Every outcome the project's tasks recorded, without bodies, ordered by `seq`: the order the tasks were STARTED, across every stream. `stream` narrows to one stream. An outcome is immutable once written.",
+      "Every outcome the project's tasks recorded, without bodies, ordered by `seq`: the order the tasks were STARTED, across every stream. `stream` narrows to one stream. An outcome is immutable once written. Each names its `taskType`, the task type whose handler decodes its body (its schema is the kind's `schemas.outcomes[taskType]`), or null when no handler in the deployment decodes it.",
   },
   getPublicProjectOutcome: {
     tag: 'Projects',
@@ -130,6 +134,24 @@ export const PROJECT_OPERATION_DOCS = {
       "The project's current state as its kind reads every outcome (for `research`: the findings folded by question, with coverage of the pinned definition). " +
       OPAQUE +
       ' `view` is null for a kind that computes none; read its outcomes instead. A body that cannot be read is `503` with `outcome_body_unavailable`.',
+  },
+  listPublicProjectStages: {
+    tag: 'Projects',
+    summary: "List a staged project's stages",
+    description:
+      "Each stage of the definition the project pinned, in its order, with where it stands. A stage's state is derived, never stored: `blocked` (a stage it runs after has no accepted result, named in `waitingOn`), `ready`, `in-progress` (its task, `activeTaskId`, has no result yet), `awaiting-checkpoint` (its newest result waits for a person to accept it) or `done`. `stale` says an upstream result it built on has since changed. `acceptance` reports how its newest result meets the stage's acceptance criteria. Empty for a definition with no stages. A read serves the pinned version even when the definition changed since.",
+  },
+  startPublicProjectStage: {
+    tag: 'Projects',
+    summary: 'Start a stage',
+    description:
+      "Create the stage's task under the project, bound to the stage, and return it; start its run as any project task's (`POST /api/v1/projects/{projectId}/tasks/{taskId}/start`). Refused with `409` and a `details.reason` of `project_stage_blocked`, `project_stage_in_progress`, `project_stage_awaiting_checkpoint` or `project_stage_not_repeatable` unless the stage is ready, or done and repeatable. Only on the board that homes the project (`project_homed_elsewhere`). Requires a `write` key.",
+  },
+  acceptPublicProjectStage: {
+    tag: 'Projects',
+    summary: "Accept a stage's result at its checkpoint",
+    description:
+      "Accept the stage's newest result so the stages after it count it, and return the stage's state. A task type that settles its result at the checkpoint takes a `revision` (a decision register's choices, say) and may require one (`422 project_stage_revision_required`); one that takes none refuses it (`project_stage_revision_unsupported`). A stage whose result started tasks waits until each is done or removed (`409 project_stage_work_unsettled`). `409 project_stage_checkpoint_not_pending` when nothing waits. The acceptance is recorded with no person. Requires a `decide` key.",
   },
   resumePublicRunCredential: {
     tag: 'Decisions',

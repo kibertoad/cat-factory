@@ -18,6 +18,7 @@ from .errors import _repeated_cursor
 from .models import (
     _encode,
     _enum,
+    AcceptPublicProjectStage,
     AcknowledgeKaizenEntry,
     ActPublicNotificationRequest,
     AddPublicTaskDependencyRequest,
@@ -132,6 +133,8 @@ from .models import (
     PublicProjectOutcome,
     PublicProjectOutcomeList,
     PublicProjectServices,
+    PublicProjectStageList,
+    PublicProjectStageState,
     PublicProjectTask,
     PublicProjectTaskList,
     PublicProjectView,
@@ -3232,9 +3235,11 @@ class ProjectKindsResource:
         """Get a project kind with its schemas
         One kind with the JSON Schemas of the shapes the rest of this surface leaves opaque:
         a definition's `spec`, an outcome's `body` (in the schema version the deployment
-        writes) and a project's `view`. Each is null for a kind that declares none. A schema
-        states the shape; a kind can enforce more when it parses (unique ids, say). An
-        unknown kind is `404`.
+        writes) and a project's `view`. Each is null for a kind that declares none.
+        `outcomes` states each task type's body, keyed by the `taskType` an outcome names;
+        `outcome` is that body for a kind with one task type and null for a kind with
+        several. A schema states the shape; a kind can enforce more when it parses (unique
+        ids, say). An unknown kind is `404`.
         `GET /api/v1/project-kinds/{kind}` (operation `getPublicProjectKind`).
         """
         raw = self._transport.request(
@@ -3330,6 +3335,28 @@ class ProjectsResource:
 
     def __init__(self, transport: Transport) -> None:
         self._transport = transport
+
+    def accept_stage(self, project_id: str, stage_id: str, body: AcceptPublicProjectStage | None = None, *, timeout: float | None = None) -> PublicProjectStageState:
+        """Accept a stage's result at its checkpoint
+        Accept the stage's newest result so the stages after it count it, and return the
+        stage's state. A task type that settles its result at the checkpoint takes a
+        `revision` (a decision register's choices, say) and may require one (`422
+        project_stage_revision_required`); one that takes none refuses it
+        (`project_stage_revision_unsupported`). A stage whose result started tasks waits
+        until each is done or removed (`409 project_stage_work_unsettled`). `409
+        project_stage_checkpoint_not_pending` when nothing waits. The acceptance is recorded
+        with no person. Requires a `decide` key.
+        `POST /api/v1/projects/{projectId}/stages/{stageId}/checkpoint` (operation
+        `acceptPublicProjectStage`).
+        """
+        raw = self._transport.request(
+            "POST",
+            f"/api/v1/projects/{_quote(project_id)}/stages/{_quote(stage_id)}/checkpoint",
+            body={} if body is None else _encode(body),
+            query=None,
+            timeout=timeout,
+        )
+        return PublicProjectStageState.from_dict(raw)
 
     def create(self, body: CreatePublicProject, *, timeout: float | None = None) -> PublicProject:
         """Create a project
@@ -3467,7 +3494,9 @@ class ProjectsResource:
         """List a project's outcomes
         Every outcome the project's tasks recorded, without bodies, ordered by `seq`: the
         order the tasks were STARTED, across every stream. `stream` narrows to one stream.
-        An outcome is immutable once written.
+        An outcome is immutable once written. Each names its `taskType`, the task type whose
+        handler decodes its body (its schema is the kind's `schemas.outcomes[taskType]`), or
+        null when no handler in the deployment decodes it.
         `GET /api/v1/projects/{projectId}/outcomes` (operation `listPublicProjectOutcomes`).
         """
         raw = self._transport.request(
@@ -3477,6 +3506,26 @@ class ProjectsResource:
             timeout=timeout,
         )
         return PublicProjectOutcomeList.from_dict(raw)
+
+    def list_stages(self, project_id: str, *, timeout: float | None = None) -> PublicProjectStageList:
+        """List a staged project's stages
+        Each stage of the definition the project pinned, in its order, with where it stands.
+        A stage's state is derived, never stored: `blocked` (a stage it runs after has no
+        accepted result, named in `waitingOn`), `ready`, `in-progress` (its task,
+        `activeTaskId`, has no result yet), `awaiting-checkpoint` (its newest result waits
+        for a person to accept it) or `done`. `stale` says an upstream result it built on
+        has since changed. `acceptance` reports how its newest result meets the stage's
+        acceptance criteria. Empty for a definition with no stages. A read serves the pinned
+        version even when the definition changed since.
+        `GET /api/v1/projects/{projectId}/stages` (operation `listPublicProjectStages`).
+        """
+        raw = self._transport.request(
+            "GET",
+            f"/api/v1/projects/{_quote(project_id)}/stages",
+            query=None,
+            timeout=timeout,
+        )
+        return PublicProjectStageList.from_dict(raw)
 
     def list_tasks(self, project_id: str, *, timeout: float | None = None) -> PublicProjectTaskList:
         """List a project's tasks
@@ -3512,6 +3561,26 @@ class ProjectsResource:
         raw = self._transport.request(
             "POST",
             f"/api/v1/projects/{_quote(project_id)}/tasks/{_quote(task_id)}/retry",
+            query=None,
+            timeout=timeout,
+        )
+        return PublicProjectTask.from_dict(raw)
+
+    def start_stage(self, project_id: str, stage_id: str, *, timeout: float | None = None) -> PublicProjectTask:
+        """Start a stage
+        Create the stage's task under the project, bound to the stage, and return it; start
+        its run as any project task's (`POST
+        /api/v1/projects/{projectId}/tasks/{taskId}/start`). Refused with `409` and a
+        `details.reason` of `project_stage_blocked`, `project_stage_in_progress`,
+        `project_stage_awaiting_checkpoint` or `project_stage_not_repeatable` unless the
+        stage is ready, or done and repeatable. Only on the board that homes the project
+        (`project_homed_elsewhere`). Requires a `write` key.
+        `POST /api/v1/projects/{projectId}/stages/{stageId}/tasks` (operation
+        `startPublicProjectStage`).
+        """
+        raw = self._transport.request(
+            "POST",
+            f"/api/v1/projects/{_quote(project_id)}/stages/{_quote(stage_id)}/tasks",
             query=None,
             timeout=timeout,
         )
