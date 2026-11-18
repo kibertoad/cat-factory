@@ -161,7 +161,7 @@ bucket for every new repository method in the same PR.
       .../stages/{stageId}/tasks` (`write`) and `POST .../stages/{stageId}/checkpoint`
       (`decide`), each with its `scripts/sdk/surface.mjs` entry; the public outcome names its
       `taskType`, and a kind serves each task type's outcome schema (`schemas.outcomes`). PR:
-      _pending_
+      [#2533](https://github.com/kibertoad/cat-factory/pull/2533)
 - [ ] **9b. Stage rail.** The stage rail in the project takeover (status, stale, waiting on
       whom, the acceptance report, starting a stage and accepting its checkpoint) and a
       checkpoint notification. Website PR for the user-facing behaviour.
