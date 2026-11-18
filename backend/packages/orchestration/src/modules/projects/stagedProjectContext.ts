@@ -16,7 +16,7 @@ import { stageResultRows } from './stageUpstream.js'
 // A STAGED project's current result as linked context for another task: each stage's ACCEPTED
 // result, rendered by the handler of the task type that wrote it, in the definition's order. A
 // stage with no accepted result yet is stated, never left out, and a result still awaiting its
-// checkpoint is not one. Design: `docs/initiatives/staged-project-definitions.md`.
+// checkpoint is not one. Design: `backend/docs/adr/0070-staged-project-definitions.md`.
 
 /** What a staged project's result is made of: per stage, its accepted result and its rows. */
 export interface StagedSelection {

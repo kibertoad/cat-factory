@@ -7,7 +7,7 @@ import { taskTypeRequiresProject } from './primitives.js'
 // one ordinary task in each linked service, links the project to it so the task reads the stages'
 // accepted results, and starts its run; its outcome records what it created. The engine performs
 // it, with no agent. Its checkpoint is accepted only once every task it created has settled.
-// Design: `docs/initiatives/staged-project-definitions.md`.
+// Design: `backend/docs/adr/0070-staged-project-definitions.md`.
 // ---------------------------------------------------------------------------
 
 /** The built-in task type a spawn stage runs as. */

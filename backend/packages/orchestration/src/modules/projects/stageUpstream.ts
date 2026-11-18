@@ -20,7 +20,7 @@ import { renderStageResult } from './stageRendering.js'
 // What a staged task reads of the stages its stage consumes. It reads exactly the upstream results
 // its stage task STARTED from (the `basis` recorded when the task was created), so what it read is
 // what `stale` later compares against, each rendered by the handler of the task type that wrote
-// the stream. Design: `docs/initiatives/staged-project-definitions.md`.
+// the stream. Design: `backend/docs/adr/0070-staged-project-definitions.md`.
 
 export interface StageUpstreamDeps {
   outcomes: Pick<ProjectOutcomeStore, 'bodiesOf'>

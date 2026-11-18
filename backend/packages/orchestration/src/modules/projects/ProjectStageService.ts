@@ -33,7 +33,7 @@ import { type StageRevisionDeps, settleStageRevision } from './stageRevision.js'
 // stage's task, and a person accepting a stage's result at its checkpoint. A stage's state is
 // DERIVED (`deriveProjectStageStates`) from the stage-task records and the project's outcomes, so
 // nothing here stores a status, and a read never writes. Design:
-// `docs/initiatives/staged-project-definitions.md`.
+// `backend/docs/adr/0070-staged-project-definitions.md`.
 // ---------------------------------------------------------------------------
 
 /** Creates and removes a task block under a container, on the board that homes it. */

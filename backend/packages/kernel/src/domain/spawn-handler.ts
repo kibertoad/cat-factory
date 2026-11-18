@@ -18,7 +18,7 @@ import type { ProjectTaskHandler, ProjectTaskInput } from './project-kind-module
 // project links. The engine performs its run (no agent), creating one task per linked service with
 // the project linked, and records what it created. A person accepts the stage at its checkpoint
 // once every task it created has settled. Any project kind may offer it beside its own handlers.
-// Design: `docs/initiatives/staged-project-definitions.md`.
+// Design: `backend/docs/adr/0070-staged-project-definitions.md`.
 // ---------------------------------------------------------------------------
 
 function configOf(input: ProjectTaskInput<SpawnRecord>): SpawnStageConfig {

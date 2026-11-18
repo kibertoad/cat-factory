@@ -5,7 +5,7 @@ import { projectSlugSchema } from './project-slug.js'
 // A project stage's exit criteria, and the report of whether its result meets them. The model
 // argues each criterion (met or unmet, with passages quoted from the result); the platform
 // computes the status from the quotes, and a person decides at the stage's checkpoint. Design:
-// `docs/initiatives/staged-project-definitions.md`.
+// `backend/docs/adr/0070-staged-project-definitions.md`.
 // ---------------------------------------------------------------------------
 
 export const STAGE_ACCEPTANCE_CRITERIA_MAX = 20

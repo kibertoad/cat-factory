@@ -23,7 +23,7 @@ import type { StageRunStarter, StageTaskBoard } from './ProjectStageService.js'
 // started. Every created task's id is derived from the stage task and the service, so a replayed
 // run finds the tasks it already made instead of making them twice. A service it cannot put a
 // task into is recorded as skipped with the reason, never left out. Design:
-// `docs/initiatives/staged-project-definitions.md`.
+// `backend/docs/adr/0070-staged-project-definitions.md`.
 
 /** What a task the engine performs, rather than an agent, is given when its step runs. */
 export interface ProjectEngineTaskInput {

@@ -6,7 +6,7 @@ import { type DefinitionParseResult, describeValibotIssues } from './project-def
 // into one Markdown document (a knowledge document, a handoff), referencing the binary artifacts
 // those results hold. The platform checks what the agent cannot be trusted to state about its own
 // work: which sections of the stage's outline the document lacks, and which artifacts it names
-// that no result it read holds. Design: `docs/initiatives/staged-project-definitions.md`.
+// that no result it read holds. Design: `backend/docs/adr/0070-staged-project-definitions.md`.
 // ---------------------------------------------------------------------------
 
 /** The built-in task type a document stage runs as. */

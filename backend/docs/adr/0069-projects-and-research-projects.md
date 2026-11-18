@@ -184,7 +184,8 @@ At dispatch, every linked project's current result is rendered by its kind's mod
 (`renderContext`) from its decoded outcomes and pinned definition; a kind without one contributes
 the newest outcome of each stream as recorded. A staged project contributes each stage's accepted
 result instead, rendered by the handler of the stage's task type, and a project pinned to a
-definition the deployment cannot resolve is stated as such. Each contributes a summary and a coverage line to
+definition the deployment cannot resolve is stated as such. Stages themselves are
+[ADR 0070](./0070-staged-project-definitions.md). Each contributes a summary and a coverage line to
 the prompt's linked-context index and the full result as a `project-<name>.md` file in
 `.cat-context/`, scrubbed of secrets. Research contributes its folded findings with coverage of the
 pinned definition. The step records which outcome each linked project contributed

@@ -8,7 +8,7 @@ import type { AgentKindDefinition, AgentKindRegistry } from './registry.js'
 // composes the results of the stages its stage reads (materialised as `.cat-context/` files, which
 // the project job's prompt indexes) into one Markdown document, referencing the artifacts those
 // results hold. The platform checks the outline and the artifacts it names afterwards. Design:
-// `docs/initiatives/staged-project-definitions.md`.
+// `backend/docs/adr/0070-staged-project-definitions.md`.
 // ---------------------------------------------------------------------------
 
 export const PROJECT_WRITER_KIND = PROJECT_WRITER_AGENT_KIND
