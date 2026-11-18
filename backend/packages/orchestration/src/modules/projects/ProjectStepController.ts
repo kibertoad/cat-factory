@@ -201,9 +201,16 @@ export class ProjectStepController {
         reason: 'project_task_already_recorded',
       })
     }
-    const input = this.taskInput(task, block)
     if (!step.project) {
-      const planned = task.handler.planTask(input)
+      // Only a first dispatch plans, so only it reads which artifacts the stages it reads hold.
+      const planned = task.handler.planTask({
+        ...this.taskInput(task, block),
+        ...(task.staged && task.definition
+          ? {
+              upstreamArtifacts: upstreamArtifactRefs(task.definition, task.staged, task.envelopes),
+            }
+          : {}),
+      })
       const seq = await this.deps.records.reserveTaskSeq(task.project.id, block.id)
       step.project = {
         projectId: task.project.id,
@@ -424,9 +431,6 @@ export class ProjectStepController {
 
   private taskInput(task: ResolvedTask, block: Block): ProjectTaskInput<unknown> {
     return {
-      ...(task.staged && task.definition
-        ? { upstreamArtifacts: upstreamArtifactRefs(task.definition, task.staged, task.envelopes) }
-        : {}),
       task: block,
       definition: task.definition,
       inputs: task.inputs,

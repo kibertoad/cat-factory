@@ -1,5 +1,6 @@
 import { PROJECT_WRITER_AGENT_KIND, type WriteupBrief } from '@cat-factory/contracts'
 import type { AgentRunContext } from '@cat-factory/kernel'
+import { fencedJson } from './fenced-json.js'
 import type { AgentKindDefinition, AgentKindRegistry } from './registry.js'
 
 // ---------------------------------------------------------------------------
@@ -32,13 +33,6 @@ const PROJECT_WRITER_SYSTEM_PROMPT = [
   '',
   `Reply with ONLY a JSON object of this shape: ${WRITEUP_SHAPE_HINT}`,
 ].join('\n')
-
-function fencedJson(value: unknown): string[] {
-  const json = JSON.stringify(value, null, 2)
-  const longest = Math.max(0, ...(json.match(/`+/g) ?? []).map((run) => run.length))
-  const fence = '`'.repeat(Math.max(3, longest + 1))
-  return [`${fence}json`, json, fence]
-}
 
 /** The user prompt: the stage's brief, its outline, the artifacts it may cite, any earlier draft. */
 export function projectWriterUserPrompt(context: AgentRunContext): string {

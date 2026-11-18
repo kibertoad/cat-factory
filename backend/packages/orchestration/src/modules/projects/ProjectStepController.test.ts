@@ -609,16 +609,33 @@ describe('ProjectStepController with a staged project', () => {
     const reading = stages.map((s) =>
       s.id === 'deepen' ? { ...s, consumes: [{ stage: 'discover' }] } : s,
     )
-    const { ctrl, task } = harness({
+    // Planned while discover's result could be read.
+    const readable = harness({
+      kind: 'research',
+      stages: reading,
+      stageTasks: [
+        { ...bound('discover'), taskId: 'task_1', recordedAt: 2 },
+        { ...bound('deepen'), basis: { discover: 'pout_task_1' } },
+      ],
+      rows: [outcomeRow('task_1', 1, body({ discover: 'answered' }), 'discovery')],
+    })
+    const step = { ...researching }
+    await readable.ctrl.prepare(step, readable.task)
+    const recorded = step.project?.upstream
+    expect(recorded).toEqual([{ stageId: 'discover', outcomeId: 'pout_task_1', seq: 1 }])
+
+    // A fresh dispatch now refuses before it plans anything, and a re-attach reads nothing.
+    const vanished = harness({
       kind: 'research',
       stages: reading,
       stageTasks: [{ ...bound('deepen'), basis: { discover: 'pout_vanished' } }],
     })
-    const recorded = [{ stageId: 'discover', outcomeId: 'pout_task_1', seq: 1 }]
-    const step = { ...researching }
-    await expect(ctrl.prepare(step, task)).rejects.toBeDefined()
-    step.project = { ...step.project!, upstream: recorded }
-    const run = await ctrl.prepare(step, task, { reattach: true })
+    const fresh = { ...researching }
+    await expect(vanished.ctrl.prepare(fresh, vanished.task)).rejects.toMatchObject({
+      details: { reason: 'project_stage_upstream_unreadable' },
+    })
+    expect(fresh.project).toBeUndefined()
+    const run = await vanished.ctrl.prepare(step, vanished.task, { reattach: true })
     expect(run.upstream).toEqual([])
     expect(step.project?.upstream).toEqual(recorded)
   })

@@ -87,7 +87,9 @@ export const writeupTaskHandler: ProjectTaskHandler<Writeup> = {
   },
 
   brief(input): WriteupBrief {
-    const { config, artifacts } = planOf(input.plan)
+    // The stage's own config, refused when unreadable; the plan only fixes the artifacts.
+    const config = configOf(input)
+    const { artifacts } = planOf(input.plan)
     const prior = input.outcomes.at(-1)?.body
     return {
       brief: config.brief,
@@ -128,8 +130,8 @@ export const writeupTaskHandler: ProjectTaskHandler<Writeup> = {
     }
   },
 
-  // The document reads what earlier stages accepted.
-  stageRequires: { after: true },
+  // The document is composed from the results of the stages it reads.
+  stageRequires: { consumes: true },
 
   schemas: { outcome: writeupSchema },
 }

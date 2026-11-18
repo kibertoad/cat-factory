@@ -152,9 +152,11 @@ bucket for every new repository method in the same PR.
       `project-writer` agent composes the results of the stages it reads into one Markdown
       document (title, summary, the document, the artifacts it references) against the stage's
       brief and outline. The platform names the outline sections the document has no heading
-      for and drops, naming it, an artifact no result it read holds; a handler learns those
-      artifacts through `ProjectTaskInput.upstreamArtifacts`, the refs of the results it started
-      from. PR: [#2532](https://github.com/kibertoad/cat-factory/pull/2532)
+      for, drops (naming it) an artifact no result it read holds, keeps each artifact once and
+      names those past the cap, and refuses a reply with no document written. A handler learns
+      the artifacts it may reference through `ProjectTaskInput.upstreamArtifacts`, derived from
+      the same rows the upstream rendering reads and only on a first dispatch; a writeup stage
+      must read at least one stage (`stageRequires.consumes`). PR: [#2532](https://github.com/kibertoad/cat-factory/pull/2532)
 - [ ] **9. Surfaces.** The stage rail in the project takeover (status, stale, waiting on whom), a
       checkpoint notification, and additive public API routes to list stages, start one and clear
       a checkpoint, each with its `scripts/sdk/surface.mjs` entry. Website PR for the user-facing

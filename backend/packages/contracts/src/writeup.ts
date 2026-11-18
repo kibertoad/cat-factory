@@ -38,20 +38,26 @@ export type WriteupStageConfig = v.InferOutput<typeof writeupStageConfigSchema>
 /** An artifact the document references: one a result the stage read holds. */
 export const writeupArtifactSchema = v.object({
   ref: v.pipe(v.string(), v.minLength(1)),
-  caption: short,
+  caption: v.optional(short, ''),
 })
 
-/** The document as recorded. */
+/**
+ * The document, as the agent replies it and as recorded. A reply's artifacts are not capped here:
+ * `settleWriteup` keeps at most {@link WRITEUP_ARTIFACTS_MAX} and names the rest. An empty document
+ * does not parse, so a reply with nothing written fails its run rather than reading as finished.
+ */
 export const writeupSchema = v.object({
   title: heading,
   /** A few sentences on what the document covers. */
-  summary: short,
-  markdown: v.pipe(v.string(), v.maxLength(WRITEUP_MARKDOWN_MAX)),
-  artifacts: v.pipe(v.array(writeupArtifactSchema), v.maxLength(WRITEUP_ARTIFACTS_MAX)),
+  summary: v.optional(short, ''),
+  markdown: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(WRITEUP_MARKDOWN_MAX)),
+  artifacts: v.optional(v.array(writeupArtifactSchema), []),
   /** Outline sections the document has no heading for, as the platform found. */
   missingSections: v.optional(v.array(v.string()), []),
   /** Artifacts the agent named that no result the stage read holds, left out of `artifacts`. */
   droppedArtifacts: v.optional(v.array(v.string()), []),
+  /** Held artifacts past the most a document keeps, left out of `artifacts`. */
+  overflowArtifacts: v.optional(v.array(v.string()), []),
 })
 export type Writeup = v.InferOutput<typeof writeupSchema>
 
@@ -90,15 +96,16 @@ export function missingOutlineSections(outline: readonly string[], markdown: str
       else if (line.startsWith(fence)) fence = null
       continue
     }
-    const match = fence === null ? /^#{1,6}\s+(.*?)\s*#*\s*$/.exec(line) : null
+    // A closing `#` run is decoration only after whitespace, so `C#` keeps its `#`.
+    const match = fence === null ? /^#{1,6}\s+(.*?)(?:\s+#+)?\s*$/.exec(line) : null
     if (match) headings.add(normalizedHeading(match[1]!))
   }
   return outline.filter((section) => !headings.has(normalizedHeading(section)))
 }
 
 /**
- * The document as the platform records it: artifacts no result the stage read holds dropped and
- * named, and the outline sections it lacks named.
+ * The document as the platform records it: each artifact once, one no result the stage read holds
+ * dropped and named, those past the cap named, and the outline sections it lacks named.
  */
 export function settleWriteup(
   reply: Writeup,
@@ -106,10 +113,13 @@ export function settleWriteup(
   allowedArtifacts: readonly string[],
 ): Writeup {
   const allowed = new Set(allowedArtifacts)
+  const unique = [...new Map(reply.artifacts.map((a) => [a.ref, a] as const)).values()]
+  const held = unique.filter((a) => allowed.has(a.ref))
   return {
     ...reply,
-    artifacts: reply.artifacts.filter((a) => allowed.has(a.ref)),
-    droppedArtifacts: reply.artifacts.filter((a) => !allowed.has(a.ref)).map((a) => a.ref),
+    artifacts: held.slice(0, WRITEUP_ARTIFACTS_MAX),
+    droppedArtifacts: unique.filter((a) => !allowed.has(a.ref)).map((a) => a.ref),
+    overflowArtifacts: held.slice(WRITEUP_ARTIFACTS_MAX).map((a) => a.ref),
     missingSections: missingOutlineSections(outline, reply.markdown),
   }
 }

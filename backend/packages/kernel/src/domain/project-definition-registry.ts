@@ -98,6 +98,15 @@ function parseStageConfig(
       ],
     }
   }
+  if (handler.stageRequires?.consumes && stage.consumes.length === 0) {
+    return {
+      ok: false,
+      issues: [
+        `task type '${stage.taskType}' works from the results of earlier stages, so its stage must ` +
+          'read at least one',
+      ],
+    }
+  }
   if (handler.stageRequires?.after && stage.after.length === 0) {
     return {
       ok: false,
