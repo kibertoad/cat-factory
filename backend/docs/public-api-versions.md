@@ -659,3 +659,9 @@ Additive. A consumer built against 1.101.0 keeps parsing, and one that maps task
 A project definition's stage may declare `acceptance`: up to 20 criteria, each an `id` slug and a `statement`, ids unique. A stage that declares them must declare a `checkpoint`. Each result the stage records is assessed against them, and the report is shown where the stage's state is read.
 
 Additive, and the field is optional with no default, so a definition that names none hashes as before.
+
+## 1.104.0
+
+The task-type vocabulary gains `writeup`: a project stage that composes the results of the stages it reads into one Markdown document, referencing the artifacts those results hold, run on the new `pl_writeup` pipeline. The platform names the outline sections the document lacks and drops an artifact no result it read holds. Like `research`, it belongs under a project and is refused under a service. The pipeline-purpose vocabulary gains `project-writeup`.
+
+Additive. A consumer built against 1.103.0 keeps parsing, and one that maps task types or purposes through an exhaustive table gains a member to name.

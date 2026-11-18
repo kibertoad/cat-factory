@@ -69,6 +69,11 @@ export function useTaskTypeOffer(container: Ref<Block | undefined>, taskType: Re
         label: t('board.addTask.types.spawn'),
         icon: 'i-lucide-git-fork',
       },
+      {
+        value: 'writeup',
+        label: t('board.addTask.types.writeup'),
+        icon: 'i-lucide-file-text',
+      },
       { value: 'recurring', label: t('board.addTask.types.recurring'), icon: 'i-lucide-repeat' },
     ]
     const set = offered.value

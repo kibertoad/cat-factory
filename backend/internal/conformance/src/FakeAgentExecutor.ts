@@ -13,7 +13,7 @@ import type {
 } from '@cat-factory/kernel'
 import type { AgentExecutor } from '@cat-factory/kernel'
 import { CapabilityCredentialMissingError } from '@cat-factory/kernel'
-import type { DecisionBrief, ResearchBrief } from '@cat-factory/contracts'
+import type { DecisionBrief, ResearchBrief, WriteupBrief } from '@cat-factory/contracts'
 import {
   type AgentKindRegistry,
   defaultAgentKindRegistry,
@@ -456,6 +456,31 @@ export class FakeAgentExecutor implements AgentExecutor {
     }
   }
 
+  private runWriter(context: AgentRunContext): AgentRunResult {
+    // The writeup handler built this brief for its agent kind. It drafts every outline section but
+    // the last, and names one artifact no result holds, so the suite sees both checks the platform
+    // makes.
+    const brief = context.project?.brief as WriteupBrief | undefined
+    const outline = brief?.outline ?? []
+    const markdown = outline
+      .slice(0, -1)
+      .map((section) => `## ${section}\n\n[fake] ${section} from the results.`)
+      .join('\n\n')
+    return {
+      output: '[project-writer] drafted',
+      model: 'fake',
+      custom: {
+        title: context.block.title,
+        summary: `Composed from ${context.project?.upstream.length ?? 0} upstream result(s).`,
+        markdown,
+        artifacts: [
+          ...(brief?.artifacts ?? []).map((ref) => ({ ref, caption: 'from the results' })),
+          { ref: 'artifact-not-held', caption: 'invented' },
+        ],
+      },
+    }
+  }
+
   // Matches the `model: 'fake'` every result carries, so the engine's up-front
   // model preview (shown on the first "spinning up container" / querying emit)
   // resolves to the same value the result later confirms.
@@ -710,6 +735,7 @@ export class FakeAgentExecutor implements AgentExecutor {
 
     if (context.agentKind === 'project-researcher') return this.runResearcher(context)
     if (context.agentKind === 'project-decider') return this.runDecider(context)
+    if (context.agentKind === 'project-writer') return this.runWriter(context)
 
     // The `task-estimator` step emits a JSON triage the engine parses + persists onto
     // `block.estimate` (the new column on both stores). Deterministic so the conformance

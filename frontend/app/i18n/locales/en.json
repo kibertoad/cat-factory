@@ -275,7 +275,8 @@
         "resolveConflicts": "Resolve conflicts",
         "research": "Research",
         "decisions": "Decisions",
-        "spawn": "Spawn"
+        "spawn": "Spawn",
+        "writeup": "Writeup"
       },
       "recurringWithFrame": "A recurring task runs a pipeline on a cadence. Continue to set the schedule + prompt.",
       "recurringNoFrame": "A recurring task must live on a service. Add it from a service frame (or a module inside one).",
@@ -5753,7 +5754,8 @@
         "maintenance": "PR maintenance",
         "projectResearch": "Project research",
         "projectDecisions": "Project decisions",
-        "projectSpawn": "Project spawn"
+        "projectSpawn": "Project spawn",
+        "projectWriteup": "Project writeup"
       },
       "strategyOption": {
         "specialist-panel": "Specialist panel",

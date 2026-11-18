@@ -152,3 +152,26 @@ export function stageResultRows(
       (row.intent !== REVISION_INTENT || accepted.has(row.id)),
   )
 }
+
+/**
+ * The binary artifacts the results a staged task reads reference, as of the results it started
+ * from: the only artifacts a task building on them may name.
+ */
+export function upstreamArtifactRefs(
+  definition: ProjectDefinition,
+  staged: { stage: ProjectStage; record: ProjectStageTask; records: readonly ProjectStageTask[] },
+  envelopes: readonly ProjectOutcomeRow[],
+): string[] {
+  const byId = new Map(envelopes.map((row) => [row.id, row] as const))
+  const refs = new Set<string>()
+  for (const { stage: id } of staged.stage.consumes) {
+    const upstream = definition.stages.find((s) => s.id === id)
+    const basisId = staged.record.basis[id]
+    const basis = basisId ? byId.get(basisId) : undefined
+    if (!upstream || !basis) continue
+    for (const row of stageResultRows(upstream, staged.records, byId.values(), basis)) {
+      for (const ref of row.artifactRefs) refs.add(ref)
+    }
+  }
+  return [...refs]
+}

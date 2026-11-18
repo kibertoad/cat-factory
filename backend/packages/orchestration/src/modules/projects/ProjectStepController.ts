@@ -39,7 +39,7 @@ import { decodeOutcome, outcomeTaskType } from './outcomeDecoding.js'
 import { resolvePinnedDefinition } from './pinnedDefinition.js'
 import { assessStageResult } from './stageAcceptance.js'
 import type { ProjectEngineTask } from './stageSpawner.js'
-import { renderStageUpstream } from './stageUpstream.js'
+import { renderStageUpstream, upstreamArtifactRefs } from './stageUpstream.js'
 
 // ---------------------------------------------------------------------------
 // The engine half of a project task's run, for every project kind: what its step is asked when it
@@ -424,6 +424,9 @@ export class ProjectStepController {
 
   private taskInput(task: ResolvedTask, block: Block): ProjectTaskInput<unknown> {
     return {
+      ...(task.staged && task.definition
+        ? { upstreamArtifacts: upstreamArtifactRefs(task.definition, task.staged, task.envelopes) }
+        : {}),
       task: block,
       definition: task.definition,
       inputs: task.inputs,

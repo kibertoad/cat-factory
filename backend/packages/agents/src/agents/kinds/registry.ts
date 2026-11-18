@@ -40,6 +40,7 @@ import { registerSpikeAgent } from './spike.js'
 import { registerSkillAgent } from './skill.js'
 import { registerMediaAgent } from './media.js'
 import { registerProjectDeciderAgent } from './project-decider.js'
+import { registerProjectWriterAgent } from './project-writer.js'
 import { registerProjectResearcherAgent } from './project-researcher.js'
 import { registerBuiltInContainerAgents } from './built-in-container.js'
 
@@ -767,6 +768,7 @@ export function defaultAgentKindRegistry(): AgentKindRegistry {
   registerMediaAgent(registry)
   registerProjectResearcherAgent(registry)
   registerProjectDeciderAgent(registry)
+  registerProjectWriterAgent(registry)
   // The built-in CONTAINER kinds (implementer, testers, fixers, assessors, read-only explorers).
   // Disjoint from every id above — registration replaces by kind, so an overlap would silently
   // drop whichever definition ran first.

@@ -38,6 +38,9 @@ import * as v from 'valibot'
  *   - `project-spawn` creates a task in each service a project links, from a project stage. The
  *                  engine performs it with no agent and no repository of its own, so a `spawn`
  *                  task offers ONLY these, and no other task type is offered one.
+ *   - `project-writeup` composes a project's stage results into one document. It has no
+ *                  repository either, so a `writeup` task offers ONLY these, and no other task
+ *                  type is offered one.
  *
  * The gating predicates that read it live in `pipeline-purpose.ts`, which re-exports this
  * module. The vocabulary sits apart from them because `agent-presentation.ts` has to name a
@@ -58,6 +61,7 @@ export const PIPELINE_PURPOSES = [
   'project-research',
   'project-decisions',
   'project-spawn',
+  'project-writeup',
 ] as const
 export const pipelinePurposeSchema = v.picklist(PIPELINE_PURPOSES)
 export type PipelinePurpose = v.InferOutput<typeof pipelinePurposeSchema>

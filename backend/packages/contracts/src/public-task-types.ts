@@ -201,6 +201,8 @@ export const BUILTIN_PUBLIC_TASK_FIELDS: Readonly<Record<string, readonly Descri
   // task's is its stage's config: neither has per-case fields.
   decisions: [],
   spawn: [],
+  // A writeup's input is its stage's config and the stages it reads.
+  writeup: [],
 }
 
 /**

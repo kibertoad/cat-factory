@@ -239,7 +239,8 @@
         "resolveConflicts": "Rozwiąż konflikty",
         "research": "Badanie",
         "decisions": "Decyzje",
-        "spawn": "Rozdzielenie"
+        "spawn": "Rozdzielenie",
+        "writeup": "Opracowanie"
       },
       "recurringWithFrame": "Zadanie cykliczne uruchamia pipeline w określonym rytmie. Kontynuuj, aby ustawić harmonogram i prompt.",
       "recurringNoFrame": "Zadanie cykliczne musi należeć do usługi. Dodaj je z ramki usługi (lub modułu w jej obrębie).",
@@ -5553,7 +5554,8 @@
         "maintenance": "Utrzymanie PR",
         "projectResearch": "Badanie projektu",
         "projectDecisions": "Decyzje projektu",
-        "projectSpawn": "Rozdzielenie projektu"
+        "projectSpawn": "Rozdzielenie projektu",
+        "projectWriteup": "Opracowanie projektu"
       },
       "strategyOption": {
         "specialist-panel": "Panel specjalistów",

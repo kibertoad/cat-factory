@@ -3183,7 +3183,8 @@
         "resolveConflicts": "Risolvi conflitti",
         "research": "Ricerca",
         "decisions": "Decisioni",
-        "spawn": "Distribuzione"
+        "spawn": "Distribuzione",
+        "writeup": "Resoconto"
       },
       "recurringWithFrame": "Un'attività ricorrente esegue una pipeline a cadenza regolare. Continua per impostare la pianificazione e il prompt.",
       "recurringNoFrame": "Un'attività ricorrente deve risiedere su un servizio. Aggiungila da un frame di servizio (o da un modulo al suo interno).",
@@ -4945,7 +4946,8 @@
         "maintenance": "Manutenzione PR",
         "projectResearch": "Ricerca di progetto",
         "projectDecisions": "Decisioni del progetto",
-        "projectSpawn": "Distribuzione del progetto"
+        "projectSpawn": "Distribuzione del progetto",
+        "projectWriteup": "Resoconto del progetto"
       },
       "strategyOption": {
         "specialist-panel": "Panel di specialisti",

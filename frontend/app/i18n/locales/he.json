@@ -239,7 +239,8 @@
         "resolveConflicts": "פתרון קונפליקטים",
         "research": "מחקר",
         "decisions": "החלטות",
-        "spawn": "פיצול"
+        "spawn": "פיצול",
+        "writeup": "סיכום כתוב"
       },
       "recurringWithFrame": "משימה מחזורית מריצה צינור במרווחים קבועים. המשך כדי להגדיר את התזמון והפרומפט.",
       "recurringNoFrame": "משימה מחזורית חייבת להתקיים על שירות. הוסף אותה ממסגרת שירות (או ממודול בתוכה).",
@@ -5553,7 +5554,8 @@
         "maintenance": "תחזוקת PR",
         "projectResearch": "מחקר פרויקט",
         "projectDecisions": "החלטות פרויקט",
-        "projectSpawn": "פיצול פרויקט"
+        "projectSpawn": "פיצול פרויקט",
+        "projectWriteup": "סיכום כתוב של הפרויקט"
       },
       "strategyOption": {
         "specialist-panel": "פאנל מומחים",

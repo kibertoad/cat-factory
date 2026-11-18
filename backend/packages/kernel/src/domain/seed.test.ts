@@ -24,6 +24,7 @@ import {
   RESEARCH_PIPELINE_ID,
   DECISIONS_PIPELINE_ID,
   SPAWN_PIPELINE_ID,
+  WRITEUP_PIPELINE_ID,
   seedBlocks,
   seedPipelines,
 } from './seed.js'
@@ -590,6 +591,7 @@ describe('defaultPipelineIdForTaskType', () => {
     expect(defaultPipelineIdForTaskType('research')).toBe(RESEARCH_PIPELINE_ID)
     expect(defaultPipelineIdForTaskType('decisions')).toBe(DECISIONS_PIPELINE_ID)
     expect(defaultPipelineIdForTaskType('spawn')).toBe(SPAWN_PIPELINE_ID)
+    expect(defaultPipelineIdForTaskType('writeup')).toBe(WRITEUP_PIPELINE_ID)
   })
 
   it('resolves every pinned default to a pipeline the catalog actually ships', () => {
@@ -613,6 +615,7 @@ describe('defaultPipelineIdForTaskType', () => {
       'research',
       'decisions',
       'spawn',
+      'writeup',
     ])
     for (const taskType of BUILTIN_TASK_TYPES) {
       if (pinned.has(taskType)) continue

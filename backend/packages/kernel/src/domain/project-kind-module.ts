@@ -37,6 +37,11 @@ export interface ProjectTaskInput<Body> {
    * staged task, only those of its own stage.
    */
   outcomes: ReadonlyArray<ProjectOutcome<Body>>
+  /**
+   * The binary artifacts the results a staged task reads (`consumes`) reference, as of the
+   * results it started from. Absent for a task that reads no stage.
+   */
+  upstreamArtifacts?: readonly string[]
 }
 
 /** What a handler reads to render one stream's outcomes as context. */

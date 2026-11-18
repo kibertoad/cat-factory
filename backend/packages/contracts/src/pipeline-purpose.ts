@@ -203,6 +203,16 @@ const PURPOSE_SUGGESTED_CATEGORIES: Record<
     docs: false,
     gates: true,
   },
+  // Composes a document from what the stages found: its writing kind groups under `docs`, and a
+  // planning step may shape the outline in front of it.
+  'project-writeup': {
+    review: false,
+    design: true,
+    build: false,
+    test: false,
+    docs: true,
+    gates: true,
+  },
 }
 
 /**
@@ -349,6 +359,7 @@ const EXACT_PURPOSE_FOR_TASK_TYPE: ReadonlyMap<string, PipelinePurpose> = new Ma
   ['research', 'project-research'],
   ['decisions', 'project-decisions'],
   ['spawn', 'project-spawn'],
+  ['writeup', 'project-writeup'],
 ])
 
 /** The purposes offered only to the one task type mapped to them, and to no other. */
@@ -357,6 +368,7 @@ const EXCLUSIVE_PURPOSES: readonly PipelinePurpose[] = [
   'project-research',
   'project-decisions',
   'project-spawn',
+  'project-writeup',
 ]
 
 /**
