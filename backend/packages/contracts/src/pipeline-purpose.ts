@@ -193,11 +193,11 @@ const PURPOSE_SUGGESTED_CATEGORIES: Record<
     docs: false,
     gates: true,
   },
-  // The engine creates the services' tasks itself, so no agent category belongs in its palette
-  // beyond the gates a person may want in front of it.
+  // The engine creates the services' tasks itself; a pipeline built for it may put a planning
+  // step and the gates a person wants in front of the spawn.
   'project-spawn': {
     review: false,
-    design: false,
+    design: true,
     build: false,
     test: false,
     docs: false,

@@ -401,36 +401,8 @@ export {
   sanitizeDescriptorFields,
   validateDescriptorFields,
 } from '@cat-factory/kernel'
-// The BUILT-IN pipeline ids, so an operation can pin one of the shipped pipelines (or a task type
-// can name it as its `defaultPipelineId`) without restating a string the platform owns.
-export {
-  BLUEPRINT_AGENT_KIND,
-  ENVIRONMENT_ANALYST_AGENT_KIND,
-  INITIATIVE_PIPELINE_ID,
-  INITIATIVE_DOCS_PIPELINE_ID,
-  BUILD_PIPELINE_ID,
-  RESEARCH_PIPELINE_ID,
-  DECISIONS_PIPELINE_ID,
-  SPAWN_PIPELINE_ID,
-  SIMPLE_PIPELINE_ID,
-  ADAPTIVE_BUILD_PIPELINE_ID,
-  COMPLEX_BUILD_PIPELINE_ID,
-  UNATTENDED_BUILD_PIPELINE_ID,
-  defaultBuildPipelineId,
-  BUG_TRIAGE_PIPELINE_ID,
-  BUGFIX_PIPELINE_ID,
-  TEST_VERIFIED_BUGFIX_PIPELINE_ID,
-  CODE_COMMENTS_PIPELINE_ID,
-  BUSINESS_DOCS_PIPELINE_ID,
-  DOCUMENT_PIPELINE_ID,
-  DOCUMENT_QUICK_PIPELINE_ID,
-  REVIEW_PIPELINE_ID,
-  RESOLVE_CONFLICTS_PIPELINE_ID,
-  SPIKE_PIPELINE_ID,
-  RALPH_PIPELINE_ID,
-  BUG_FISHING_PIPELINE_ID,
-  MEDIA_PIPELINE_ID,
-} from '@cat-factory/kernel'
+// The BUILT-IN pipeline ids and agent kinds a deployment may name, from their own module.
+export * from './builtinPipelineIds'
 // The pipeline AUTHORING seam, so a deployment writes a registered pipeline the way the built-in
 // catalog is written: a list of NAMED steps, lowered into `Pipeline`'s index-aligned
 // `agentKinds`/`gates`/`enabled`/`gating`/`stepOptions` arrays by the same helper. Hand-aligning
