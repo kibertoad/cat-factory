@@ -62,6 +62,9 @@ describe('mockFrontendSection', () => {
     // docker-compose stand-up guidance the (backend-oriented) mocker role prompt carries.
     expect(section).toContain('NOT a docker-compose stack')
     expect(section).toContain('OVERRIDES the docker-compose')
+    // The platform serves the mappings with its own WireMock, so the role prompt's
+    // version-pinning rule must not lead the agent to add one to the frontend repo.
+    expect(section).toContain('version-pinning guidance in your')
   })
 
   it('defaults to `mocks/` when the frame declares no mappings path', () => {
